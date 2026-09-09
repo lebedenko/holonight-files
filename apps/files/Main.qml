@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 // Initialize the configured style before shared controls import Basic.
@@ -10,6 +12,7 @@ import Holonight.Controls
 HnApplicationWindow {
     id: window
     objectName: "filesWindow"
+    required property DirectoryController controller
     width: 1000
     height: 700
     minimumWidth: 420
@@ -17,27 +20,18 @@ HnApplicationWindow {
     visible: true
     title: qsTr("HoloNight Files")
 
-    property bool restoreMaximized: false
+    function toggleFullscreen(): void {
+        WindowState.setFullscreen(window, window.visibility !== Window.FullScreen);
+    }
 
     function leaveFullscreen(): void {
-        if (window.visibility === Window.FullScreen) {
-            if (window.restoreMaximized)
-                window.showMaximized();
-            else
-                window.showNormal();
-        }
+        if (window.visibility === Window.FullScreen)
+            WindowState.setFullscreen(window, false);
     }
 
     Shortcut {
         sequence: "F"
-        onActivated: {
-            if (window.visibility === Window.FullScreen) {
-                window.leaveFullscreen();
-            } else {
-                window.restoreMaximized = window.visibility === Window.Maximized;
-                window.showFullScreen();
-            }
-        }
+        onActivated: window.toggleFullscreen()
     }
     Shortcut {
         sequence: "Escape"
@@ -52,15 +46,37 @@ HnApplicationWindow {
         anchors.fill: parent
         spacing: HnMetrics.internalSpacing(HnControlSize.Normal)
 
-        Item {
+        HnLabel {
+            objectName: "statusLabel"
+            Layout.fillWidth: true
+            Layout.margins: HnMetrics.internalSpacing(HnControlSize.Normal)
+            role: HnTypographyRole.Caption
+            color: HoloniightPalette.textMuted
+            elide: Text.ElideMiddle
+            rawText: {
+                if (!window.controller)
+                    return "";
+                return window.controller.statusMessage.length > 0 ? qsTr("%1  ·  %2").arg(window.controller.currentPath).arg(window.controller.statusMessage) : window.controller.currentPath;
+            }
+        }
+
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            spacing: HnMetrics.internalSpacing(HnControlSize.Normal)
 
-            HnEmptyState {
-                id: emptyState
-                objectName: "emptyState"
-                anchors.centerIn: parent
-                titleText: qsTr("No folder open")
+            PlacesPanel {
+                objectName: "placesPanel"
+                controller: window.controller
+                Layout.preferredWidth: 200
+                Layout.fillHeight: true
+            }
+
+            DirectoryListing {
+                objectName: "directoryListing"
+                controller: window.controller
+                Layout.fillWidth: true
+                Layout.fillHeight: true
             }
         }
 
@@ -71,7 +87,7 @@ HnApplicationWindow {
             HnLabel {
                 role: HnTypographyRole.Caption
                 color: HoloniightPalette.textMuted
-                rawText: qsTr("F  fullscreen")
+                rawText: qsTr(".  hidden   s  reverse sort   F  fullscreen")
             }
             HnLabel {
                 role: HnTypographyRole.Caption

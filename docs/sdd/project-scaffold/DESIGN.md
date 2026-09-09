@@ -14,7 +14,7 @@ Main.qml uses HnApplicationWindow's native-decoration default, a 1000×700
 initial canvas with a 420×280 minimum, centered HnEmptyState, and bottom
 HnLabel captions with shared caption typography, muted palette color, and
 HnMetrics spacing. No directory state or mock controls are created. Fullscreen
-remembers maximized state, matching holonight-viewer's toggle behavior.
+preserves other window-state flags, matching holonight-viewer's toggle behavior.
 
 qtquickcontrols2.conf is embedded at the resource root, reused unchanged from
 holonight-viewer since style selection is a shared, project-agnostic concern.
@@ -54,3 +54,16 @@ home under build/, validates generated entries and launch arguments, executes
 their version commands, and checks packaged-entry separation — the same shape
 as holonight-viewer's check, minus the MIME/`%f` assertions that do not apply
 here yet.
+
+## Fullscreen restoration correction
+
+R3 includes compositor-managed tiling. A tiled Wayland window may report the
+maximized flag, so showNormal/showMaximized must not be used to restore it.
+Use the viewer's internal WindowState QML singleton to change only
+Qt::WindowFullScreen through QWindow::setWindowStates, preserving every other
+state flag. Route both F and Escape through this helper.
+
+Let compositor configure events settle between transitions in the production
+window keyboard test; verify restored geometry as well as visibility. Native
+Wayland protocol inspection must confirm toggles send fullscreen requests without
+maximize/unmaximize requests. Sibling sources remain read-only.

@@ -2,5 +2,7 @@
 set -euo pipefail
 formatted=$(mktemp)
 trap 'rm -f "$formatted"' EXIT
-/usr/lib/qt6/bin/qmlformat apps/files/Main.qml > "$formatted"
-diff -u apps/files/Main.qml "$formatted"
+for qml in apps/files/Main.qml apps/files/DirectoryListing.qml apps/files/PlacesPanel.qml; do
+  /usr/lib/qt6/bin/qmlformat "$qml" > "$formatted"
+  diff -u "$qml" "$formatted"
+done

@@ -14,3 +14,8 @@ mimicking holonight-viewer's infrastructure. Completion depends on recorded chec
 | T7 Resize, dark/light, fractional scale, native decoration inspection | R10 | Offscreen resize/dark/light/scale checks passed; live compositor inspection pending |
 | T8 Development/installed registration separation | R7, R8 | Complete: `task desktop-check` passed; included in CI |
 | T9 Fresh-source build and clean-checkout acceptance | R1, R8 | Local build/test passed on the working tree; committed clean-checkout acceptance pending |
+
+- [x] R3 fullscreen regression: preserve compositor-managed tiling with the viewer's
+  state-flag helper; exercise settled F/F and F/Escape transitions and restored
+  geometry; record functional checks and native Wayland protocol evidence.
+  Passed: see the fullscreen regression evidence in [VERIFICATION.md](VERIFICATION.md).

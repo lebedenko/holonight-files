@@ -26,3 +26,54 @@ Adaptive CSD/SSD remains a shared holonight-qt initiative and must not block
 core browsing. No compositor-name heuristics or Files-specific decoration
 policy. Image editing, albums, tagging, photo databases, and a standalone image
 viewer are outside this roadmap — see the sibling HoloNight Viewer.
+
+## v1 scope (stages 1-4)
+
+v1 is stages 1-4: browse, inspect, modal commands, file operations, on the
+local filesystem only. No SFTP/SMB/MTP, archive-as-directory, plugins,
+embedded terminal, Git UI, or multi-register (`"a`) / mark (`ma`) vim features
+— those are v2+ if ever. Each stage still runs its own SDD cycle (idea grill,
+EARS requirements, design, tasks, implementation, verification); this section
+seeds that work, it does not replace it.
+
+Layering across stages 1-4:
+
+```text
+UI (QML)
+Navigation:  DirectoryController · SelectionController · VimModeController · HistoryController
+Models:      DirectoryModel · PlacesModel · SearchModel (in-process FuzzyMatcher)
+Filesystem:  FileOperationService · MimeService · ThumbnailService (freedesktop-compat) · FileWatcher · MountService
+Tasks:       TaskManager (progress · cancellation · conflicts · queue)
+Preview:     ImagePreview · TextPreview · GenericMetadataPreview
+```
+
+`TaskManager` is required from stage 4 onward, not bolted on later: recursive
+copy/move, name collisions, permission errors, cancellation, and progress are
+the hard part, not listing filenames. `FuzzyMatcher` and `ThumbnailService`
+start in-tree; only extract them into a shared HoloNight library once a second
+consuming application (e.g. holonight-viewer, a future launcher) needs them.
+
+- **Stage 1 — Browse a folder**: `DirectoryModel` (async populate, natural
+  filename sort, size/mtime columns), `PlacesModel` (fixed standard places only), `FileWatcher` for live updates.
+  NORMAL-mode movement only: `j/k`, `gg`/`G`, count-prefixed motions (`5j`),
+  `h` parent, `l`/Enter open, sort toggles, hidden-files toggle. Fixtures:
+  empty, large (10k+ entries), permission-denied, Unicode-named directories.
+- **Stage 2 — Inspect a selection**: metadata/EXIF preview pane and a Quick
+  Look overlay (`Space`) sharing the same preview backends — image and text
+  first; PDF/video/audio thumbnailing deferred. `ThumbnailService` v1 covers
+  images only (already being decoded), reading/writing the freedesktop
+  Thumbnail Managing Standard cache (`$XDG_CACHE_HOME/thumbnails/`,
+  MD5-of-URI keyed, mtime/size-validated) instead of a Files-private cache.
+- **Stage 3 — Modal command mode**: `VimModeController` state machine
+  (NORMAL/VISUAL/COMMAND/SEARCH/INSERT; INSERT backs rename/create dialogs),
+  the `:`-prefixed palette (`:mkdir`, `:touch`, `:cd`, `:sort`, `:hidden`),
+  `/` search over `SearchModel`'s in-process fuzzy matcher (fzf-style scoring:
+  consecutive runs, word-boundary bonus, gap penalty — no shelling out to an
+  external matcher), and `v`/`V` visual selection.
+- **Stage 4 — File operations**: `FileOperationService`
+  (copy/move/rename/trash/delete) driven entirely through `TaskManager` —
+  asynchronous, cancellable, progress-reporting, conflict-resolving from the
+  start. `yy`/`dd`/`p`/`D` over a single active clipboard register.
+
+Stage 5 (release readiness) follows once stages 1-4 land; its scope is
+packaging/accessibility/performance hardening, not new v1 features.

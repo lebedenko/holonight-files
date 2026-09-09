@@ -73,3 +73,38 @@ These are intentional, requirement-driven differences, not omissions:
 The scaffold is implemented and all locally-runnable automated checks pass.
 CI execution and live-compositor decoration inspection remain open, as noted
 above.
+
+## Fullscreen tiled-state regression (2026-09-09)
+
+The reported Hyprland tiled → fullscreen → maximized transition corrects R3.
+Files adopts the viewer's internal WindowState helper, changing only the
+Qt::WindowFullScreen flag. F and Escape preserve the compositor's other flags.
+The production-window keyboard test now waits 250 ms between transitions and
+asserts restored geometry as well as visibility for F/F and F/Escape; it also
+checks both exits from an explicitly maximized window and Escape outside
+fullscreen. Fixed delays allow native configure events on the observed desktop;
+they are not a universal compositor synchronization guarantee.
+
+Native Wayland test passed on the live Hyprland desktop: all four F/F and
+F/Escape cycles restored the expected visibility; both initial tiled-state
+cycles restored the original geometry. The protocol trace contains four
+set_fullscreen/unset_fullscreen pairs and zero set_maximized/unset_maximized
+requests. Evidence: `build/fullscreen-native.log`. Command (from repository root):
+
+```sh
+env QT_QPA_PLATFORM=wayland WAYLAND_DEBUG=1 \
+  QML_IMPORT_PATH="$PWD/build/deps/prefix/lib/qt6/qml" \
+  LD_LIBRARY_PATH="$PWD/build/deps/prefix/lib" \
+  build/test/tests/files-smoke --gtest_filter=Files.WindowAndKeyboard \
+  > build/fullscreen-native.log 2>&1
+```
+
+The native GUI test required sandbox escalation. A stacking compositor was not
+exercised; offscreen tests cover normal and explicitly maximized restoration.
+
+Checks passed: `task deps`, `task build`, `task test` (all five CTest entries),
+`task build PRESET=release`, `task format`, `task format-check`, and
+`task license-check`. REUSE required sandbox escalation for its multiprocessing
+socket. Logs are `build/fullscreen-{deps,build,tests,release,format,license}.log`.
+`task qml-lint`, `task tidy`, `task install-check`, and `git diff --check`
+also passed. Logs: `build/fullscreen-{qml-lint,tidy,install}.log`.

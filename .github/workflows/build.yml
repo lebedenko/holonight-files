@@ -23,5 +23,8 @@ jobs:
         run: >-
           docker run --rm -v "$GITHUB_WORKSPACE:/work" files-ci
           bash -euc 'task deps; task build; task build PRESET=release;
-          task test; task format-check; task tidy; task qml-lint;
+          chown -R files-test:files-test /work/files/build;
+          runuser -u files-test -- env LC_ALL=C.UTF-8 task test;
+          runuser -u files-test -- env LC_ALL=en_US.UTF-8 task test;
+          task format-check; task tidy; task qml-lint;
           task license-check; task install-check; task desktop-check'

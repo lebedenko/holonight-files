@@ -25,7 +25,12 @@ install(FILES packaging/org.holonight.Files.desktop DESTINATION ${CMAKE_INSTALL_
 install(FILES packaging/org.holonight.Files.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 find_program(CLANG_FORMAT clang-format)
 find_program(RUN_CLANG_TIDY run-clang-tidy)
-file(GLOB FILES_CXX CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/apps/files/*.cpp" "${CMAKE_SOURCE_DIR}/tests/*.cpp")
+file(GLOB FILES_CXX CONFIGURE_DEPENDS
+  "${CMAKE_SOURCE_DIR}/apps/files/*.cpp"
+  "${CMAKE_SOURCE_DIR}/apps/files/*.h"
+  "${CMAKE_SOURCE_DIR}/tests/*.cpp"
+  "${CMAKE_SOURCE_DIR}/tests/*.h"
+)
 if(CLANG_FORMAT)
   add_custom_target(format COMMAND ${CLANG_FORMAT} -i ${FILES_CXX})
   add_custom_target(format-check COMMAND ${CLANG_FORMAT} --dry-run --Werror ${FILES_CXX})

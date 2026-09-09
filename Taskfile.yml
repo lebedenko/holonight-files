@@ -38,11 +38,11 @@ tasks:
       - ctest --preset test
   format:
     cmds:
-      - clang-format -i apps/files/*.cpp tests/*.cpp
-      - /usr/lib/qt6/bin/qmlformat -i apps/files/Main.qml
+      - clang-format -i apps/files/*.cpp apps/files/*.h tests/*.cpp tests/*.h
+      - /usr/lib/qt6/bin/qmlformat -i apps/files/Main.qml apps/files/DirectoryListing.qml apps/files/PlacesPanel.qml
   format-check:
     cmds:
-      - clang-format --dry-run --Werror apps/files/*.cpp tests/*.cpp
+      - clang-format --dry-run --Werror apps/files/*.cpp apps/files/*.h tests/*.cpp tests/*.h
       - bash scripts/check-qml-format.sh
   tidy:
     cmds:
