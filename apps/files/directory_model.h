@@ -16,6 +16,7 @@ struct DirectoryEntry {
   bool is_dir = false;
   qint64 size = -1;
   QDateTime modified;
+  quint32 mode = 0;
   bool stat_failed = false;
   QString stat_error;
   bool operator==(const DirectoryEntry&) const = default;
@@ -33,6 +34,7 @@ class DirectoryModel : public QAbstractListModel {
     IsDirRole,
     SizeRole,
     ModifiedRole,
+    ModeRole,
     IsHiddenRole,
     StatFailedRole,
     StatErrorRole,

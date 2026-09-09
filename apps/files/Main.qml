@@ -72,11 +72,24 @@ HnApplicationWindow {
                 Layout.fillHeight: true
             }
 
-            DirectoryListing {
-                objectName: "directoryListing"
-                controller: window.controller
+            SplitView {
+                objectName: "listingPreviewSplit"
+                orientation: Qt.Horizontal
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+
+                DirectoryListing {
+                    objectName: "directoryListing"
+                    controller: window.controller
+                    SplitView.fillWidth: true
+                }
+
+                PreviewPane {
+                    objectName: "previewPane"
+                    controller: window.controller
+                    SplitView.preferredWidth: 320
+                    SplitView.minimumWidth: 220
+                }
             }
         }
 
@@ -92,8 +105,13 @@ HnApplicationWindow {
             HnLabel {
                 role: HnTypographyRole.Caption
                 color: HoloniightPalette.textMuted
-                rawText: qsTr("Q  quit")
+                rawText: qsTr("Space  quick look   Q  quit")
             }
         }
+    }
+
+    QuickLookOverlay {
+        objectName: "quickLookOverlay"
+        controller: window.controller
     }
 }

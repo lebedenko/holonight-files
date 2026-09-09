@@ -3,6 +3,7 @@
 #include "directory_model.h"
 #include "directory_proxy_model.h"
 #include "places_model.h"
+#include "preview_service.h"
 
 #include <QElapsedTimer>
 #include <QFileSystemWatcher>
@@ -25,6 +26,8 @@ class DirectoryController : public QObject {
   Q_PROPERTY(int cursorRow READ cursorRow NOTIFY changed)
   Q_PROPERTY(DirectoryProxyModel* listing READ listing CONSTANT)
   Q_PROPERTY(PlacesModel* places READ places CONSTANT)
+  Q_PROPERTY(PreviewService* preview READ preview CONSTANT)
+  Q_PROPERTY(bool quickLookOpen READ quickLookOpen NOTIFY changed)
  public:
   explicit DirectoryController(QObject* parent = nullptr);
   QString currentPath() const { return current_path_; }
@@ -34,6 +37,8 @@ class DirectoryController : public QObject {
   int cursorRow() const { return cursor_row_; }
   DirectoryProxyModel* listing() { return &proxy_; }
   PlacesModel* places() { return &places_; }
+  PreviewService* preview() { return &preview_; }
+  bool quickLookOpen() const { return quick_look_open_; }
   Q_INVOKABLE void open(const QString& path, const QString& fallbackReason = {});
   Q_INVOKABLE void navigateInto(int proxyRow);
   Q_INVOKABLE void navigateParent();
@@ -53,15 +58,23 @@ class DirectoryController : public QObject {
   int takeCount();
   void setCursorRow(qint64 row);
   void clampCursorRow();
+  void syncPreviewTarget();
+  bool canPreviewSelection() const;
+  void handleWorkerShutdown();
   DirectoryModel model_;
   DirectoryProxyModel proxy_;
   PlacesModel places_;
+  PreviewService preview_;
   QFileSystemWatcher watcher_;
   QString current_path_;
   QString status_message_;
+  QString preview_target_path_;
+  quint64 preview_revision_ = 0;
   int cursor_row_ = 0;
   int pending_count_ = 0;
   bool has_pending_count_ = false;
   bool pending_g_ = false;
+  bool quick_look_open_ = false;
+  int workers_finished_ = 0;
   QElapsedTimer pending_g_timer_;
 };

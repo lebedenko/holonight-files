@@ -5,22 +5,36 @@ A keyboard-driven, Vim-like HoloNight file manager for native Wayland. Stage 1
 acceptance status is tracked in [browse-folder verification](docs/sdd/browse-folder/VERIFICATION.md). It provides an asynchronously populated, naturally
 sorted directory listing with a fixed places sidebar, live filesystem
 watching, and NORMAL-mode keyboard navigation (`j`/`k`, count-prefixed
-motions, `gg`/`G`, `h`/`l`/Enter, `.` for hidden files, `s` to reverse filename sorting). File
-operations, search, selection, and command mode are not implemented yet. See
-[docs/BACKLOG.md](docs/BACKLOG.md) for the planned stages and
+motions, `gg`/`G`, `h`/`l`/Enter, `.` for hidden files, `s` to reverse filename sorting).
+Stage 2 ("Inspect a selection") is also implemented: a docked preview pane
+(resizable via a divider next to the listing) shows name/size/date/
+permissions/MIME type, an EXIF summary for images, and a text preview with a
+truncation notice for large files; press `Space` to open the same preview in
+a full-window Quick Look overlay, which live-updates as you move with `j`/`k`
+and closes on `Space`/`Escape`. Image thumbnails are cached per the
+freedesktop Thumbnail Managing Standard (`$XDG_CACHE_HOME/thumbnails/normal/`).
+Space is consumed before delegate button activation; Enter/`l` still opens files.
+Previews use one verified regular-file descriptor, progressive thumbnail/full-image
+updates, bounded EXIF reads, and a two-entry/64 MiB full-image cache. Selected-file
+changes refresh previews without moving the cursor. See the
+[inspection verification](docs/sdd/inspect-selection/VERIFICATION.md) for evidence
+and remaining acceptance limitations.
+File operations, search, selection, and command mode are not implemented yet.
+See [docs/BACKLOG.md](docs/BACKLOG.md) for the planned stages and
 [docs/mockups/moc1.png](docs/mockups/moc1.png) for visual direction.
 
-Requires C++23, Qt 6.11+, CMake 3.25+, Ninja, Task, and installed
-HolonightQt::Core / HolonightQt::Controls. Tests use Qt Test and GTest. Checks
-need clang-format, clang-tidy (run-clang-tidy), REUSE, desktop-file-utils and
-Python 3. On Arch, the [CI Dockerfile](packaging/Dockerfile.ci) lists the
-packages.
+Requires C++23, Qt 6.11+ (including the Svg component), CMake 3.25+, Ninja,
+Task, libexif (via pkg-config), and installed HolonightQt::Core /
+HolonightQt::Controls. Tests use Qt Test and GTest. Checks need clang-format,
+clang-tidy (run-clang-tidy), REUSE, desktop-file-utils and Python 3. On Arch,
+the [CI Dockerfile](packaging/Dockerfile.ci) lists the packages.
 
 ```sh
 task deps                 # builds sibling providers locally, without source changes
 task build
 task run
 # f toggles fullscreen, Escape leaves fullscreen (preserving tiling), q quits
+# Space opens/closes Quick Look for the entry under the cursor
 task test
 task build PRESET=release
 task format-check
@@ -103,3 +117,18 @@ inconclusive; watcher refresh is timed separately. Record hardware, renderer,
 locale, commands, and results with the verification record. Offscreen runs and
 `task visual-check` screenshots under `build/visual/` provide regression evidence,
 not native rendering acceptance. Provider and container-image pinning are deferred.
+
+Inspection performance acceptance (101 images, each >5 MB, native renderer):
+
+```sh
+QT_QPA_PLATFORM=wayland \
+  QML_IMPORT_PATH="$PWD/build/deps/prefix/lib/qt6/qml" \
+  LD_LIBRARY_PATH="$PWD/build/deps/prefix/lib" \
+  FILES_NATIVE_ACCEPTANCE="$PWD/build/native-acceptance.txt" \
+  build/test/tests/files-smoke --gtest_filter=Files.NativeInspectionAcceptance
+```
+
+The result records initial/cached/Quick Look latency, stale-image count, movement
+rate, process peak RSS and rendered FPS. Qt image decoding remains cooperatively
+cancellable between stages; the three-second timeout is a visible deadline, not
+hard preemption of a decoder call.

@@ -35,6 +35,7 @@ DirectoryEntry readEntry(const QString& path, const QString& name) {
   if (::stat(encoded.constData(), &info) == 0) {
     entry.is_dir = S_ISDIR(info.st_mode);
     entry.size = entry.is_dir ? -1 : info.st_size;
+    entry.mode = info.st_mode;
     entry.modified =
         QDateTime::fromMSecsSinceEpoch((qint64{info.st_mtim.tv_sec} * 1000) + (info.st_mtim.tv_nsec / 1000000));
   } else {
@@ -140,6 +141,8 @@ QVariant DirectoryModel::data(const QModelIndex& index, int role) const {
       return entry.size;
     case ModifiedRole:
       return entry.modified;
+    case ModeRole:
+      return entry.mode;
     case IsHiddenRole:
       return entry.name.startsWith(u'.');
     case StatFailedRole:
@@ -152,13 +155,8 @@ QVariant DirectoryModel::data(const QModelIndex& index, int role) const {
 }
 QHash<int, QByteArray> DirectoryModel::roleNames() const {
   return {
-      {NameRole, "name"},
-      {PathRole, "path"},
-      {IsDirRole, "isDir"},
-      {SizeRole, "size"},
-      {ModifiedRole, "modified"},
-      {IsHiddenRole, "isHidden"},
-      {StatFailedRole, "statFailed"},
+      {NameRole, "name"},           {PathRole, "path"}, {IsDirRole, "isDir"},       {SizeRole, "size"},
+      {ModifiedRole, "modified"},   {ModeRole, "mode"}, {IsHiddenRole, "isHidden"}, {StatFailedRole, "statFailed"},
       {StatErrorRole, "statError"},
   };
 }

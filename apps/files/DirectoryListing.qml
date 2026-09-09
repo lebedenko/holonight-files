@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import "InspectionKeys.js" as InspectionKeys
 import QtQuick
 import Holonight.Controls
 
@@ -7,6 +8,7 @@ Item {
     id: root
 
     required property DirectoryController controller
+    property bool previousQuickLookOpen: false
 
     function formatSize(bytes: real): string {
         if (bytes < 0)
@@ -38,12 +40,17 @@ Item {
                 positionViewAtIndex(currentIndex, ListView.Contain);
         }
 
-        Keys.onPressed: event => {
-            let key = event.text;
-            if (key.length === 0 && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter))
-                key = "Return";
-            if (key.length > 0 && root.controller && root.controller.handleKey(key))
-                event.accepted = true;
+        Keys.priority: Keys.BeforeItem
+        Keys.onShortcutOverride: event => InspectionKeys.overrideShortcut(event, false)
+        Keys.onPressed: event => InspectionKeys.press(event, root.controller, false)
+        Keys.onReleased: event => InspectionKeys.release(event)
+        Connections {
+            target: root.controller
+            function onChanged(): void {
+                if (root.previousQuickLookOpen && !root.controller.quickLookOpen)
+                    listView.forceActiveFocus();
+                root.previousQuickLookOpen = root.controller.quickLookOpen;
+            }
         }
         Component.onCompleted: forceActiveFocus()
 
@@ -73,6 +80,11 @@ Item {
                     status: HnStatusIndicator.Warning
                 }
             }
+
+            Keys.priority: Keys.BeforeItem
+            Keys.onShortcutOverride: event => InspectionKeys.overrideShortcut(event, false)
+            Keys.onPressed: event => InspectionKeys.press(event, root.controller, false)
+            Keys.onReleased: event => InspectionKeys.release(event)
 
             onClicked: root.controller.openEntry(delegate.index)
         }

@@ -164,6 +164,61 @@ TEST(DirectoryController, WatcherObservesCreateRenameDeleteWithoutExplicitRefres
   ASSERT_TRUE(QTest::qWaitFor([&] { return names().isEmpty(); }));
 }
 
+TEST(DirectoryController, SpaceTogglesQuickLookWhenACursorIsOnAValidRow) {
+  QTemporaryDir dir(fixturePattern("ctrl-quicklook"));
+  ASSERT_TRUE(dir.isValid());
+  writeFile(dir, "a.txt");
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  EXPECT_FALSE(controller.quickLookOpen());
+  EXPECT_TRUE(controller.handleKey(" "));
+  EXPECT_TRUE(controller.quickLookOpen());
+  EXPECT_TRUE(controller.handleKey(" "));
+  EXPECT_FALSE(controller.quickLookOpen());
+}
+
+TEST(DirectoryController, SpaceOnAnEmptyDirectoryIsConsumedAsANoOp) {
+  QTemporaryDir dir(fixturePattern("ctrl-quicklook-empty"));
+  ASSERT_TRUE(dir.isValid());
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  EXPECT_TRUE(controller.handleKey(" "));  // REQ-F-013: consumed, but explicitly a no-op
+  EXPECT_FALSE(controller.quickLookOpen());
+}
+
+TEST(DirectoryController, EscapeClosesQuickLookAndReturnsFalseWhenAlreadyClosed) {
+  QTemporaryDir dir(fixturePattern("ctrl-quicklook-escape"));
+  ASSERT_TRUE(dir.isValid());
+  writeFile(dir, "a.txt");
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  // Closed already: falls through so the window-level fullscreen Shortcut can handle Escape.
+  EXPECT_FALSE(controller.handleKey("Escape"));
+  ASSERT_TRUE(controller.handleKey(" "));
+  ASSERT_TRUE(controller.quickLookOpen());
+  EXPECT_TRUE(controller.handleKey("Escape"));
+  EXPECT_FALSE(controller.quickLookOpen());
+}
+
+TEST(DirectoryController, JAndKKeepUpdatingThePreviewWhileQuickLookStaysOpen) {
+  QTemporaryDir dir(fixturePattern("ctrl-quicklook-live"));
+  ASSERT_TRUE(dir.isValid());
+  writeFile(dir, "a.txt");
+  writeFile(dir, "b.txt");
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey(" "));
+  ASSERT_TRUE(controller.quickLookOpen());
+  const auto firstName = controller.preview()->name();
+  EXPECT_TRUE(controller.handleKey("j"));
+  EXPECT_TRUE(controller.quickLookOpen());  // still open — j/k never close it
+  EXPECT_NE(controller.preview()->name(), firstName);
+}
+
 TEST(PlacesModel, FixedStandardLocations) {
   const PlacesModel places;
   ASSERT_EQ(places.rowCount(), 4);

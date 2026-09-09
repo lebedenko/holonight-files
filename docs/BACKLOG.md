@@ -58,7 +58,8 @@ consuming application (e.g. holonight-viewer, a future launcher) needs them.
   NORMAL-mode movement only: `j/k`, `gg`/`G`, count-prefixed motions (`5j`),
   `h` parent, `l`/Enter open, sort toggles, hidden-files toggle. Fixtures:
   empty, large (10k+ entries), permission-denied, Unicode-named directories.
-- **Stage 2 — Inspect a selection**: metadata/EXIF preview pane and a Quick
+- **Stage 2 — Inspect a selection** (implemented; review remediation and native
+  acceptance recorded in [verification](sdd/inspect-selection/VERIFICATION.md)): metadata/EXIF preview pane and a Quick
   Look overlay (`Space`) sharing the same preview backends — image and text
   first; PDF/video/audio thumbnailing deferred. `ThumbnailService` v1 covers
   images only (already being decoded), reading/writing the freedesktop

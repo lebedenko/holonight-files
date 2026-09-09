@@ -5,6 +5,7 @@
 #include <QUrl>
 
 #include <limits>
+#include <sys/stat.h>
 
 namespace {
 constexpr qint64 kPendingGTimeoutMs = 600;
@@ -13,7 +14,12 @@ constexpr qint64 kPendingGTimeoutMs = 600;
 DirectoryController::DirectoryController(QObject* parent) : QObject(parent) {
   proxy_.setSourceModel(&model_);
   connect(&model_, &DirectoryModel::changed, this, &DirectoryController::changed);
-  connect(&model_, &DirectoryModel::shutdownFinished, this, &DirectoryController::shutdownFinished);
+  connect(&model_, &DirectoryModel::shutdownFinished, this, &DirectoryController::handleWorkerShutdown);
+  connect(&preview_, &PreviewService::shutdownFinished, this, &DirectoryController::handleWorkerShutdown);
+  // changed() already fires on every cursor move, batch flush, watcher-driven refresh, and
+  // toggle; syncPreviewTarget() guards on the resolved path so it's cheap when nothing
+  // preview-relevant actually changed.
+  connect(this, &DirectoryController::changed, this, &DirectoryController::syncPreviewTarget);
   // Row-count/order changes (batches landing, a toggle, a watcher-driven refresh) all funnel
   // through here so cursorRow never points past the end and QML always hears about it.
   connect(&proxy_, &QAbstractItemModel::rowsInserted, this, [this] {
@@ -29,7 +35,14 @@ DirectoryController::DirectoryController(QObject* parent) : QObject(parent) {
     emit changed();
   });
   connect(&proxy_, &QAbstractItemModel::layoutChanged, this, [this] { emit changed(); });
-  connect(&watcher_, &QFileSystemWatcher::directoryChanged, &model_, &DirectoryModel::refresh);
+  connect(&watcher_, &QFileSystemWatcher::directoryChanged, this, [this] {
+    ++preview_revision_;
+    model_.refresh();
+  });
+  connect(&watcher_, &QFileSystemWatcher::fileChanged, this, [this] {
+    ++preview_revision_;
+    model_.refresh();
+  });
 }
 void DirectoryController::open(const QString& path, const QString& fallbackReason) {
   const auto watched = watcher_.directories() + watcher_.files();
@@ -88,6 +101,10 @@ void DirectoryController::clampCursorRow() {
   const int last = proxy_.rowCount() - 1;
   cursor_row_ = qBound(0, cursor_row_, qMax(0, last));
 }
+bool DirectoryController::canPreviewSelection() const {
+  return cursor_row_ >= 0 && cursor_row_ < proxy_.rowCount() && preview_.hasEntry() &&
+         !model_.data(proxy_.mapToSource(proxy_.index(cursor_row_, 0)), DirectoryModel::StatFailedRole).toBool();
+}
 bool DirectoryController::handleKey(const QString& key) {
   if (pending_g_ && pending_g_timer_.elapsed() > kPendingGTimeoutMs) {
     pending_g_ = false;
@@ -142,7 +159,68 @@ bool DirectoryController::handleKey(const QString& key) {
     openEntry(cursor_row_);
     return true;
   }
+  if (key == u" ") {
+    takeCount();
+    if (!quick_look_open_ && !canPreviewSelection()) {
+      return true;  // REQ-F-013: consumed, but explicitly a no-op
+    }
+    quick_look_open_ = !quick_look_open_;
+    preview_.setQuickLookActive(quick_look_open_);
+    emit changed();
+    return true;
+  }
+  if (key == u"Escape") {
+    if (!quick_look_open_) {
+      return false;  // Let the window-level Shortcut handle fullscreen.
+    }
+    takeCount();
+    quick_look_open_ = false;
+    preview_.setQuickLookActive(false);
+    emit changed();
+    return true;
+  }
   takeCount();
   return false;
 }
-void DirectoryController::shutdown() { model_.shutdown(); }
+void DirectoryController::syncPreviewTarget() {
+  if (cursor_row_ < 0 || cursor_row_ >= proxy_.rowCount()) {
+    if (quick_look_open_) {
+      quick_look_open_ = false;
+      preview_.setQuickLookActive(false);
+      emit changed();
+    }
+    if (!preview_target_path_.isEmpty()) {
+      preview_target_path_.clear();
+      preview_.clear();
+    }
+    return;
+  }
+  const auto sourceIndex = proxy_.mapToSource(proxy_.index(cursor_row_, 0));
+  const auto path = model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+  if (path != preview_target_path_) {
+    const auto files = watcher_.files();
+    if (!files.isEmpty()) {
+      watcher_.removePaths(files);
+    }
+  }
+  const auto mode = model_.data(sourceIndex, DirectoryModel::ModeRole).toUInt();
+  if (S_ISREG(mode) && !watcher_.files().contains(path)) {
+    watcher_.addPath(path);
+  }
+  preview_target_path_ = path;
+  preview_.setTarget(path, model_.data(sourceIndex, DirectoryModel::IsDirRole).toBool(),
+                     model_.data(sourceIndex, DirectoryModel::SizeRole).toLongLong(),
+                     model_.data(sourceIndex, DirectoryModel::ModifiedRole).toDateTime(),
+                     model_.data(sourceIndex, DirectoryModel::ModeRole).toUInt(),
+                     model_.data(sourceIndex, DirectoryModel::StatFailedRole).toBool(),
+                     model_.data(sourceIndex, DirectoryModel::StatErrorRole).toString(), preview_revision_);
+}
+void DirectoryController::handleWorkerShutdown() {
+  if (++workers_finished_ == 2) {
+    emit shutdownFinished();
+  }
+}
+void DirectoryController::shutdown() {
+  model_.shutdown();
+  preview_.shutdown();
+}
