@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=HoloNight Files
+Comment=A keyboard-driven file manager
+Exec=holonight-files
+Icon=org.holonight.Files
+Terminal=false
+Categories=System;FileTools;FileManager;
+StartupNotify=true

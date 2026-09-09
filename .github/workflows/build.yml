@@ -1,0 +1,27 @@
+name: Build and checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: files
+      - uses: actions/checkout@v4
+        with:
+          repository: lebedenko/holonight-config
+          path: holonight-config
+      - uses: actions/checkout@v4
+        with:
+          repository: lebedenko/holonight-qt
+          path: holonight-qt
+      - name: Build CI image locally
+        run: docker build -t files-ci -f files/packaging/Dockerfile.ci files
+      - name: Build and verify
+        run: >-
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" files-ci
+          bash -euc 'task deps; task build; task build PRESET=release;
+          task test; task format-check; task tidy; task qml-lint;
+          task license-check; task install-check; task desktop-check'

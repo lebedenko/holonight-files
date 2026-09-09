@@ -1,0 +1,75 @@
+version: '3'
+vars:
+  PRESET: '{{default "debug" .PRESET}}'
+  HOLONIGHT_DEPENDENCY_PREFIX: '{{default (printf "%s/build/deps/prefix" .ROOT_DIR) .HOLONIGHT_DEPENDENCY_PREFIX}}'
+  HOLONIGHT_QML_IMPORT_PATH: '{{default (printf "%s/lib/qt6/qml" .HOLONIGHT_DEPENDENCY_PREFIX) .HOLONIGHT_QML_IMPORT_PATH}}'
+env:
+  HOLONIGHT_DEPENDENCY_PREFIX: '{{.HOLONIGHT_DEPENDENCY_PREFIX}}'
+  HOLONIGHT_QML_IMPORT_PATH: '{{.HOLONIGHT_QML_IMPORT_PATH}}'
+  QML_IMPORT_PATH: '{{.HOLONIGHT_QML_IMPORT_PATH}}'
+  LD_LIBRARY_PATH: '{{.HOLONIGHT_DEPENDENCY_PREFIX}}/lib'
+tasks:
+  deps:
+    desc: Build sibling providers into project-local directories
+    cmds: ['bash scripts/prepare-deps.sh']
+  configure:
+    cmds: ['cmake --preset {{.PRESET}} -DHOLONIGHT_DEPENDENCY_PREFIX="{{.HOLONIGHT_DEPENDENCY_PREFIX}}" -DHOLONIGHT_QML_IMPORT_PATH="{{.HOLONIGHT_QML_IMPORT_PATH}}"']
+  build:
+    cmds:
+      - task: configure
+        vars: {PRESET: '{{.PRESET}}'}
+      - cmake --build --preset {{.PRESET}}
+  desktop-install:
+    desc: Register the development build and icon in the user's XDG data directory
+    cmds:
+      - task: build
+        vars: {PRESET: '{{.PRESET}}'}
+      - python3 scripts/register-desktop.py 'build/{{.PRESET}}/apps/files/holonight-files' '{{.HOLONIGHT_DEPENDENCY_PREFIX}}' '{{.HOLONIGHT_QML_IMPORT_PATH}}'
+  run:
+    cmds:
+      - task: desktop-install
+        vars: {PRESET: '{{.PRESET}}'}
+      - build/{{.PRESET}}/apps/files/holonight-files {{.CLI_ARGS}}
+
+  test:
+    cmds:
+      - task: build
+        vars: {PRESET: test}
+      - ctest --preset test
+  format:
+    cmds:
+      - clang-format -i apps/files/*.cpp tests/*.cpp
+      - /usr/lib/qt6/bin/qmlformat -i apps/files/Main.qml
+  format-check:
+    cmds:
+      - clang-format --dry-run --Werror apps/files/*.cpp tests/*.cpp
+      - bash scripts/check-qml-format.sh
+  tidy:
+    cmds:
+      - task: build
+        vars: {PRESET: test}
+      - cmake --build build/test --target tidy
+  qml-lint:
+    deps: [build]
+    cmds: ['cmake --build build/{{.PRESET}} --target qml-lint']
+  license-check:
+    cmds: [reuse lint]
+  install-check:
+    cmds:
+      - task: build
+        vars: {PRESET: release}
+      - bash scripts/check-install.sh
+  visual-check:
+    desc: Capture dark/light renders at normal and fractional scale for inspection
+    cmds:
+      - task: build
+        vars: {PRESET: test}
+      - bash scripts/check-visual.sh
+  desktop-check:
+    desc: Verify development registration and packaged entry separation under build/
+    cmds:
+      - task: build
+        vars: {PRESET: debug}
+      - task: build
+        vars: {PRESET: release}
+      - python3 scripts/check-desktop.py

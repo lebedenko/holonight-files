@@ -1,0 +1,27 @@
+version = 1
+
+[theme]
+scheme = "holonight-dark"
+accent = "blue"
+
+[typography]
+ui_family = "Inter"
+ui_size = 12
+monospace_family = "JetBrains Mono"
+monospace_size = 12
+title_family = "Audiowide"
+title_size = 10
+display_family = "Rajdhani"
+display_size = 24
+
+[icons]
+theme = "HoloNight"
+fallback = "Papirus"
+cursor = "default"
+
+[layout]
+scale = 1.0
+
+[shape]
+style = "inherit"
+scale = 1.0
