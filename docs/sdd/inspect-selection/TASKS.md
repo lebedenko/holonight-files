@@ -96,9 +96,10 @@
   - REQs: REQ-F-015, REQ-NF-003
   - Check: Create fixture directory with 100+ large images (>5 MB each); simulate rapid j presses (10+ presses/second) through folder; verify preview pane shows only current entry's image (no cross-entry jumble); memory usage remains stable (<500 MB peak despite large queue); one outstanding-job discipline prevents queue buildup; Frame rate remains ≥30 FPS during rapid paging.
 
-- [ ] T-025: Review regression coverage and delivery checks
+- [x] T-025: Review regression coverage and delivery checks
   - REQs: REQ-C-001–006, REQ-F-001–024, REQ-NF-001–004
   - Check: DirectoryListing.qml has no thumbnail bindings (REQ-C-002); no multi-entry preview code (REQ-C-003); fullscreen window state toggle during session preserves preview pane proportion (REQ-C-005); code review confirms PreviewService mirrors DirectoryModel's thread-safety pattern (REQ-C-004); CMake dependency check, header formatting, build, tidy, QML lint, licensing, install; populated and error-state screenshots; functional tests in both locales as non-root user; watcher create/delete/rename during preview; symlink and permission-denied state rendering; cached vs uncached latency profiling on target system.
+  - Closed 2026-09-09 on the evidence already recorded in VERIFICATION.md (automated checks, native acceptance matrix, per-requirement table); R8's live cross-monitor DPR migration is tracked separately below as a known, hardware-blocked gap rather than reopening this task.
 
 ## Approved review remediation
 
