@@ -15,10 +15,19 @@ class DirectoryProxyModel : public QSortFilterProxyModel {
   Q_PROPERTY(bool sortDescending READ sortDescending WRITE setSortDescending NOTIFY sortDescendingChanged)
  public:
   explicit DirectoryProxyModel(QObject* parent = nullptr);
+  void setEditing(bool editing) { editing_ = editing; }
   bool hiddenVisible() const { return hidden_visible_; }
   void setHiddenVisible(bool visible);
   bool sortDescending() const { return sort_order_ == Qt::DescendingOrder; }
   void setSortDescending(bool descending);
+  // Pins the source row at sourceRow (an INSERT-mode o/O create placeholder) to sort immediately
+  // adjacent to the entry named anchorName, instead of by its own (empty) name — the placeholder
+  // borrows anchorName/anchorIsDir as its sort key and is tie-broken to land right after
+  // (below=true) or right before (below=false) the anchor (SPEC.md REQ-F-010/011). Real entries
+  // never share a name, so this tie only ever occurs between the placeholder and its anchor.
+  // Call with sourceRow < 0 to release the pin. Must be set before the placeholder row is
+  // inserted into the source model, so it sorts correctly the moment it appears.
+  void setPlaceholder(int sourceRow, const QString& anchorName, bool anchorIsDir, bool below);
 
  signals:
   void hiddenVisibleChanged();
@@ -31,5 +40,10 @@ class DirectoryProxyModel : public QSortFilterProxyModel {
  private:
   QCollator collator_;
   Qt::SortOrder sort_order_ = Qt::AscendingOrder;
+  bool editing_ = false;
   bool hidden_visible_ = false;
+  int placeholder_source_row_ = -1;
+  QString placeholder_anchor_name_;
+  bool placeholder_anchor_is_dir_ = false;
+  bool placeholder_below_ = false;
 };

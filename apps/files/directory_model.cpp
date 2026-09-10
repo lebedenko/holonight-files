@@ -164,6 +164,7 @@ void DirectoryModel::load(const QString& path) {
   if (stopping_) {
     return;
   }
+  updates_suspended_ = false;
   ++generation_;
   if (cancellation_) {
     cancellation_->store(true);
@@ -180,7 +181,7 @@ void DirectoryModel::load(const QString& path) {
   startWalk(path, /*diff=*/false);
 }
 void DirectoryModel::refresh() {
-  if (stopping_ || directory_path_.isEmpty()) {
+  if (stopping_ || updates_suspended_ || directory_path_.isEmpty()) {
     return;
   }
   ++generation_;
@@ -192,6 +193,38 @@ void DirectoryModel::refresh() {
   scanning_ = true;
   emit changed();
   startWalk(directory_path_, /*diff=*/true);
+}
+void DirectoryModel::suspendUpdates() {
+  updates_suspended_ = true;
+  if (cancellation_) {
+    cancellation_->store(true);
+  }
+  scanning_ = false;
+  emit changed();
+}
+void DirectoryModel::resumeUpdates() {
+  if (!updates_suspended_) {
+    return;
+  }
+  updates_suspended_ = false;
+  refresh();
+}
+int DirectoryModel::insertPlaceholderRow() {
+  const int row = static_cast<int>(entries_.size());
+  DirectoryEntry placeholder;
+  placeholder.is_placeholder = true;
+  beginInsertRows({}, row, row);
+  entries_.append(placeholder);
+  endInsertRows();
+  return row;
+}
+void DirectoryModel::removePlaceholderRow(int row) {
+  if (row < 0 || row >= entries_.size() || !entries_[row].is_placeholder) {
+    return;
+  }
+  beginRemoveRows({}, row, row);
+  entries_.remove(row);
+  endRemoveRows();
 }
 void DirectoryModel::shutdown() {
   if (stopping_) {
@@ -241,6 +274,15 @@ void DirectoryModel::startWalk(const QString& path, bool diff) {
 }
 void DirectoryModel::applyBatch(const Batch& batch) {
   if (batch.generation != generation_) {
+    return;
+  }
+  if (batch.finished) {
+    walk_in_flight_ = false;
+    if (stopping_) {
+      thread_.quit();
+    }
+  }
+  if (updates_suspended_ || stopping_) {
     return;
   }
   if (batch.diff) {

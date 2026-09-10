@@ -9,7 +9,7 @@ acceptance checks remain pending.
 | 0. Project scaffold | Themed native-decoration shell, CLI, packaging, CI, checks | Clean-checkout build and installed launch; all scaffold checks closed |
 | 1. Browse a folder | Directory model, sortable listing, places sidebar, keyboard navigation | Responsive large directories; natural filename order; unreadable/missing entries handled |
 | 2. Inspect a selection | Metadata/EXIF preview pane, quick look | Predictable resize/fullscreen behavior, fractional scaling |
-| 3. Modal command mode | NORMAL mode, `:`-prefixed command palette, visual/multi-selection | Discoverable, composable commands; escape returns to NORMAL |
+| 3. Modal editing | NORMAL/VISUAL/SEARCH/INSERT; inline synchronous mkdir/touch/rename | Stable editing, safe creation, literal search highlighting; native acceptance pending |
 | 4. File operations | mkdir, touch, rename, delete (with trash), copy/move | Asynchronous operations; confirmations and recoverable failures |
 | 5. Release readiness | Desktop integration, accessibility, performance, packaging | Packaged workflow on supported desktops without development paths |
 
@@ -65,12 +65,12 @@ consuming application (e.g. holonight-viewer, a future launcher) needs them.
   images only (already being decoded), reading/writing the freedesktop
   Thumbnail Managing Standard cache (`$XDG_CACHE_HOME/thumbnails/`,
   MD5-of-URI keyed, mtime/size-validated) instead of a Files-private cache.
-- **Stage 3 — Modal command mode**: `VimModeController` state machine
-  (NORMAL/VISUAL/COMMAND/SEARCH/INSERT; INSERT backs rename/create dialogs),
-  the `:`-prefixed palette (`:mkdir`, `:touch`, `:cd`, `:sort`, `:hidden`),
-  `/` search over `SearchModel`'s in-process fuzzy matcher (fzf-style scoring:
-  consecutive runs, word-boundary bonus, gap penalty — no shelling out to an
-  external matcher), and `v`/`V` visual selection.
+- **Stage 3 — Modal editing**: `VimModeController` implements NORMAL/VISUAL/SEARCH/INSERT,
+  inline rename/create and synchronous mkdir/touch; `/` fuzzy jump with literal match
+  highlighting and NORMAL `n`/`N` repetition; `v`/`V` range selection without filesystem
+  consumers. COMMAND mode and the `:` palette are explicitly deferred to a future
+  approved cycle. See [verification](sdd/vim-modal-editing/VERIFICATION.md) for checks
+  and pending native acceptance.
 - **Stage 4 — File operations**: `FileOperationService`
   (copy/move/rename/trash/delete) driven entirely through `TaskManager` —
   asynchronous, cancellable, progress-reporting, conflict-resolving from the

@@ -19,6 +19,10 @@ struct DirectoryEntry {
   quint32 mode = 0;
   bool stat_failed = false;
   QString stat_error;
+  // Stage 3 (vim-modal-editing): a synchronous, UI-thread-only row standing in for an INSERT-mode
+  // (o/O) create-in-progress — never produced by the walker, never diffed against. See
+  // insertPlaceholderRow()/removePlaceholderRow().
+  bool is_placeholder = false;
   bool operator==(const DirectoryEntry&) const = default;
 };
 
@@ -52,6 +56,15 @@ class DirectoryModel : public QAbstractListModel {
   // Re-walks the current directoryPath(), diffing the result against current rows instead of
   // resetting the model, so watcher-driven refreshes keep scroll position and sort work intact.
   void refresh();
+  void suspendUpdates();
+  void resumeUpdates();
+  // INSERT-mode (o/O) create placeholder row (SPEC.md REQ-F-010/011): always appended, so no
+  // other row's index shifts. Synchronous, UI-thread-only — no worker involvement (REQ-F-041).
+  // Returns the new row's index. DirectoryProxyModel is responsible for sorting it to the
+  // requested visual position (see DirectoryProxyModel::setPlaceholder()).
+  int insertPlaceholderRow();
+  // No-op if row is out of range or isn't a placeholder row.
+  void removePlaceholderRow(int row);
   void shutdown();
  signals:
   void changed();
@@ -83,6 +96,7 @@ class DirectoryModel : public QAbstractListModel {
   QString directory_error_;
   std::shared_ptr<std::atomic_bool> cancellation_;
   quint64 generation_ = 0;
+  bool updates_suspended_ = false;
   bool scanning_ = false;
   bool walk_in_flight_ = false;
   bool stopping_ = false;

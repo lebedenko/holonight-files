@@ -92,3 +92,52 @@ TEST(DirectoryProxyModel, SortDirectionTogglesWithoutFullModelReset) {
   proxy.setSortDescending(false);
   EXPECT_EQ(proxyNames(proxy), (QStringList{"a.txt", "b.txt", "c.txt"}));
 }
+
+TEST(DirectoryProxyModel, PlaceholderAdjacentToExactAnchorAcrossDirectionsGroupsAndTies) {
+  QTemporaryDir dir(fixturePattern("placeholder-order"));
+  for (const auto& name : {"A", "a", "file02", "file2", "z"}) {
+    writeFile(dir, name);
+  }
+  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
+  DirectoryModel model;
+  DirectoryProxyModel proxy;
+  proxy.setSourceModel(&model);
+  model.load(dir.path());
+  ASSERT_TRUE(settled(model));
+  for (bool descending : {false, true}) {
+    proxy.setSortDescending(descending);
+    const auto original = proxyNames(proxy);
+    for (int anchor = 0; anchor < original.size(); ++anchor) {
+      for (bool below : {false, true}) {
+        const int sourceRow = model.rowCount();
+        const bool isDir = proxy.data(proxy.index(anchor, 0), DirectoryModel::IsDirRole).toBool();
+        proxy.setPlaceholder(sourceRow, original[anchor], isDir, below);
+        model.insertPlaceholderRow();
+        auto expected = original;
+        expected.insert(anchor + (below ? 1 : 0), QString{});
+        EXPECT_EQ(proxyNames(proxy), expected);
+        model.removePlaceholderRow(sourceRow);
+        proxy.setPlaceholder(-1, {}, false, false);
+      }
+    }
+  }
+}
+
+TEST(DirectoryProxyModel, EmptyPlaceholderAndEditingLocks) {
+  DirectoryModel model;
+  DirectoryProxyModel proxy;
+  proxy.setSourceModel(&model);
+  for (bool descending : {false, true}) {
+    proxy.setSortDescending(descending);
+    proxy.setPlaceholder(0, {}, false, true);
+    model.insertPlaceholderRow();
+    EXPECT_EQ(proxy.rowCount(), 1);
+    model.removePlaceholderRow(0);
+    proxy.setPlaceholder(-1, {}, false, false);
+  }
+  proxy.setEditing(true);
+  proxy.setSortDescending(false);
+  proxy.setHiddenVisible(true);
+  EXPECT_TRUE(proxy.sortDescending());
+  EXPECT_FALSE(proxy.hiddenVisible());
+}

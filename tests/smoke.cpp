@@ -15,6 +15,7 @@
 #include <QtQml/QQmlExtensionPlugin>
 
 #include <gtest/gtest.h>
+#include <iostream>
 #include <memory>
 
 Q_IMPORT_QML_PLUGIN(HolonightFilesPlugin)
@@ -153,8 +154,10 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   ASSERT_NE(error, nullptr);
   EXPECT_TRUE(error->isVisible());
   EXPECT_FALSE(list->isVisible());
-  EXPECT_TRUE(
-      window->findChild<QObject*>("statusLabel")->property("rawText").toString().contains(dir.filePath("missing")));
+  EXPECT_TRUE(window->findChild<QObject*>("normalStatusLabel")
+                  ->property("rawText")
+                  .toString()
+                  .contains(dir.filePath("missing")));
   if (!capture.isEmpty()) {
     QTest::qWait(100);
     EXPECT_TRUE(window->grabWindow().save(capture + "-error.png"));
@@ -454,4 +457,127 @@ TEST(Files, InspectionImageSplitterAndPixelSizing) {
   }
   QTest::keyClick(window, Qt::Key_Escape);
   EXPECT_NEAR(pane->width(), originalWidth + 100, 1);
+}
+
+TEST(Files, ModalEditingWindowKeyboardAndHighlighting) {
+  QTemporaryDir dir(files_test::fixturePattern("modal-window"));
+  QTemporaryDir destination(files_test::fixturePattern("modal-window-destination"));
+  files_test::writeFile(dir, "<b>nN&.txt");
+  files_test::writeFile(dir, "beta.txt");
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  window->requestActivate();
+  ASSERT_TRUE(QTest::qWaitForWindowActive(window));
+  controller.open(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+  auto* list = window->findChild<QQuickItem*>("directoryListView");
+  ASSERT_NE(list, nullptr);
+  auto capture = [&](const QString& state) {
+    const auto prefix = qEnvironmentVariable("FILES_CAPTURE_PREFIX");
+    if (!prefix.isEmpty()) {
+      QTest::qWait(60);
+      EXPECT_TRUE(window->grabWindow().save(prefix + "-modal-" + state + ".png"));
+    }
+  };
+  for (const char key : {'i', 'a', 'o'}) {
+    for (const auto modifier : {Qt::NoModifier, Qt::ShiftModifier}) {
+      SCOPED_TRACE(QString("key=%1 shift=%2 focus=%3")
+                       .arg(QChar(key))
+                       .arg(modifier == Qt::ShiftModifier)
+                       .arg(window->activeFocusItem() ? window->activeFocusItem()->objectName() : QString())
+                       .toStdString());
+      QTest::keyClick(window, modifier == Qt::ShiftModifier ? static_cast<char>(key - 'a' + 'A') : key, modifier);
+      ASSERT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Insert);
+      auto* editor = window->activeFocusItem();
+      ASSERT_NE(editor, nullptr);
+      EXPECT_EQ(editor->objectName(), "inlineNameEditor");
+      const int expectedCursor = key == 'a' ? static_cast<int>(controller.vim()->insertText().size()) : 0;
+      EXPECT_TRUE(QTest::qWaitFor([&] { return editor->property("cursorPosition").toInt() == expectedCursor; }));
+      QTest::keyClick(window, Qt::Key_F);
+      QTest::keyClick(window, Qt::Key_Q);
+      EXPECT_NE(window->visibility(), QWindow::FullScreen);
+      EXPECT_TRUE(window->isVisible());
+      capture("insert");
+      QTest::keyClick(window, Qt::Key_Escape);
+      EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+      EXPECT_TRUE(list->hasActiveFocus());
+      ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+    }
+  }
+  QTest::keyClick(window, Qt::Key_O);
+  auto* editor = window->activeFocusItem();
+  ASSERT_NE(editor, nullptr);
+  QElapsedTimer timer;
+  qint64 maxNs = 0;
+  for (int edit = 0; edit < 20; ++edit) {
+    timer.start();
+    editor->setProperty("text", edit % 2 == 0 ? "../invalid" : "created.txt");
+    ASSERT_TRUE(QTest::qWaitFor([&] { return editor->property("hasError").toBool() == (edit % 2 == 0); }));
+    maxNs = qMax(maxNs, timer.nsecsElapsed());
+    EXPECT_LT(timer.elapsed(), 200);
+  }
+  std::cout << "Modal validation feedback: 20 edits, maximum ms " << static_cast<double>(maxNs) / 1e6 << '\n';
+  QTest::keyClick(window, Qt::Key_Return);
+  EXPECT_TRUE(QFile::exists(dir.filePath("created.txt")));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+  QTest::keyClick(window, Qt::Key_Slash);
+  ASSERT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Search);
+  EXPECT_EQ(window->activeFocusItem()->objectName(), "searchField");
+  QTest::keyClick(window, Qt::Key_N);
+  EXPECT_EQ(window->activeFocusItem()->objectName(), "searchField");
+  QTest::keyClick(window, 'N', Qt::ShiftModifier);
+  EXPECT_EQ(controller.vim()->searchQuery(), "nN");
+  EXPECT_EQ(controller.vim()->searchMatchPositions(), (QList<int>{3, 4}));
+  capture("search");
+  bool literal = false;
+  bool highlighted = false;
+  QList<QQuickItem*> items{window->contentItem()};
+  for (int item = 0; item < items.size(); ++item) {
+    items.append(items[item]->childItems());
+  }
+  for (auto* label : items) {
+    if (label->objectName() != "filenameRun") {
+      continue;
+    }
+    const auto text = label->property("rawText").toString();
+    literal |= text == "<b>";
+    highlighted |= text == "nN" && label->property("font").value<QFont>().bold();
+    EXPECT_EQ(label->property("text").toString(), text);
+  }
+  EXPECT_TRUE(literal);
+  EXPECT_TRUE(highlighted);
+  QTest::keyClick(window, Qt::Key_F);
+  QTest::keyClick(window, Qt::Key_Q);
+  EXPECT_NE(window->visibility(), QWindow::FullScreen);
+  QTest::keyClick(window, Qt::Key_Escape);
+  EXPECT_TRUE(list->hasActiveFocus());
+  QTest::keyClick(window, Qt::Key_Slash);
+  QTest::keyClick(window, Qt::Key_N);
+  QTest::keyClick(window, Qt::Key_Return);
+  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+  QTest::keyClick(window, Qt::Key_V);
+  capture("visual");
+  QTest::keyClick(window, Qt::Key_F);
+  QTest::keyClick(window, Qt::Key_Q);
+  EXPECT_NE(window->visibility(), QWindow::FullScreen);
+  QTest::keyClick(window, Qt::Key_Escape);
+  for (const auto key : {Qt::Key_I, Qt::Key_O, Qt::Key_V, Qt::Key_Slash}) {
+    QTest::keyClick(window, key);
+    controller.open(destination.path());
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+    EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+    EXPECT_TRUE(list->hasActiveFocus());
+    controller.open(dir.path());
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+  }
+  window->showFullScreen();
+  QTest::qWait(60);
+  QTest::keyClick(window, Qt::Key_Escape);
+  EXPECT_NE(window->visibility(), QWindow::FullScreen);
+  capture("normal");
 }

@@ -19,7 +19,28 @@ updates, bounded EXIF reads, and a two-entry/64 MiB full-image cache. Selected-f
 changes refresh previews without moving the cursor. See the
 [inspection verification](docs/sdd/inspect-selection/VERIFICATION.md) for evidence
 and remaining acceptance limitations.
-File operations, search, selection, and command mode are not implemented yet.
+Stage 3 ("Modal editing") adds a Vim-style NORMAL/VISUAL/SEARCH/INSERT mode state
+machine. `v`/`V` enters VISUAL for range selection (`j`/`k`/`gg`/`G` extend it, a
+status-bar counter tracks the count; no operation consumes the selection yet).
+`/` enters SEARCH: a live fuzzy jump-to-match with substring highlighting, `n`/`N`
+to cycle committed matches (with wraparound) in NORMAL after `Enter`; SEARCH accepts
+literal n/N. `Escape` restores the original entry by filename identity. `i`/`I`/`a`/`A` rename the selected entry
+in place (cursor at the start/end); pressing `Enter` with the name unchanged just
+touches its modification time, a changed name renames it, `Escape` discards the
+edit with no side effect. `o`/`O` create a new file or folder inline, positioned
+immediately below/above the cursor regardless of alphabetical order; a name ending
+in `/` creates a directory. Invalid names (parent traversal, nested paths, empty,
+reserved, too long, or colliding) are rejected live with a status-bar message and
+a recolored input, and permission failures surface only at commit time. There is
+Folder navigation cancels unfinished edits and clears modal/search state. Listings
+and sort/filter settings stay stable during INSERT; commit/cancel refreshes external
+changes. Creation is exclusive, and touch changes the entry’s own mtime, including
+symlinks. NORMAL Escape closes Quick Look first, then retains fullscreen exit. There is
+still no `:` command palette — see
+[modal editing verification](docs/sdd/vim-modal-editing/VERIFICATION.md) for scope
+and known limitations.
+Bulk/async file operations (copy, move, trash, delete) and the `:` command palette
+are not implemented yet.
 See [docs/BACKLOG.md](docs/BACKLOG.md) for the planned stages and
 [docs/mockups/moc1.png](docs/mockups/moc1.png) for visual direction.
 

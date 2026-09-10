@@ -31,6 +31,7 @@ HnApplicationWindow {
 
     Shortcut {
         sequence: "F"
+        enabled: window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.toggleFullscreen()
     }
     Shortcut {
@@ -39,6 +40,7 @@ HnApplicationWindow {
     }
     Shortcut {
         sequence: "Q"
+        enabled: window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.close()
     }
 
@@ -46,18 +48,11 @@ HnApplicationWindow {
         anchors.fill: parent
         spacing: HnMetrics.internalSpacing(HnControlSize.Normal)
 
-        HnLabel {
-            objectName: "statusLabel"
+        ModeStatusBar {
+            objectName: "modeStatusBar"
+            controller: window.controller
             Layout.fillWidth: true
             Layout.margins: HnMetrics.internalSpacing(HnControlSize.Normal)
-            role: HnTypographyRole.Caption
-            color: HoloniightPalette.textMuted
-            elide: Text.ElideMiddle
-            rawText: {
-                if (!window.controller)
-                    return "";
-                return window.controller.statusMessage.length > 0 ? qsTr("%1  ·  %2").arg(window.controller.currentPath).arg(window.controller.statusMessage) : window.controller.currentPath;
-            }
         }
 
         RowLayout {
@@ -106,6 +101,11 @@ HnApplicationWindow {
                 role: HnTypographyRole.Caption
                 color: HoloniightPalette.textMuted
                 rawText: qsTr("Space  quick look   Q  quit")
+            }
+            HnLabel {
+                role: HnTypographyRole.Caption
+                color: HoloniightPalette.textMuted
+                rawText: qsTr("i/a  rename   o/O  create   v  select   /  search")
             }
         }
     }

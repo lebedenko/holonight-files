@@ -317,3 +317,51 @@ TEST(DirectoryModel, MetadataFollowsValidSymlinkTargetsAndCanStatUnreadableFile)
     EXPECT_EQ(model.data(index, DirectoryModel::SizeRole).toLongLong(), folder ? -1 : 11);
   }
 }
+
+TEST(DirectoryModel, SuspensionRejectsQueuedInitialAndRefreshDeliveriesThenReconciles) {
+  QTemporaryDir dir(fixturePattern("suspended-walk"));
+  populateEntries(dir, 600);
+  DirectoryModel model;
+  for (bool refresh : {false, true}) {
+    std::atomic_bool entered = false;
+    std::atomic_bool release = false;
+    DirectoryModelTestAccess::beforeOpen(model, [&] {
+      entered = true;
+      while (!release.load()) {
+        QThread::msleep(1);
+      }
+    });
+    if (refresh) {
+      model.refresh();
+    } else {
+      model.load(dir.path());
+    }
+    const auto unblock = qScopeGuard([&] { release = true; });
+    ASSERT_TRUE(QTest::qWaitFor([&] { return entered.load(); }));
+    model.suspendUpdates();
+    const int before = model.rowCount();
+    const int placeholder = model.insertPlaceholderRow();
+    model.refresh();
+    release = true;
+    QTest::qWait(60);
+    EXPECT_EQ(model.rowCount(), before + 1);
+    model.removePlaceholderRow(placeholder);
+    DirectoryModelTestAccess::beforeOpen(model, {});
+    model.resumeUpdates();
+    ASSERT_TRUE(settled(model));
+    EXPECT_EQ(model.rowCount(), 600);
+  }
+}
+
+TEST(DirectoryModel, ShutdownCompletesWhileSuspendedWithQueuedDeliveries) {
+  QTemporaryDir dir(fixturePattern("suspended-shutdown"));
+  populateEntries(dir, 1000);
+  DirectoryModel model;
+  QSignalSpy finished(&model, &DirectoryModel::shutdownFinished);
+  model.load(dir.path());
+  QThread::msleep(30);  // Fill bounded delivery slots without processing GUI events.
+  model.suspendUpdates();
+  model.shutdown();
+  ASSERT_TRUE(QTest::qWaitFor([&] { return finished.count() == 1; }));
+  EXPECT_EQ(model.rowCount(), 0);
+}

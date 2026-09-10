@@ -27,7 +27,10 @@ function release(event) {
         event.accepted = true;
 }
 
-function overrideShortcut(event, popup) {
-    if (event.key === Qt.Key_Space || (popup && event.key === Qt.Key_Escape))
+function overrideShortcut(event, popup, blockEscape) {
+    // blockEscape: true while VISUAL mode is active (Escape there must exit VISUAL, not leave
+    // fullscreen) — INSERT/SEARCH move focus onto their own text field, which claims Escape
+    // itself, so they never need this parameter.
+    if (event.key === Qt.Key_Space || (event.key === Qt.Key_Escape && (popup || blockEscape)))
         event.accepted = true;
 }

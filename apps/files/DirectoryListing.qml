@@ -2,6 +2,9 @@ pragma ComponentBehavior: Bound
 
 import "InspectionKeys.js" as InspectionKeys
 import QtQuick
+import QtQuick.Layouts
+import Holonight.Core
+import Holonight
 import Holonight.Controls
 
 Item {
@@ -9,6 +12,7 @@ Item {
 
     required property DirectoryController controller
     property bool previousQuickLookOpen: false
+    property int previousMode: VimModeController.Normal
 
     function formatSize(bytes: real): string {
         if (bytes < 0)
@@ -41,15 +45,28 @@ Item {
         }
 
         Keys.priority: Keys.BeforeItem
-        Keys.onShortcutOverride: event => InspectionKeys.overrideShortcut(event, false)
+        Keys.onShortcutOverride: event => InspectionKeys.overrideShortcut(event, false, root.controller.vim.currentMode === VimModeController.Visual)
         Keys.onPressed: event => InspectionKeys.press(event, root.controller, false)
         Keys.onReleased: event => InspectionKeys.release(event)
         Connections {
             target: root.controller
+            function onNavigated(): void {
+                listView.forceActiveFocus();
+            }
             function onChanged(): void {
                 if (root.previousQuickLookOpen && !root.controller.quickLookOpen)
                     listView.forceActiveFocus();
                 root.previousQuickLookOpen = root.controller.quickLookOpen;
+
+                const mode = root.controller.vim.currentMode;
+                if (root.previousMode !== VimModeController.Normal && mode === VimModeController.Normal) {
+                    listView.forceActiveFocus();
+                    Qt.callLater(() => {
+                        if (root.controller.vim.currentMode === VimModeController.Normal)
+                            listView.forceActiveFocus();
+                    });
+                }
+                root.previousMode = mode;
             }
         }
         Component.onCompleted: forceActiveFocus()
@@ -65,13 +82,78 @@ Item {
             required property bool statFailed
             required property string statError
 
+            readonly property bool editingThis: root.controller.vim.currentMode === VimModeController.Insert && root.controller.vim.editingRow === delegate.index
+
             objectName: "directoryEntryDelegate"
             width: listView.width
-            highlighted: ListView.isCurrentItem
+            highlighted: ListView.isCurrentItem || (root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(delegate.index))
             title: name
             subtitle: statFailed ? statError : (isDir ? qsTr("Folder") : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm"))
             metadata: isDir ? "" : root.formatSize(size)
             trailingContent: statFailed ? errorIndicator : null
+
+            contentItem: RowLayout {
+                spacing: delegate.semanticSpacing
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Math.max(2, delegate.semanticSpacing / 2)
+                    Item {
+                        Layout.fillWidth: true
+                        implicitHeight: filenameRuns.implicitHeight
+                        clip: true
+                        Row {
+                            id: filenameRuns
+                            Repeater {
+                                model: {
+                                    const positions = root.controller.vim.currentMode === VimModeController.Search && root.controller.cursorRow === delegate.index ? root.controller.vim.searchMatchPositions : [];
+                                    const runs = [];
+                                    for (let i = 0; i < delegate.name.length; ++i) {
+                                        const matched = positions.indexOf(i) !== -1;
+                                        if (runs.length && runs[runs.length - 1].matched === matched)
+                                            runs[runs.length - 1].text += delegate.name[i];
+                                        else
+                                            runs.push({
+                                                text: delegate.name[i],
+                                                matched: matched
+                                            });
+                                    }
+                                    return runs;
+                                }
+                                HnLabel {
+                                    required property var modelData
+                                    objectName: "filenameRun"
+                                    role: HnTypographyRole.Body
+                                    rawText: modelData.text
+                                    textFormat: Text.PlainText
+                                    color: modelData.matched ? HoloniightPalette.accentCyan : HoloniightPalette.textPrimary
+                                    font.weight: modelData.matched ? Font.Bold : Font.Normal
+                                    Accessible.ignored: true
+                                }
+                            }
+                        }
+                    }
+                    HnLabel {
+                        Layout.fillWidth: true
+                        role: HnTypographyRole.Caption
+                        rawText: delegate.subtitle
+                        color: HoloniightPalette.textMuted
+                        elide: Text.ElideRight
+                        visible: rawText.length > 0
+                    }
+                }
+                HnLabel {
+                    role: HnTypographyRole.Caption
+                    rawText: delegate.metadata
+                    color: HoloniightPalette.textSecondary
+                    visible: rawText.length > 0
+                    Layout.alignment: Qt.AlignTop
+                }
+                Loader {
+                    active: delegate.statFailed
+                    visible: active
+                    sourceComponent: errorIndicator
+                }
+            }
 
             Component {
                 id: errorIndicator
@@ -82,11 +164,51 @@ Item {
             }
 
             Keys.priority: Keys.BeforeItem
-            Keys.onShortcutOverride: event => InspectionKeys.overrideShortcut(event, false)
+            Keys.onShortcutOverride: event => InspectionKeys.overrideShortcut(event, false, root.controller.vim.currentMode === VimModeController.Visual)
             Keys.onPressed: event => InspectionKeys.press(event, root.controller, false)
             Keys.onReleased: event => InspectionKeys.release(event)
 
             onClicked: root.controller.openEntry(delegate.index)
+
+            // INSERT-mode inline rename/create editor (SPEC.md REQ-F-006 through REQ-F-017): an
+            // opaque-background TextField overlaid on this delegate, covering its label, rather
+            // than a separate floating popup — it scrolls/clips with the delegate for free
+            // (docs/sdd/vim-modal-editing/DESIGN.md).
+            TextField {
+                id: inlineEditor
+                objectName: "inlineNameEditor"
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: 8
+                visible: delegate.editingThis
+                text: root.controller.vim.insertText
+                hasError: !root.controller.vim.insertValid
+
+                Keys.priority: Keys.BeforeItem
+                Keys.onShortcutOverride: event => {
+                    if (event.key === Qt.Key_Escape)
+                        event.accepted = true;
+                }
+                Keys.onReturnPressed: root.controller.commitInsertEditing()
+                Keys.onEnterPressed: root.controller.commitInsertEditing()
+                Keys.onEscapePressed: root.controller.cancelInsertEditing()
+
+                onTextChanged: if (delegate.editingThis)
+                    root.controller.updateInsertText(text)
+                onVisibleChanged: if (visible) {
+                    forceActiveFocus();
+                    Qt.callLater(() => {
+                        if (delegate.editingThis) {
+                            forceActiveFocus();
+                            cursorPosition = root.controller.vim.insertCursorPosition;
+                        }
+                    });
+                } else {
+                    focus = false;
+                }
+            }
         }
     }
 
