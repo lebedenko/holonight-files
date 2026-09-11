@@ -31,17 +31,25 @@ HnApplicationWindow {
 
     Shortcut {
         sequence: "F"
-        enabled: window.controller.vim.currentMode === VimModeController.Normal
+        enabled: !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.toggleFullscreen()
     }
     Shortcut {
         sequence: "Escape"
+        enabled: !window.controller.tasks.hasPrompt
         onActivated: window.leaveFullscreen()
     }
     Shortcut {
         sequence: "Q"
-        enabled: window.controller.vim.currentMode === VimModeController.Normal
+        enabled: !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.close()
+    }
+    Shortcut {
+        // REQ-F-030/REQ-C-009: fires regardless of which mode owns keyboard focus — including
+        // while SEARCH's own TextField holds it — which handleKey()'s per-character dispatch
+        // chain can't guarantee without special-casing every mode (see DESIGN.md Interfaces).
+        sequence: "Ctrl+C"
+        onActivated: window.controller.tasks.cancelCurrentTask()
     }
 
     ColumnLayout {
@@ -106,6 +114,11 @@ HnApplicationWindow {
                 role: HnTypographyRole.Caption
                 color: HoloniightPalette.textMuted
                 rawText: qsTr("i/a  rename   o/O  create   v  select   /  search")
+            }
+            HnLabel {
+                role: HnTypographyRole.Caption
+                color: HoloniightPalette.textMuted
+                rawText: qsTr("yy/dd  copy/cut   p  paste   D  trash")
             }
         }
     }

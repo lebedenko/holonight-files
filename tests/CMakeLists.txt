@@ -3,13 +3,24 @@ qt_add_executable(files-smoke smoke.cpp directory_model_test.cpp directory_proxy
   directory_controller_test.cpp directory_performance_test.cpp initial_directory_test.cpp
   thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp preview_service_test.cpp
   preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp
-  name_validator_test.cpp fuzzy_matcher_test.cpp vim_mode_controller_test.cpp)
+  name_validator_test.cpp fuzzy_matcher_test.cpp vim_mode_controller_test.cpp
+  clipboard_register_test.cpp file_operation_service_test.cpp trash_service_test.cpp
+  task_manager_test.cpp directory_controller_file_ops_test.cpp)
 qt_add_resources(files-smoke test-config PREFIX "/" BASE ../apps/files FILES ../apps/files/qtquickcontrols2.conf)
 target_link_libraries(files-smoke PRIVATE files-ui files-uiplugin Qt6::Test GTest::gtest)
 target_compile_definitions(files-smoke PRIVATE FILES_FIXTURE_DIR="${CMAKE_CURRENT_BINARY_DIR}/fixtures/files")
 add_test(NAME files-smoke COMMAND files-smoke)
 set_tests_properties(files-smoke PROPERTIES ENVIRONMENT
   "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QML_IMPORT_PATH=${HOLONIGHT_QML_IMPORT_PATH};LD_LIBRARY_PATH=${HOLONIGHT_DEPENDENCY_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+
+# Cross-filesystem-boundary coverage (EXDEV move fallback, per-partition trash directory
+# selection, ENOSPC) runs in its own process: it unshares into a fresh user+mount namespace to
+# create genuinely distinct filesystems without root (see fs_isolation.h), which must never share
+# a process with files-smoke's chmod-000 permission-denied fixtures.
+qt_add_executable(files-fsops-smoke cross_filesystem_test.cpp fs_isolation.cpp)
+target_link_libraries(files-fsops-smoke PRIVATE files-ui GTest::gtest)
+add_test(NAME files-fsops-smoke COMMAND files-fsops-smoke)
+set_tests_properties(files-fsops-smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
 add_test(NAME files-help COMMAND holonight-files --help)
 add_test(NAME files-version COMMAND holonight-files --version)
 add_test(NAME files-reject-argument COMMAND holonight-files one two)

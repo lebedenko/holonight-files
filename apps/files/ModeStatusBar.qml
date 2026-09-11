@@ -21,9 +21,49 @@ RowLayout {
         role: HnTypographyRole.Caption
         color: HoloniightPalette.textMuted
         elide: Text.ElideMiddle
-        visible: root.controller.vim.currentMode === VimModeController.Normal
+        visible: root.controller.vim.currentMode === VimModeController.Normal && !root.controller.tasks.busy && !root.controller.tasks.hasPrompt
         Layout.fillWidth: visible
         rawText: root.controller.statusMessage.length > 0 ? qsTr("%1  ·  %2").arg(root.controller.currentPath).arg(root.controller.statusMessage) : root.controller.currentPath
+    }
+
+    HnLabel {
+        objectName: "taskProgressLabel"
+        role: HnTypographyRole.Caption
+        color: HoloniightPalette.textMuted
+        elide: Text.ElideMiddle
+        visible: root.controller.tasks.busy && !root.controller.tasks.hasPrompt
+        Layout.fillWidth: visible
+        readonly property string operationName: {
+            switch (root.controller.tasks.currentOperation) {
+            case TaskManager.Move:
+                return qsTr("Move");
+            case TaskManager.Trash:
+                return qsTr("Trash");
+            default:
+                return qsTr("Copy");
+            }
+        }
+        rawText: qsTr("%1 %2/%3: %4").arg(operationName).arg(root.controller.tasks.itemsDone).arg(root.controller.tasks.itemsTotal).arg(root.controller.tasks.currentItemName)
+    }
+
+    HnLabel {
+        objectName: "conflictPromptLabel"
+        role: HnTypographyRole.Caption
+        color: HoloniightPalette.error
+        elide: Text.ElideMiddle
+        visible: root.controller.tasks.hasPrompt && root.controller.tasks.promptKind === TaskManager.Conflict
+        Layout.fillWidth: visible
+        rawText: qsTr("%1 already exists as %2 — (s)kip / (o)verwrite / auto-(r)ename / (c)ancel").arg(root.controller.tasks.conflictSourceName).arg(root.controller.tasks.conflictDestName)
+    }
+
+    HnLabel {
+        objectName: "trashConfirmLabel"
+        role: HnTypographyRole.Caption
+        color: HoloniightPalette.error
+        elide: Text.ElideMiddle
+        visible: root.controller.tasks.hasPrompt && root.controller.tasks.promptKind === TaskManager.TrashConfirm
+        Layout.fillWidth: visible
+        rawText: qsTr("Trash %1 item(s)? (y/n)").arg(root.controller.tasks.trashConfirmCount)
     }
 
     HnLabel {

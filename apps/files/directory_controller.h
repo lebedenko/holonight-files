@@ -1,9 +1,11 @@
 #pragma once
 
+#include "clipboard_register.h"
 #include "directory_model.h"
 #include "directory_proxy_model.h"
 #include "places_model.h"
 #include "preview_service.h"
+#include "task_manager.h"
 #include "vim_mode_controller.h"
 
 #include <QElapsedTimer>
@@ -28,6 +30,7 @@ class DirectoryController : public QObject {
   Q_PROPERTY(PlacesModel* places READ places CONSTANT)
   Q_PROPERTY(PreviewService* preview READ preview CONSTANT)
   Q_PROPERTY(VimModeController* vim READ vim CONSTANT)
+  Q_PROPERTY(TaskManager* tasks READ tasks CONSTANT)
   Q_PROPERTY(bool quickLookOpen READ quickLookOpen NOTIFY changed)
  public:
   explicit DirectoryController(QObject* parent = nullptr);
@@ -40,6 +43,7 @@ class DirectoryController : public QObject {
   PlacesModel* places() { return &places_; }
   PreviewService* preview() { return &preview_; }
   VimModeController* vim() { return &vim_; }
+  TaskManager* tasks() { return &tasks_; }
   bool quickLookOpen() const { return quick_look_open_; }
   Q_INVOKABLE void open(const QString& path, const QString& fallbackReason = {});
   Q_INVOKABLE void navigateInto(int proxyRow);
@@ -95,11 +99,26 @@ class DirectoryController : public QObject {
   bool handleNormalOnlyKey(const QString& key);
   bool handleNormalToggleAndNavigationKey(const QString& key);
   bool handleModeTransitionKey(const QString& key);
+  // File-operations dispatch (SPEC.md file-operations): yy/dd chords and VISUAL y/d/D, checked
+  // ahead of the rest of NORMAL/VISUAL dispatch. Returns true when key was recognized and
+  // consumed.
+  bool handleFileOperationKey(const QString& key, bool isVisual);
+  // While tasks_.hasPrompt() is true, every key is either a valid prompt response or a swallowed
+  // no-op (REQ-F-021's "paused... does not proceed until resolved" reads as exclusive key
+  // capture) — takes priority over NORMAL/VISUAL/SEARCH entirely.
+  bool handlePromptKey(const QString& key);
+  bool eventFilter(QObject* watched, QEvent* event) override;
+  QStringList collectVisualSelectionPaths() const;
+  void yankOrCut(bool cut, bool wholeVisualSelection);
+  void pasteRegister();
+  void requestTrash(bool wholeVisualSelection);
   DirectoryModel model_;
   DirectoryProxyModel proxy_;
   PlacesModel places_;
   PreviewService preview_;
   VimModeController vim_;
+  TaskManager tasks_;
+  ClipboardRegister register_;
   QFileSystemWatcher watcher_;
   QString current_path_;
   QString status_message_;
@@ -109,8 +128,12 @@ class DirectoryController : public QObject {
   int pending_count_ = 0;
   bool has_pending_count_ = false;
   bool pending_g_ = false;
+  bool pending_y_ = false;
+  bool pending_d_ = false;
   bool quick_look_open_ = false;
   int workers_finished_ = 0;
   int active_placeholder_source_row_ = -1;
   QElapsedTimer pending_g_timer_;
+  QElapsedTimer pending_y_timer_;
+  QElapsedTimer pending_d_timer_;
 };

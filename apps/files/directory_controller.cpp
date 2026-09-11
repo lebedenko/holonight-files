@@ -1,9 +1,13 @@
 #include "directory_controller.h"
 
+#include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QKeyEvent>
+#include <QQuickItem>
+#include <QQuickWindow>
 #include <QUrl>
 
 #include <array>
@@ -19,11 +23,31 @@ constexpr qint64 kPendingGTimeoutMs = 600;
 }
 
 DirectoryController::DirectoryController(QObject* parent) : QObject(parent) {
+  QCoreApplication::instance()->installEventFilter(this);
   proxy_.setSourceModel(&model_);
   connect(&model_, &DirectoryModel::changed, this, &DirectoryController::changed);
   connect(&model_, &DirectoryModel::shutdownFinished, this, &DirectoryController::handleWorkerShutdown);
   connect(&preview_, &PreviewService::shutdownFinished, this, &DirectoryController::handleWorkerShutdown);
   connect(&vim_, &VimModeController::changed, this, &DirectoryController::changed);
+  connect(&tasks_, &TaskManager::changed, this, [this] {
+    if (tasks_.hasPrompt() && quick_look_open_) {
+      quick_look_open_ = false;
+      preview_.setQuickLookActive(false);
+    }
+    emit changed();
+  });
+  connect(&tasks_, &TaskManager::shutdownFinished, this, &DirectoryController::handleWorkerShutdown);
+  connect(&tasks_, &TaskManager::taskFinished, this, [this](const QStringList& affectedDirs) {
+    // Renders through the same normalStatusLabel/statusMessage channel open()'s fallbackReason
+    // already uses (REQ-F-034/035) — no new ModeStatusBar branch needed for the summary itself.
+    status_message_ = tasks_.lastSummaryText();
+    // In addition to (not instead of) the existing QFileSystemWatcher-driven refresh, so the
+    // listing updates deterministically right after a paste/trash rather than only whenever the
+    // watcher happens to coalesce a filesystem event.
+    if (affectedDirs.contains(current_path_)) {
+      model_.refresh();
+    }
+  });
   // changed() already fires on every cursor move, batch flush, watcher-driven refresh, and
   // toggle; syncPreviewTarget() guards on the resolved path so it's cheap when nothing
   // preview-relevant actually changed.
@@ -296,6 +320,14 @@ bool DirectoryController::handleNormalOnlyKey(const QString& key) {
   return false;
 }
 bool DirectoryController::handleKey(const QString& key) {
+  // File-operations (SPEC.md docs/sdd/file-operations/SPEC.md): a pending prompt captures every
+  // key exclusively, ahead of mode dispatch entirely (REQ-F-021's "paused... does not proceed
+  // until resolved" reads as exclusive key capture — new p/D presses during an open prompt are
+  // simply consumed, not queued as additional operations).
+  if (tasks_.hasPrompt()) {
+    return handlePromptKey(key);
+  }
+
   const auto mode = vim_.currentMode();
   if (mode == VimModeController::Mode::Insert || mode == VimModeController::Mode::Search) {
     // Keyboard focus lives on the inline editor / search field now; QML never routes their key
@@ -306,18 +338,29 @@ bool DirectoryController::handleKey(const QString& key) {
   if (pending_g_ && pending_g_timer_.elapsed() > kPendingGTimeoutMs) {
     pending_g_ = false;
   }
+  if (pending_y_ && pending_y_timer_.elapsed() > kPendingGTimeoutMs) {
+    pending_y_ = false;
+  }
+  if (pending_d_ && pending_d_timer_.elapsed() > kPendingGTimeoutMs) {
+    pending_d_ = false;
+  }
+
+  const bool isVisual = mode == VimModeController::Mode::Visual;
+  if (handleFileOperationKey(key, isVisual)) {
+    return true;
+  }
 
   const bool isDigit = key.size() == 1 && key.at(0) >= u'0' && key.at(0) <= u'9';
   const bool isMotionKey = key == u"g" || key == u"G" || key == u"j" || key == u"k";
-  if (mode == VimModeController::Mode::Visual) {
+  if (isVisual) {
     if (key == u"Escape") {
       takeCount();
       vim_.exitVisual();
       return true;
     }
     if (!isDigit && !isMotionKey) {
-      // REQ-F-023/REQ-C-004: VISUAL has no operation consumer this stage — every key besides a
-      // count-prefixed motion or Escape is swallowed as a deliberate no-op.
+      // REQ-C-004: VISUAL has no other operation consumer this stage — every key besides a
+      // count-prefixed motion, Escape, or a file-operation key above is swallowed as a no-op.
       takeCount();
       return true;
     }
@@ -334,6 +377,152 @@ bool DirectoryController::handleKey(const QString& key) {
   }
   takeCount();
   return false;
+}
+bool DirectoryController::handleFileOperationKey(const QString& key, bool isVisual) {
+  if (key != u"y") {
+    pending_y_ = false;
+  }
+  if (key != u"d") {
+    pending_d_ = false;
+  }
+  if (isVisual) {
+    if (key == u"y") {
+      takeCount();
+      yankOrCut(/*cut=*/false, /*wholeVisualSelection=*/true);
+      return true;
+    }
+    if (key == u"d") {
+      takeCount();
+      yankOrCut(/*cut=*/true, /*wholeVisualSelection=*/true);
+      return true;
+    }
+    if (key == u"D") {
+      takeCount();
+      requestTrash(/*wholeVisualSelection=*/true);
+      return true;
+    }
+    return false;
+  }
+  if (key == u"y") {
+    if (pending_y_) {
+      pending_y_ = false;
+      takeCount();
+      yankOrCut(/*cut=*/false, /*wholeVisualSelection=*/false);
+      return true;
+    }
+    pending_y_ = true;
+    pending_y_timer_.start();
+    return true;
+  }
+  pending_y_ = false;
+  if (key == u"d") {
+    if (pending_d_) {
+      pending_d_ = false;
+      takeCount();
+      yankOrCut(/*cut=*/true, /*wholeVisualSelection=*/false);
+      return true;
+    }
+    pending_d_ = true;
+    pending_d_timer_.start();
+    return true;
+  }
+  pending_d_ = false;
+  if (key == u"p") {
+    takeCount();
+    pasteRegister();
+    return true;
+  }
+  if (key == u"D") {
+    takeCount();
+    requestTrash(/*wholeVisualSelection=*/false);
+    return true;
+  }
+  return false;
+}
+bool DirectoryController::handlePromptKey(const QString& key) {
+  switch (tasks_.promptKind()) {
+    case TaskManager::PromptKind::Conflict:
+      if (key == u"s") {
+        tasks_.resolveConflict(TaskManager::ConflictResolution::Skip, tasks_.promptId());
+      } else if (key == u"o") {
+        tasks_.resolveConflict(TaskManager::ConflictResolution::Overwrite, tasks_.promptId());
+      } else if (key == u"r") {
+        tasks_.resolveConflict(TaskManager::ConflictResolution::AutoRename, tasks_.promptId());
+      } else if (key == u"c") {
+        tasks_.resolveConflict(TaskManager::ConflictResolution::Cancel, tasks_.promptId());
+      }
+      // Any other key (including Escape, REQ-C-008) is swallowed: no effect on the task.
+      return true;
+    case TaskManager::PromptKind::TrashConfirm:
+      // REQ-F-017: any key other than "y" declines, including Escape (REQ-C-008).
+      tasks_.respondToTrashConfirm(key == u"y", tasks_.promptId());
+      return true;
+    case TaskManager::PromptKind::None:
+      break;
+  }
+  return true;
+}
+QStringList DirectoryController::collectVisualSelectionPaths() const {
+  QStringList paths;
+  for (int row = 0; row < proxy_.rowCount(); ++row) {
+    if (!vim_.isRowSelected(row)) {
+      continue;
+    }
+    const auto sourceIndex = proxy_.mapToSource(proxy_.index(row, 0));
+    const auto path = model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+    if (!path.isEmpty()) {
+      paths.append(path);
+    }
+  }
+  return paths;
+}
+void DirectoryController::yankOrCut(bool cut, bool wholeVisualSelection) {
+  QStringList paths;
+  if (wholeVisualSelection) {
+    paths = collectVisualSelectionPaths();
+    vim_.exitVisual();  // REQ-F-002/004: exits VISUAL immediately, regardless of what was selected
+  } else if (cursor_row_ >= 0 && cursor_row_ < proxy_.rowCount()) {
+    const auto sourceIndex = proxy_.mapToSource(proxy_.index(cursor_row_, 0));
+    const auto path = model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+    if (!path.isEmpty()) {
+      paths = {path};
+    }
+  }
+  if (paths.isEmpty()) {
+    return;
+  }
+  register_.paths = paths;  // REQ-F-005: silently overwrites whatever was registered before
+  register_.cut = cut;
+}
+void DirectoryController::pasteRegister() {
+  if (register_.paths.isEmpty() || current_path_.isEmpty()) {
+    return;
+  }
+  const auto paths = register_.paths;
+  const bool cut = register_.cut;
+  if (cut) {
+    register_.clear();  // REQ-F-008: cleared synchronously with this keypress, not on completion
+    tasks_.enqueueMove(paths, current_path_);
+  } else {
+    tasks_.enqueueCopy(paths, current_path_);
+  }
+}
+void DirectoryController::requestTrash(bool wholeVisualSelection) {
+  QStringList paths;
+  if (wholeVisualSelection) {
+    paths = collectVisualSelectionPaths();
+    vim_.exitVisual();  // REQ-F-015: exits VISUAL immediately, prompt appears back in NORMAL
+  } else if (cursor_row_ >= 0 && cursor_row_ < proxy_.rowCount()) {
+    const auto sourceIndex = proxy_.mapToSource(proxy_.index(cursor_row_, 0));
+    const auto path = model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+    if (!path.isEmpty()) {
+      paths = {path};
+    }
+  }
+  if (paths.isEmpty()) {
+    return;
+  }
+  tasks_.requestTrashConfirmation(paths);  // REQ-F-016: unconditional, single vs. VISUAL alike
 }
 void DirectoryController::updateInsertText(const QString& text) { vim_.setInsertText(text); }
 void DirectoryController::commitInsertEditing() {
@@ -467,6 +656,8 @@ void DirectoryController::resetForNavigation() {
   pending_count_ = 0;
   has_pending_count_ = false;
   pending_g_ = false;
+  pending_y_ = false;
+  pending_d_ = false;
   quick_look_open_ = false;
   preview_.setQuickLookActive(false);
   ++listing_revision_;
@@ -506,11 +697,53 @@ void DirectoryController::syncPreviewTarget() {
                      model_.data(sourceIndex, DirectoryModel::StatErrorRole).toString(), preview_revision_);
 }
 void DirectoryController::handleWorkerShutdown() {
-  if (++workers_finished_ == 2) {
+  if (++workers_finished_ == 3) {
     emit shutdownFinished();
   }
 }
 void DirectoryController::shutdown() {
   model_.shutdown();
   preview_.shutdown();
+  tasks_.shutdown();
+}
+
+// Intercept at the window boundary, before Qt dispatches to editors or application shortcuts.
+// Keeping the existing focus item avoids changing editor cursor/selection and input mode.
+bool DirectoryController::eventFilter(QObject* watched, QEvent* event) {
+  if (event->type() != QEvent::ShortcutOverride && event->type() != QEvent::KeyPress) {
+    return false;
+  }
+  auto* window = qobject_cast<QQuickWindow*>(watched);
+  if (auto* item = qobject_cast<QQuickItem*>(watched)) {
+    window = item->window();
+  }
+  if ((window == nullptr) || window->property("controller").value<DirectoryController*>() != this) {
+    return false;
+  }
+  // The event type is checked above, as required by Qt event filters.
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  auto* keyEvent = static_cast<QKeyEvent*>(event);
+  const bool cancel = keyEvent->key() == Qt::Key_C && keyEvent->modifiers().testFlag(Qt::ControlModifier) &&
+                      (tasks_.busy() || tasks_.hasPrompt());
+  if (!tasks_.hasPrompt() && !cancel) {
+    return false;
+  }
+  event->accept();
+  if (event->type() == QEvent::ShortcutOverride) {
+    return true;
+  }
+  if (cancel) {
+    tasks_.cancelCurrentTask();
+  } else {
+    QString key = keyEvent->text();
+    if (keyEvent->key() == Qt::Key_Escape) {
+      key = QStringLiteral("Escape");
+    }
+    // Modifier presses do not answer a prompt before their printable key arrives.
+    if (keyEvent->key() != Qt::Key_Shift && keyEvent->key() != Qt::Key_Control && keyEvent->key() != Qt::Key_Alt &&
+        keyEvent->key() != Qt::Key_Meta) {
+      handlePromptKey(key);
+    }
+  }
+  return true;
 }

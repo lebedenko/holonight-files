@@ -71,10 +71,17 @@ consuming application (e.g. holonight-viewer, a future launcher) needs them.
   consumers. COMMAND mode and the `:` palette are explicitly deferred to a future
   approved cycle. See [verification](sdd/vim-modal-editing/VERIFICATION.md) for checks
   and pending native acceptance.
-- **Stage 4 — File operations**: `FileOperationService`
-  (copy/move/rename/trash/delete) driven entirely through `TaskManager` —
+- **Stage 4 — File operations** (safety remediation implemented; acceptance tracked in
+  [verification](sdd/file-operations/VERIFICATION.md)): `FileOperationService`
+  (safe copy/move and validated trash) driven entirely through `TaskManager` —
   asynchronous, cancellable, progress-reporting, conflict-resolving from the
-  start. `yy`/`dd`/`p`/`D` over a single active clipboard register.
+  start. `yy`/`dd`/`p`/`D` over a single active clipboard register. Full SDD
+  docs at `docs/sdd/file-operations/{SPEC,DESIGN,TASKS,VERIFICATION}.md`.
+  Mkdir/touch/rename remain Stage 3's synchronous implementation, unchanged.
 
 Stage 5 (release readiness) follows once stages 1-4 land; its scope is
 packaging/accessibility/performance hardening, not new v1 features.
+
+Stage 4 safety revision removes permanent deletion, retains complete sources on
+incomplete moves, and captures prompts ahead of editors. Remaining combined E2E,
+performance and native acceptance checks stay open in its verification record.

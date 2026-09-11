@@ -581,3 +581,177 @@ TEST(Files, ModalEditingWindowKeyboardAndHighlighting) {
   EXPECT_NE(window->visibility(), QWindow::FullScreen);
   capture("normal");
 }
+
+TEST(Files, ModeStatusBarShowsProgressAndConflictPromptAndCtrlCCancels) {
+  QTemporaryDir src(files_test::fixturePattern("fileops-window-src"));
+  QTemporaryDir dst(files_test::fixturePattern("fileops-window-dst"));
+  ASSERT_TRUE(src.isValid() && dst.isValid());
+  files_test::writeFile(src, "a.txt");
+  files_test::writeFile(src, "b.txt", "NEW");
+  files_test::writeFile(src, "c.txt");
+  files_test::writeFile(dst, "b.txt", "OLD");
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  window->requestActivate();
+  ASSERT_TRUE(QTest::qWaitForWindowActive(window));
+  controller.open(src.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+
+  // v + j + j selects all three entries, "y" copies the whole selection to the register.
+  QTest::keyClick(window, Qt::Key_V);
+  QTest::keyClick(window, Qt::Key_J);
+  QTest::keyClick(window, Qt::Key_J);
+  QTest::keyClick(window, Qt::Key_Y);
+  controller.open(dst.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+
+  QTest::keyClick(window, Qt::Key_P);
+  auto* conflictLabel = window->findChild<QObject*>("conflictPromptLabel");
+  ASSERT_NE(conflictLabel, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return conflictLabel->property("visible").toBool(); }));
+  EXPECT_TRUE(conflictLabel->property("rawText").toString().contains("b.txt"));
+  EXPECT_TRUE(controller.tasks()->busy());
+
+  const auto capture = qEnvironmentVariable("FILES_CAPTURE_PREFIX");
+  if (!capture.isEmpty()) {
+    QTest::qWait(60);
+    EXPECT_TRUE(window->grabWindow().save(capture + "-fileops-conflict.png"));
+  }
+
+  // Ctrl+C fires the window-level Shortcut regardless of the open prompt, cancelling the whole
+  // task rather than resolving it (REQ-F-030/REQ-C-009).
+  QTest::keyClick(window, Qt::Key_C, Qt::ControlModifier);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.tasks()->busy(); }));
+  EXPECT_FALSE(controller.tasks()->hasPrompt());
+  // "a.txt" sorts and processes before the "b.txt" collision; "c.txt" never gets reached.
+  EXPECT_TRUE(QFile::exists(dst.filePath("a.txt")));
+  EXPECT_FALSE(QFile::exists(dst.filePath("c.txt")));
+  QFile bFile(dst.filePath("b.txt"));
+  ASSERT_TRUE(bFile.open(QIODevice::ReadOnly));
+  EXPECT_EQ(bFile.readAll(), QByteArray("OLD"));  // conflict was never resolved, dest untouched
+}
+
+TEST(Files, ModeStatusBarShowsTrashConfirmation) {
+  QTemporaryDir home(files_test::fixturePattern("fileops-window-trash-home"));
+  QTemporaryDir src(files_test::fixturePattern("fileops-window-trash-src"));
+  ASSERT_TRUE(home.isValid() && src.isValid());
+  const files_test::ScopedXdgDataHome guard(home.path());
+  files_test::writeFile(src, "gone.txt");
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  window->requestActivate();
+  ASSERT_TRUE(QTest::qWaitForWindowActive(window));
+  controller.open(src.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+
+  QTest::keyClick(window, 'D', Qt::ShiftModifier);
+  auto* trashLabel = window->findChild<QObject*>("trashConfirmLabel");
+  ASSERT_NE(trashLabel, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return trashLabel->property("visible").toBool(); }));
+  EXPECT_TRUE(trashLabel->property("rawText").toString().contains("Trash 1 item"));
+  const auto capture = qEnvironmentVariable("FILES_CAPTURE_PREFIX");
+  if (!capture.isEmpty()) {
+    QTest::qWait(60);
+    EXPECT_TRUE(window->grabWindow().save(capture + "-fileops-trash-confirm.png"));
+  }
+  QTest::keyClick(window, Qt::Key_Y);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.tasks()->busy(); }));
+  EXPECT_FALSE(QFile::exists(src.filePath("gone.txt")));
+}
+
+TEST(Files, PromptsCaptureKeysAndCtrlCInEveryModeWithoutChangingEditorState) {
+  for (const auto* mode : {"normal", "visual", "search", "insert", "quicklook"}) {
+    SCOPED_TRACE(mode);
+    QTemporaryDir src(files_test::fixturePattern("prompt-modes-src"));
+    QTemporaryDir dst(files_test::fixturePattern("prompt-modes-dst"));
+    ASSERT_TRUE(src.isValid() && dst.isValid());
+    const auto source = files_test::writeFile(src, "file.txt", "new");
+    files_test::writeFile(dst, "file.txt", "old");
+    DirectoryController controller;
+    QQmlApplicationEngine engine;
+    engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+    engine.loadFromModule("HolonightFiles", "Main");
+    ASSERT_EQ(engine.rootObjects().size(), 1);
+    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+    ASSERT_NE(window, nullptr);
+    window->requestActivate();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(window));
+    controller.open(src.path());
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+    const QString modeName = QString::fromLatin1(mode);
+    if (modeName == "visual") {
+      QTest::keyClick(window, Qt::Key_V);
+    }
+    if (modeName == "search") {
+      QTest::keyClick(window, Qt::Key_Slash);
+    }
+    if (modeName == "insert") {
+      QTest::keyClick(window, Qt::Key_I);
+    }
+    if (modeName == "quicklook") {
+      ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->hasEntry(); }));
+      QTest::keyClick(window, Qt::Key_Space);
+      ASSERT_TRUE(controller.quickLookOpen());
+    }
+    const auto originalMode = controller.vim()->currentMode();
+    QQuickItem* editor = nullptr;
+    if (modeName == "search" || modeName == "insert") {
+      const auto name = modeName == "search" ? QStringLiteral("searchField") : QStringLiteral("inlineNameEditor");
+      ASSERT_TRUE(QTest::qWaitFor(
+          [&] { return window->activeFocusItem() && window->activeFocusItem()->objectName() == name; }));
+      editor = window->activeFocusItem();
+      editor->setProperty("text", "draft-name");
+      ASSERT_TRUE(QMetaObject::invokeMethod(editor, "select", Q_ARG(int, 1), Q_ARG(int, 5)));
+    }
+    const auto cursor = (editor != nullptr) ? editor->property("cursorPosition") : QVariant();
+    const auto selectionStart = (editor != nullptr) ? editor->property("selectionStart") : QVariant();
+    const auto selectionEnd = (editor != nullptr) ? editor->property("selectionEnd") : QVariant();
+    controller.tasks()->enqueueCopy({source}, dst.path());
+    ASSERT_TRUE(QTest::qWaitFor([&] { return controller.tasks()->hasPrompt(); }));
+    EXPECT_FALSE(controller.quickLookOpen());
+    QTest::keyClick(window, Qt::Key_Q, Qt::ShiftModifier);
+    QTest::keyClick(window, Qt::Key_F, Qt::ShiftModifier);
+    QTest::keyClick(window, Qt::Key_Escape);
+    EXPECT_TRUE(window->isVisible());
+    EXPECT_TRUE(controller.tasks()->hasPrompt());
+    EXPECT_EQ(controller.vim()->currentMode(), originalMode);
+    QTest::keyClick(window, Qt::Key_S);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.tasks()->busy(); }));
+    EXPECT_FALSE(controller.tasks()->hasPrompt());
+    if (editor != nullptr) {
+      EXPECT_EQ(window->activeFocusItem(), editor);
+      EXPECT_EQ(editor->property("text").toString(), "draft-name");
+      EXPECT_EQ(editor->property("cursorPosition"), cursor);
+      EXPECT_EQ(editor->property("selectionStart"), selectionStart);
+      EXPECT_EQ(editor->property("selectionEnd"), selectionEnd);
+    }
+    controller.tasks()->requestTrashConfirmation({source});
+    ASSERT_TRUE(controller.tasks()->hasPrompt());
+    QTest::keyClick(window, Qt::Key_Escape);
+    EXPECT_FALSE(controller.tasks()->hasPrompt());
+    EXPECT_EQ(controller.vim()->currentMode(), originalMode);
+    EXPECT_TRUE(QFile::exists(source));
+    controller.tasks()->enqueueCopy({source}, dst.path());
+    ASSERT_TRUE(QTest::qWaitFor([&] { return controller.tasks()->hasPrompt(); }));
+    QTest::keyClick(window, Qt::Key_C, Qt::ControlModifier);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.tasks()->busy(); }));
+    EXPECT_FALSE(controller.tasks()->hasPrompt());
+    if (editor != nullptr) {
+      EXPECT_EQ(window->activeFocusItem(), editor);
+      EXPECT_EQ(editor->property("text").toString(), "draft-name");
+      EXPECT_EQ(editor->property("cursorPosition"), cursor);
+      EXPECT_EQ(editor->property("selectionStart"), selectionStart);
+      EXPECT_EQ(editor->property("selectionEnd"), selectionEnd);
+    }
+  }
+}

@@ -39,8 +39,25 @@ symlinks. NORMAL Escape closes Quick Look first, then retains fullscreen exit. T
 still no `:` command palette — see
 [modal editing verification](docs/sdd/vim-modal-editing/VERIFICATION.md) for scope
 and known limitations.
-Bulk/async file operations (copy, move, trash, delete) and the `:` command palette
-are not implemented yet.
+Stage 4 ("File operations") adds asynchronous, cancellable copy/move/trash over a
+single clipboard register: `yy`/`dd` (NORMAL, doubled key) yank/cut the entry under
+the cursor; `y`/`d` (VISUAL, single key) act on the whole selection and return to
+NORMAL; `p` pastes into the currently displayed directory (never the cursor item);
+`D` (NORMAL or VISUAL) trashes with a mandatory one-key confirmation. Name
+collisions pause the operation with an inline skip/overwrite/auto-rename/cancel
+prompt; only the top-level collision prompts, nested collisions inside a
+recursive copy resolve automatically as skip. `Ctrl+C` cancels the in-flight
+operation from any mode, including focused editors. Escape declines trash confirmation
+and leaves conflict prompts unresolved. Incomplete directory moves retain the entire
+source tree; completed destination copies remain and the summary explains skipped
+children and errors. Copies stage file and symlink replacements so failure or
+cancellation preserves the previous destination.
+Trash uses validated home or per-partition `.Trash/$uid` / `.Trash-$uid` storage.
+If validation, metadata creation or relocation fails, the item remains untouched and
+the summary reports why. Permanent deletion is unavailable. Progress, prompts, and
+the completion summary render inline in the existing status bar; there is no `:` command
+palette. See [file operations verification](docs/sdd/file-operations/VERIFICATION.md)
+for evidence and known gaps.
 See [docs/BACKLOG.md](docs/BACKLOG.md) for the planned stages and
 [docs/mockups/moc1.png](docs/mockups/moc1.png) for visual direction.
 

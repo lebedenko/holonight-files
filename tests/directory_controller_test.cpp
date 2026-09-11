@@ -260,7 +260,10 @@ TEST(DirectoryController, VisualModeMotionsExtendSelectionAndCountedMotionsWork)
   }
 }
 
-TEST(DirectoryController, VisualModeSwallowsOperationKeysAsNoOps) {
+TEST(DirectoryController, VisualModeSwallowsUnrecognizedKeysAsNoOps) {
+  // Stage 4 (file-operations) gave VISUAL real y/d/D consumers — docs/sdd/file-operations/
+  // tests/directory_controller_file_ops_test.cpp covers those. This test now only asserts that a
+  // key with no consumer at all (neither a motion nor a file-operation key) stays an inert no-op.
   QTemporaryDir dir(fixturePattern("visual-noop"));
   ASSERT_TRUE(dir.isValid());
   writeFile(dir, "a.txt");
@@ -269,9 +272,7 @@ TEST(DirectoryController, VisualModeSwallowsOperationKeysAsNoOps) {
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   ASSERT_TRUE(controller.handleKey("v"));
-  EXPECT_TRUE(controller.handleKey("d"));  // consumed, but no filesystem effect (REQ-F-023/C-004)
-  EXPECT_TRUE(controller.handleKey("y"));
-  EXPECT_TRUE(controller.handleKey("x"));
+  EXPECT_TRUE(controller.handleKey("x"));  // no consumer at all: consumed, no filesystem effect
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Visual);
   EXPECT_TRUE(QDir(dir.path()).exists("a.txt"));
   EXPECT_TRUE(QDir(dir.path()).exists("b.txt"));

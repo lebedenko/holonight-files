@@ -81,4 +81,30 @@ inline void restorePermissionFixture(const PermissionFixture& fixture) {
   ::chmod(fixture.blocked_dir.toLocal8Bit().constData(), 0700);
 }
 
+// Redirects $XDG_DATA_HOME to an isolated fixture directory for the lifetime of the guard,
+// restoring whatever was there before — used by TrashService/TaskManager tests so they never
+// touch the real ~/.local/share/Trash (SPEC.md's redirected-XDG_DATA_HOME fixture requirement).
+class ScopedXdgDataHome {
+ public:
+  explicit ScopedXdgDataHome(const QString& path) : had_previous_(qEnvironmentVariableIsSet("XDG_DATA_HOME")) {
+    if (had_previous_) {
+      previous_ = qEnvironmentVariable("XDG_DATA_HOME");
+    }
+    qputenv("XDG_DATA_HOME", path.toLocal8Bit());
+  }
+  ~ScopedXdgDataHome() {
+    if (had_previous_) {
+      qputenv("XDG_DATA_HOME", previous_.toLocal8Bit());
+    } else {
+      qunsetenv("XDG_DATA_HOME");
+    }
+  }
+  ScopedXdgDataHome(const ScopedXdgDataHome&) = delete;
+  ScopedXdgDataHome& operator=(const ScopedXdgDataHome&) = delete;
+
+ private:
+  bool had_previous_;
+  QString previous_;
+};
+
 }  // namespace files_test
