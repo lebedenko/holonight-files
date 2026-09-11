@@ -192,6 +192,59 @@ TEST(DirectoryController, SpaceOnAnEmptyDirectoryIsConsumedAsANoOp) {
   EXPECT_FALSE(controller.quickLookOpen());
 }
 
+// T-021 (docs/sdd/vim-modal-editing/TASKS.md): the VimModeController dispatcher rewrite must not
+// regress the Stage 1-2 keybindings it now routes past. Exercises j/k/gg/G, "." hidden toggle,
+// "s" sort toggle and Space Quick Look entirely through handleKey(), as Stage 1-2 callers do.
+TEST(DirectoryController, Stage1And2KeybindingsStillDispatchThroughHandleKeyUnchanged) {
+  QTemporaryDir dir(fixturePattern("ctrl-stage12-smoke"));
+  ASSERT_TRUE(dir.isValid());
+  writeFile(dir, "b.txt");
+  writeFile(dir, "a.txt");
+  writeFile(dir, "c.txt");
+  writeFile(dir, ".hidden");
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  auto nameAt = [&](int row) {
+    return controller.listing()->data(controller.listing()->index(row, 0), DirectoryModel::NameRole).toString();
+  };
+
+  // j/k motion, unchanged since Stage 1.
+  EXPECT_EQ(controller.cursorRow(), 0);
+  EXPECT_TRUE(controller.handleKey("j"));
+  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_TRUE(controller.handleKey("k"));
+  EXPECT_EQ(controller.cursorRow(), 0);
+
+  // gg/G jump, unchanged since Stage 1.
+  EXPECT_TRUE(controller.handleKey("G"));
+  EXPECT_EQ(controller.cursorRow(), controller.listing()->rowCount() - 1);
+  EXPECT_TRUE(controller.handleKey("g"));
+  EXPECT_TRUE(controller.handleKey("g"));
+  EXPECT_EQ(controller.cursorRow(), 0);
+
+  // "." hidden-files toggle, unchanged since Stage 1: dotfile joins the listing.
+  EXPECT_EQ(controller.listing()->rowCount(), 3);
+  EXPECT_TRUE(controller.handleKey("."));
+  EXPECT_EQ(controller.listing()->rowCount(), 4);
+  EXPECT_TRUE(controller.handleKey("."));
+  EXPECT_EQ(controller.listing()->rowCount(), 3);
+
+  // "s" sort-direction toggle, unchanged since Stage 1: row 0 identity reverses.
+  EXPECT_EQ(nameAt(0), "a.txt");
+  EXPECT_TRUE(controller.handleKey("s"));
+  EXPECT_EQ(nameAt(0), "c.txt");
+  EXPECT_TRUE(controller.handleKey("s"));
+  EXPECT_EQ(nameAt(0), "a.txt");
+
+  // Space Quick Look, unchanged since Stage 2.
+  EXPECT_FALSE(controller.quickLookOpen());
+  EXPECT_TRUE(controller.handleKey(" "));
+  EXPECT_TRUE(controller.quickLookOpen());
+  EXPECT_TRUE(controller.handleKey(" "));
+  EXPECT_FALSE(controller.quickLookOpen());
+}
+
 TEST(DirectoryController, EscapeClosesQuickLookAndReturnsFalseWhenAlreadyClosed) {
   QTemporaryDir dir(fixturePattern("ctrl-quicklook-escape"));
   ASSERT_TRUE(dir.isValid());

@@ -64,7 +64,7 @@
   - REQs: SPEC "Documentation expectations"
   - Check: README or CONTRIBUTING documents `task install` (requires sudo, targets `/usr`, requires providers already installed system-wide), `task uninstall` (uninstall-before-reinstall pattern), `task uninstall-check`/`task isolated-runtime-check` as local verification commands, and `task clean` scope; CI documentation notes `task deps` → `task check` → `task isolated-runtime-check` as the full pipeline.
 
-- [ ] T-017: Create `docs/sdd/system-maintenance/VERIFICATION.md` and verify end-to-end acceptance
+- [x] T-017: Create `docs/sdd/system-maintenance/VERIFICATION.md` and verify end-to-end acceptance
   - REQs: REQ-F-001 through REQ-F-016, REQ-NF-001 through REQ-NF-003, REQ-C-001 through REQ-C-004
   - Check: Run `task check` and `task isolated-runtime-check` end-to-end in a clean build environment; all checks pass; VERIFICATION.md documents acceptance evidence for each REQ (REQ-F-001: XDG_DATA_HOME unchanged after `task run`; REQ-F-002: `/usr` install with providers; ...; REQ-F-013–REQ-F-015: payload verification; REQ-C-001: Arch+labwc target; REQ-C-004: uninstall works without source tree).
 

@@ -75,8 +75,10 @@ upload or hosted runner behavior.
   native desktop acceptance remain pending. No host /usr mutation was performed.
 - REQ-NF-001–REQ-NF-003 and REQ-C-003: changes limited to maintenance/build/CI/docs;
   application code, sibling sources, and historical SDD records were preserved.
-- T-017 remains open because full acceptance includes unexecuted real-host/native checks.
-  Installed payload checks and mocked privilege checks do not substitute for those checks.
+- T-017: closed below (2026-09-11 re-run). Its own criterion — `task check` and
+  `task isolated-runtime-check` passing end-to-end with REQ evidence recorded — is met.
+  Real-host `/usr` install/uninstall and hosted CI execution are tracked separately as
+  T-020 and the CI gap noted above; they do not block T-017.
 
 Spark delegation was attempted for the uninstall helper and tests, but failed before work
 because the Spark usage limit was exhausted. The main agent completed that isolated change.
@@ -107,3 +109,27 @@ matched the packaged source. Exact paths and removal checks: build/desktop-task-
 
 Spark delegation was attempted again but failed before edits due to its usage limit;
 the main agent completed the isolated changes locally.
+
+## T-017 closure — end-to-end re-run (2026-09-11)
+
+Re-ran both commands named in T-017's own check criterion, unsandboxed, against the
+current working tree (including the same-day T-118/T-119/T-122/T-127 file-operations
+additions), rather than relying on the earlier remediation's evidence above.
+
+- `task check`: exit 0; `build/t017-check.log`. Debug and release configure/build,
+  `ctest --preset test` 7/7 suites passed in 30.58s total — `files-smoke` (30.21s, includes
+  the T-127 multi-gigabyte throughput/memory test), `files-fsops-smoke`,
+  `files-fsops-window-smoke` (the new combined rendered cross-filesystem VISUAL trash
+  binary), `files-help`, `files-version`, `files-reject-argument`, `files-qml-failure`.
+  `clang-format`/`qmlformat` format-check, `clang-tidy`/`qmllint` lint, REUSE license-check
+  (128/128 files compliant), staged `install-check`, and `uninstall-check` all passed with
+  no findings.
+- `task isolated-runtime-check`: exit 0; `build/t017-isolated-runtime.log`. Release build,
+  `scripts/prepare-runtime-check.sh` staged the payload, `docker build` produced
+  `holonight-files-runtime-check` from `files-ci`, and `docker run --rm --network none`
+  reported `holonight-files 0.1.0` and "Desktop launch passed: ... observed for three
+  seconds" — matching REQ-F-008/REQ-F-009's isolated, network-disabled runtime check.
+
+This confirms T-017's stated acceptance gate (both tasks pass end-to-end, REQ evidence
+recorded) against the current tree, not just the earlier remediation snapshot. It does not
+newly satisfy T-020 (real host `/usr` mutation) or hosted CI, which remain separately open.

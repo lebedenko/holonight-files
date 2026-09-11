@@ -75,6 +75,15 @@ maximum 0.539 ms). `build/review-native.log` and `native-modal-*.png` record the
 run; all four captures were inspected. This uses the active compositor's supplied
 window sizing/scaling, not a claim of a full native theme/scale matrix.
 
+## T-021 — Stage 1-2 keybinding backward compatibility (2026-09-11)
+
+`DirectoryController.Stage1And2KeybindingsStillDispatchThroughHandleKeyUnchanged`
+(`tests/directory_controller_test.cpp`) exercises j/k, gg/G, `.` hidden-files toggle,
+`s` sort-direction toggle and Space Quick Look entirely through `handleKey()`, confirming
+the Stage 3 dispatcher rewrite (`handleNormalOnlyKey`/`handleNormalToggleAndNavigationKey`/
+`handleModeTransitionKey`) did not change Stage 1-2 behavior. `ctest --test-dir build`:
+6/6 suites pass (37/37 `DirectoryController` cases); `format-check` clean.
+
 ## Remaining acceptance
 
 Manual IME and assistive-technology interaction and a full native desktop theme/scale

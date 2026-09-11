@@ -80,9 +80,12 @@
   - REQs: REQ-F-041, REQ-C-005
   - Check: Code review confirms all INSERT-mode file operations (mkdir, touch, rename) use direct synchronous Qt/Linux filesystem calls with no TaskManager or async queue usage.
 
-- [ ] T-021: Backward compatibility smoke test for Stage 1-2 keybindings
+- [x] T-021: Backward compatibility smoke test for Stage 1-2 keybindings
   - REQs: REQ-C-002, REQ-C-003
   - Check: Manual test confirms j/k/gg/G motions work unchanged, sort toggle works, hidden-files toggle works, Space opens Quick Look, all existing keybindings dispatch correctly through DirectoryController.
+  - Automated as `DirectoryController.Stage1And2KeybindingsStillDispatchThroughHandleKeyUnchanged`
+    in `tests/directory_controller_test.cpp`: j/k, gg/G, `.` hidden toggle, `s` sort toggle and
+    Space Quick Look all dispatched through `handleKey()`, matching Stage 1-2 caller behavior.
 
 - [x] T-022: Project verify sequence (build, format, lint, tidy, test)
   - REQs: All (implicit coverage of all requirements)
