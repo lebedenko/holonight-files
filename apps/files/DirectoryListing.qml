@@ -14,6 +14,23 @@ Item {
     property bool previousQuickLookOpen: false
     property int previousMode: VimModeController.Normal
 
+    readonly property real sizeColumnWidth: 88
+    // Widest expected rendering of "yyyy-MM-dd HH:mm" (all-digit fields, so "9" stands in for the
+    // widest glyph in every position); measured against an offstage label using the exact role/
+    // font the delegate's own Modified field renders with, rather than re-deriving font metrics.
+    readonly property real modifiedColumnWidth: Math.ceil(modifiedColumnMetric.implicitWidth)
+    readonly property real columnSpacing: HnMetrics.internalSpacing(HnControlSize.Compact)
+    readonly property real columnPadding: HnMetrics.horizontalPadding(HnControlSize.Normal)
+    readonly property bool showSize: width >= 2 * columnPadding + 120 + columnSpacing + sizeColumnWidth
+    readonly property bool showModified: width >= 2 * columnPadding + 120 + 2 * columnSpacing + sizeColumnWidth + modifiedColumnWidth
+
+    HnLabel {
+        id: modifiedColumnMetric
+        visible: false
+        role: HnTypographyRole.Caption
+        rawText: "9999-99-99 99:99"
+    }
+
     function formatSize(bytes: real): string {
         if (bytes < 0)
             return "";
@@ -29,13 +46,93 @@ Item {
         return qsTr("%1 %2").arg(value.toFixed(1)).arg(units[unitIndex]);
     }
 
+    Rectangle {
+        id: columnHeader
+        objectName: "directoryColumnHeader"
+        anchors {
+            top: parent.top
+            left: parent.left
+            right: parent.right
+        }
+        height: HnMetrics.controlHeight(HnControlSize.Compact)
+        color: "transparent"
+        clip: true
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: HnMetrics.horizontalPadding(HnControlSize.Normal)
+            anchors.rightMargin: HnMetrics.horizontalPadding(HnControlSize.Normal)
+            spacing: root.columnSpacing
+
+            HnLabel {
+                objectName: "nameColumnHeader"
+                role: HnTypographyRole.Body
+                rawText: qsTr("Name")
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+            HnLabel {
+                objectName: "sizeColumnHeader"
+                role: HnTypographyRole.Body
+                rawText: qsTr("Size")
+                horizontalAlignment: Text.AlignRight
+                visible: root.showSize
+                Layout.minimumWidth: root.sizeColumnWidth
+                Layout.preferredWidth: root.sizeColumnWidth
+                Layout.maximumWidth: root.sizeColumnWidth
+                Layout.fillHeight: true
+                verticalAlignment: Text.AlignVCenter
+
+                HnSeparator {
+                    orientation: Qt.Vertical
+                    color: HoloniightPalette.borderPassive
+                    x: -(root.columnSpacing + width) / 2
+                    height: parent.height
+                }
+            }
+            HnLabel {
+                objectName: "modifiedColumnHeader"
+                role: HnTypographyRole.Body
+                rawText: qsTr("Modified")
+                visible: root.showModified
+                Layout.minimumWidth: root.modifiedColumnWidth
+                Layout.preferredWidth: root.modifiedColumnWidth
+                Layout.maximumWidth: root.modifiedColumnWidth
+                Layout.fillHeight: true
+                verticalAlignment: Text.AlignVCenter
+
+                HnSeparator {
+                    orientation: Qt.Vertical
+                    color: HoloniightPalette.borderPassive
+                    x: -(root.columnSpacing + width) / 2
+                    height: parent.height
+                }
+            }
+        }
+
+        HnSeparator {
+            color: HoloniightPalette.borderPassive
+            anchors {
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+            }
+        }
+    }
+
     ListView {
         id: listView
         objectName: "directoryListView"
 
-        anchors.fill: parent
+        anchors {
+            top: columnHeader.bottom
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+        }
         clip: true
         focus: true
+        ScrollBar.vertical: ScrollBar {}
         visible: !root.controller || root.controller.directoryError.length === 0
         model: root.controller ? root.controller.listing : null
         currentIndex: root.controller ? root.controller.cursorRow : -1
@@ -93,65 +190,74 @@ Item {
             trailingContent: statFailed ? errorIndicator : null
 
             contentItem: RowLayout {
-                spacing: delegate.semanticSpacing
-                ColumnLayout {
+                spacing: root.columnSpacing
+                Item {
+                    objectName: "nameColumnField"
                     Layout.fillWidth: true
-                    spacing: Math.max(2, delegate.semanticSpacing / 2)
-                    Item {
-                        Layout.fillWidth: true
-                        implicitHeight: filenameRuns.implicitHeight
+                    implicitHeight: filenameRuns.implicitHeight
+                    clip: true
+                    Row {
+                        id: filenameRuns
+                        width: Math.max(0, parent.width - (statErrorIndicator.active ? statErrorIndicator.width + root.columnSpacing : 0))
                         clip: true
-                        Row {
-                            id: filenameRuns
-                            Repeater {
-                                model: {
-                                    const positions = root.controller.vim.currentMode === VimModeController.Search && root.controller.cursorRow === delegate.index ? root.controller.vim.searchMatchPositions : [];
-                                    const runs = [];
-                                    for (let i = 0; i < delegate.name.length; ++i) {
-                                        const matched = positions.indexOf(i) !== -1;
-                                        if (runs.length && runs[runs.length - 1].matched === matched)
-                                            runs[runs.length - 1].text += delegate.name[i];
-                                        else
-                                            runs.push({
-                                                text: delegate.name[i],
-                                                matched: matched
-                                            });
-                                    }
-                                    return runs;
+                        Repeater {
+                            model: {
+                                const positions = root.controller.vim.currentMode === VimModeController.Search && root.controller.cursorRow === delegate.index ? root.controller.vim.searchMatchPositions : [];
+                                const runs = [];
+                                for (let i = 0; i < delegate.name.length; ++i) {
+                                    const matched = positions.indexOf(i) !== -1;
+                                    if (runs.length && runs[runs.length - 1].matched === matched)
+                                        runs[runs.length - 1].text += delegate.name[i];
+                                    else
+                                        runs.push({
+                                            text: delegate.name[i],
+                                            matched: matched
+                                        });
                                 }
-                                HnLabel {
-                                    required property var modelData
-                                    objectName: "filenameRun"
-                                    role: HnTypographyRole.Body
-                                    rawText: modelData.text
-                                    textFormat: Text.PlainText
-                                    color: modelData.matched ? HoloniightPalette.accentCyan : HoloniightPalette.textPrimary
-                                    font.weight: modelData.matched ? Font.Bold : Font.Normal
-                                    Accessible.ignored: true
-                                }
+                                return runs;
+                            }
+                            HnLabel {
+                                required property var modelData
+                                objectName: "filenameRun"
+                                role: HnTypographyRole.Body
+                                rawText: modelData.text
+                                textFormat: Text.PlainText
+                                color: modelData.matched ? HoloniightPalette.accentCyan : HoloniightPalette.textPrimary
+                                font.weight: modelData.matched ? Font.Bold : Font.Normal
+                                Accessible.ignored: true
                             }
                         }
                     }
-                    HnLabel {
-                        Layout.fillWidth: true
-                        role: HnTypographyRole.Caption
-                        rawText: delegate.subtitle
-                        color: HoloniightPalette.textMuted
-                        elide: Text.ElideRight
-                        visible: rawText.length > 0
+                    Loader {
+                        id: statErrorIndicator
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        active: delegate.statFailed
+                        visible: active
+                        sourceComponent: errorIndicator
                     }
                 }
                 HnLabel {
+                    objectName: "sizeColumnField"
                     role: HnTypographyRole.Caption
-                    rawText: delegate.metadata
+                    rawText: delegate.isDir ? "" : root.formatSize(delegate.size)
                     color: HoloniightPalette.textSecondary
-                    visible: rawText.length > 0
-                    Layout.alignment: Qt.AlignTop
+                    horizontalAlignment: Text.AlignRight
+                    visible: root.showSize
+                    Layout.minimumWidth: root.sizeColumnWidth
+                    Layout.preferredWidth: root.sizeColumnWidth
+                    Layout.maximumWidth: root.sizeColumnWidth
                 }
-                Loader {
-                    active: delegate.statFailed
-                    visible: active
-                    sourceComponent: errorIndicator
+                HnLabel {
+                    objectName: "modifiedColumnField"
+                    role: HnTypographyRole.Caption
+                    rawText: delegate.statFailed ? delegate.statError : Qt.formatDateTime(delegate.modified, "yyyy-MM-dd HH:mm")
+                    color: delegate.statFailed ? HoloniightPalette.error : HoloniightPalette.textMuted
+                    elide: Text.ElideRight
+                    visible: root.showModified
+                    Layout.minimumWidth: root.modifiedColumnWidth
+                    Layout.preferredWidth: root.modifiedColumnWidth
+                    Layout.maximumWidth: root.modifiedColumnWidth
                 }
             }
 

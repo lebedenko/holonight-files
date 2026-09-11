@@ -164,6 +164,53 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   }
 }
 
+TEST(Files, WindowColumnAlignmentAndNarrowNames) {
+  QTemporaryDir dir(files_test::fixturePattern("columns"));
+  ASSERT_FALSE(files_test::writeFile(dir, "example.txt").isEmpty());
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  controller.open(dir.path());
+  auto* list = window->findChild<QQuickItem*>("directoryListView");
+  ASSERT_NE(list, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor(
+      [&] { return !controller.scanning() && list->property("currentItem").value<QQuickItem*>() != nullptr; }));
+  auto* row = list->property("currentItem").value<QQuickItem*>();
+  auto* name = row->findChild<QQuickItem*>("nameColumnField");
+  auto* size = row->findChild<QQuickItem*>("sizeColumnField");
+  auto* modified = row->findChild<QQuickItem*>("modifiedColumnField");
+  auto* sizeHeader = window->findChild<QQuickItem*>("sizeColumnHeader");
+  auto* modifiedHeader = window->findChild<QQuickItem*>("modifiedColumnHeader");
+  auto* breadcrumb = window->findChild<QQuickItem*>("breadcrumbLabel");
+  ASSERT_NE(name, nullptr);
+  ASSERT_NE(size, nullptr);
+  ASSERT_NE(modified, nullptr);
+  ASSERT_NE(sizeHeader, nullptr);
+  ASSERT_NE(modifiedHeader, nullptr);
+  ASSERT_NE(breadcrumb, nullptr);
+  for (const int width : {1000, 850, 700, 1000}) {
+    window->resize(width, 400);
+    ASSERT_TRUE(QTest::qWaitFor([&] {
+      return name->width() >= 120 && size->isVisible() == (width != 700) && modified->isVisible() == (width == 1000);
+    }));
+    EXPECT_NEAR(breadcrumb->mapToScene(QPointF()).x(), name->mapToScene(QPointF()).x(), 1);
+    EXPECT_EQ(sizeHeader->isVisible(), size->isVisible());
+    EXPECT_EQ(modifiedHeader->isVisible(), modified->isVisible());
+    if (size->isVisible()) {
+      EXPECT_NEAR(sizeHeader->mapToScene(QPointF()).x(), size->mapToScene(QPointF()).x(), 1);
+      EXPECT_NEAR(sizeHeader->width(), size->width(), 1);
+    }
+    if (modified->isVisible()) {
+      EXPECT_NEAR(modifiedHeader->mapToScene(QPointF()).x(), modified->mapToScene(QPointF()).x(), 1);
+      EXPECT_NEAR(modifiedHeader->width(), modified->width(), 1);
+    }
+  }
+}
+
 TEST(Files, WindowAndKeyboard) {
   DirectoryController controller;
   QQmlApplicationEngine engine;

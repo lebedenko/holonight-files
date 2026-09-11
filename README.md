@@ -61,6 +61,10 @@ for evidence and known gaps.
 See [docs/BACKLOG.md](docs/BACKLOG.md) for the planned stages and
 [docs/mockups/moc1.png](docs/mockups/moc1.png) for visual direction.
 
+The listing prioritizes filenames when space is limited, hiding Modified and then
+Size columns. See the [layout verification record](docs/sdd/app-window-layout/VERIFICATION.md)
+for review fixes and remaining minimum-window limitations.
+
 Requires C++23, Qt 6.11+ (including the Svg component), CMake 3.25+, Ninja,
 Task, libexif (via pkg-config), and installed HolonightQt::Core /
 HolonightQt::Controls. Tests use Qt Test and GTest. Checks need clang-format,

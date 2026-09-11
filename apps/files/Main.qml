@@ -13,6 +13,7 @@ HnApplicationWindow {
     id: window
     objectName: "filesWindow"
     required property DirectoryController controller
+    property real sidebarWidth: 200
     width: 1000
     height: 700
     minimumWidth: 420
@@ -54,13 +55,13 @@ HnApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: HnMetrics.internalSpacing(HnControlSize.Normal)
+        spacing: 0
 
-        ModeStatusBar {
-            objectName: "modeStatusBar"
+        AppHeaderBar {
+            objectName: "appHeaderBar"
             controller: window.controller
+            sidebarWidth: window.sidebarWidth
             Layout.fillWidth: true
-            Layout.margins: HnMetrics.internalSpacing(HnControlSize.Normal)
         }
 
         RowLayout {
@@ -68,11 +69,32 @@ HnApplicationWindow {
             Layout.fillHeight: true
             spacing: HnMetrics.internalSpacing(HnControlSize.Normal)
 
-            PlacesPanel {
-                objectName: "placesPanel"
-                controller: window.controller
-                Layout.preferredWidth: 200
+            Item {
+                id: sidebarContainer
+                objectName: "sidebarContainer"
+                Layout.preferredWidth: window.sidebarWidth
                 Layout.fillHeight: true
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: HoloniightPalette.surface
+                }
+
+                PlacesPanel {
+                    objectName: "placesPanel"
+                    controller: window.controller
+                    anchors.fill: parent
+                }
+
+                HnSeparator {
+                    orientation: Qt.Vertical
+                    color: HoloniightPalette.borderPassive
+                    anchors {
+                        top: parent.top
+                        bottom: parent.bottom
+                        right: parent.right
+                    }
+                }
             }
 
             SplitView {
@@ -81,44 +103,65 @@ HnApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
+                handle: Item {
+                    implicitWidth: HnMetrics.internalSpacing(HnControlSize.Compact) + HnMetrics.separatorWidth
+
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: HnMetrics.separatorWidth
+                        height: parent.height
+                        color: SplitHandle.pressed ? HoloniightPalette.borderActive : (SplitHandle.hovered ? HoloniightPalette.borderHover : HoloniightPalette.borderPassive)
+                    }
+                }
+
                 DirectoryListing {
                     objectName: "directoryListing"
                     controller: window.controller
                     SplitView.fillWidth: true
                 }
 
-                PreviewPane {
-                    objectName: "previewPane"
-                    controller: window.controller
+                Item {
+                    id: previewContainer
+                    objectName: "previewContainer"
                     SplitView.preferredWidth: 320
                     SplitView.minimumWidth: 220
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: HoloniightPalette.surface
+                    }
+
+                    PreviewPane {
+                        objectName: "previewPane"
+                        controller: window.controller
+                        anchors.fill: parent
+                    }
                 }
             }
         }
 
-        Row {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.bottomMargin: 6
-            spacing: 12
-            HnLabel {
-                role: HnTypographyRole.Caption
-                color: HoloniightPalette.textMuted
-                rawText: qsTr(".  hidden   s  reverse sort   F  fullscreen")
+        Rectangle {
+            id: footerBar
+            objectName: "footerBar"
+            Layout.fillWidth: true
+            implicitHeight: modeStatusBar.implicitHeight + 2 * HnMetrics.internalSpacing(HnControlSize.Normal)
+            color: HoloniightPalette.surface
+
+            HnSeparator {
+                color: HoloniightPalette.borderPassive
+                anchors {
+                    top: parent.top
+                    left: parent.left
+                    right: parent.right
+                }
             }
-            HnLabel {
-                role: HnTypographyRole.Caption
-                color: HoloniightPalette.textMuted
-                rawText: qsTr("Space  quick look   Q  quit")
-            }
-            HnLabel {
-                role: HnTypographyRole.Caption
-                color: HoloniightPalette.textMuted
-                rawText: qsTr("i/a  rename   o/O  create   v  select   /  search")
-            }
-            HnLabel {
-                role: HnTypographyRole.Caption
-                color: HoloniightPalette.textMuted
-                rawText: qsTr("yy/dd  copy/cut   p  paste   D  trash")
+
+            ModeStatusBar {
+                id: modeStatusBar
+                objectName: "modeStatusBar"
+                controller: window.controller
+                anchors.fill: parent
+                anchors.margins: HnMetrics.internalSpacing(HnControlSize.Normal)
             }
         }
     }

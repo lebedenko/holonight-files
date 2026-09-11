@@ -3,7 +3,7 @@ qt_add_qml_module(files-ui
   URI HolonightFiles VERSION 1.0
   OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/HolonightFiles"
   IMPORT_PATH "${HOLONIGHT_QML_IMPORT_PATH}"
-  QML_FILES InspectionKeys.js Main.qml PlacesPanel.qml DirectoryListing.qml PreviewPane.qml QuickLookOverlay.qml ModeStatusBar.qml
+  QML_FILES InspectionKeys.js Main.qml AppHeaderBar.qml PlacesPanel.qml DirectoryListing.qml PreviewPane.qml QuickLookOverlay.qml ModeStatusBar.qml
   SOURCES initial_directory.h initial_directory.cpp directory_model.h directory_model.cpp directory_proxy_model.h directory_proxy_model.cpp places_model.h places_model.cpp directory_controller.h directory_controller.cpp window_state.h preview_service.h preview_service.cpp thumbnail_service.h thumbnail_service.cpp exif_reader.h exif_reader.cpp text_preview_service.h text_preview_service.cpp preview_image_item.h preview_image_item.cpp vim_mode_controller.h vim_mode_controller.cpp name_validator.h name_validator.cpp fuzzy_matcher.h fuzzy_matcher.cpp clipboard_register.h file_operation_service.h file_operation_service.cpp trash_service.h trash_service.cpp task_manager.h task_manager.cpp
   NO_IMPORT_SCAN)
 target_link_libraries(files-ui PUBLIC Qt6::Quick Qt6::QuickControls2 Qt6::Svg HolonightQt::Core HolonightQt::Controls PkgConfig::EXIF)

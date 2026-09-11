@@ -94,3 +94,8 @@ evidence and pending hosted CI, real-host install/uninstall, and native acceptan
 Development desktop-registration tasks and their generated launchers are retired;
 installed desktop validation remains part of maintenance checks. This work adds no
 application features.
+
+Application-window layout review fixes preserve filenames in narrow listing panes
+and align breadcrumb/header text with the data columns. See the
+[layout verification record](sdd/app-window-layout/VERIFICATION.md). The existing
+420px sidebar/preview width conflict and native visual acceptance remain pending.

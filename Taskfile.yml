@@ -54,7 +54,7 @@ tasks:
     desc: Format C++ and QML sources
     cmds:
       - clang-format -i apps/files/*.cpp apps/files/*.h tests/*.cpp tests/*.h
-      - /usr/lib/qt6/bin/qmlformat -i apps/files/Main.qml apps/files/DirectoryListing.qml apps/files/PlacesPanel.qml apps/files/PreviewPane.qml apps/files/QuickLookOverlay.qml apps/files/ModeStatusBar.qml
+      - /usr/lib/qt6/bin/qmlformat -i apps/files/Main.qml apps/files/AppHeaderBar.qml apps/files/DirectoryListing.qml apps/files/PlacesPanel.qml apps/files/PreviewPane.qml apps/files/QuickLookOverlay.qml apps/files/ModeStatusBar.qml
   format-check:
     desc: Check C++ and QML formatting
     cmds:
