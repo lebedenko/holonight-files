@@ -50,3 +50,22 @@ can receive their children. After traversal, source directory timestamps and
 permission bits are restored. Existing merge destinations keep their permission
 bits and are not assigned source timestamps. Metadata failures make the transfer
 incomplete, preventing source cleanup during a move (REQ-F-011, REQ-F-038).
+
+## Approved verification-gap revision (2026-09-11)
+
+The user-approved implementation plan preserves SPEC.md and public behavior. Move
+the real 2 GiB copy into a dedicated headless process, enforce a 1 GiB RLIMIT_AS,
+and subtract pre-copy current RSS from post-copy peak RSS. Instrumentation and
+limit failures fail the test; require >50 MiB/s, <200 MiB growth and correct size.
+Validate the calculation in a separate controlled-allocation process after releasing
+an earlier allocation. Fixtures stay under build/; CTest timeout is 180 seconds.
+
+Retain rendered foreign-filesystem success and all-failure coverage. Add a single
+VISUAL batch on tmpfs nr_inodes=7 with two sources: root, sources, three trash
+directories and first metadata consume all inodes. Assert one success, one metadata
+failure with unchanged source contents, two processed items, and observe prompt
+state transitions through confirmation, completion and a short event-loop drain.
+
+T-118/T-119 remain pending against their original distinct-filesystem/mixed-location
+criteria; T-122 remains pending for mixed validation failures. Metadata failure is
+supplemental evidence. Close T-127 only after the isolated benchmark passes.

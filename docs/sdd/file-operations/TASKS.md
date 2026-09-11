@@ -3,8 +3,8 @@
 ## Approved safety revision
 
 The historical task evidence below predates review and is superseded where safety
-requirements changed. T-122 and T-128 are reopened. Native prompt automation passed; the broader
-manual/scaling acceptance matrix remains pending. See [verification](VERIFICATION.md).
+requirements changed. T-118, T-119 and T-122 remain pending; T-128 remains partial.
+Native prompt automation passed; the broader manual/scaling acceptance matrix remains pending. See [verification](VERIFICATION.md).
 
 - [x] T-130: Safe endpoints, staged commit, non-overwriting rename and unsupported types (REQ-F-052/053); primitive regressions.
 - [x] T-131: Full source retention and incomplete summaries (REQ-F-032/038/048); merge and EXDEV regressions.
@@ -598,9 +598,13 @@ manual/scaling acceptance matrix remains pending. See [verification](VERIFICATIO
   - Check: Cross-filesystem dd then p move completes with no user-visible distinction from same-filesystem move; only execution time differs.
   - `CrossFilesystem.MoveFallsBackToCopyOnEXDEV` exercises the FileOperationService primitive end-to-end on real distinct devices; the `dd`+`p` keybinding path itself is covered same-filesystem by `DirectoryControllerFileOps.DdCutsCursorItemAndPPastesMoveRemovingOriginal` — the two aren't combined into one real-cross-device-plus-keybinding test.
 
-- [ ] T-118: Pending combined E2E: rendered VISUAL trash spanning distinct filesystems in one task.
+- [ ] T-118: Combined E2E: rendered VISUAL trash spanning distinct filesystems in one task.
+  - Existing rendered foreign-filesystem success is supplemental: all selected sources
+    share one filesystem. The literal multi-filesystem task gate remains pending.
 
-- [ ] T-119: Pending combined E2E: rendered VISUAL trash with mixed valid/invalid trash locations.
+- [ ] T-119: Combined E2E: rendered VISUAL trash with mixed valid/invalid trash locations.
+  - Preserve success and all-failure batches; add one nr_inodes=7 mixed metadata-failure
+    batch. This does not satisfy mixed valid/invalid locations; acceptance remains pending.
 
 - [x] T-120: E2E conflict + partial failure + summary
   - REQs: REQ-F-021, REQ-F-033, REQ-F-034
@@ -612,7 +616,9 @@ manual/scaling acceptance matrix remains pending. See [verification](VERIFICATIO
   - Check: Tests cancel during copy, during move, during trash; partial files cleaned up; partial summary reports cancellation.
   - Cancellation is implemented identically for Copy/Move/Trash (same `cancel->load()` checks in shared `FileOperationService` primitives and the same `cancelCurrentTask()` path in `TaskManager`); tested concretely for Copy (`CancelCurrentTaskDropsQueueAndStopsBusy`, the window-level test) and for a mid-conflict-prompt cancel. Not independently re-driven for Move/Trash specifically — same code path, not re-verified per kind.
 
-- [ ] T-122: Reopened: combined rendered trash-confirmation and mixed per-item validation failures; no subsequent destructive prompt is permitted.
+- [ ] T-122: Combined rendered trash-confirmation and mixed per-item validation failures; no subsequent destructive prompt is permitted.
+  - Observe prompt-state signals throughout the new mixed metadata-failure batch.
+    Mixed metadata failure is supplemental; literal mixed validation failure remains pending.
 
 ## Code Review & Verification
 
@@ -636,10 +642,16 @@ manual/scaling acceptance matrix remains pending. See [verification](VERIFICATIO
   - Check: Inspected actual Trash directories and .trashinfo files on Linux system with redirected $XDG_DATA_HOME and loopback fixture; format and paths match freedesktop.org spec exactly.
   - `TrashService.WriteTrashInfoUsesAbsolutePathForHomeTrash` and `CrossFilesystem.PerPartitionTrashUsesTrashUidWhenStickyBitSet` both read back real `.trashinfo` files from disk and assert on their exact contents ("[Trash Info]" header, `Path=`, `DeletionDate=`, absolute vs. topdir-relative, URL-encoded).
 
-- [~] T-127: Performance baseline verification
+- [x] T-127: Performance baseline verification
   - REQs: REQ-NF-001 through REQ-NF-005
   - Check: Instrumentation confirms >50 MB/s copy throughput on local filesystem, conflict detection <50ms, Ctrl+C response <100ms, 100+ file queue handles smoothly, no OOM on large files.
-  - Partially verified: conflict-detection latency (<50ms, `ConflictPromptAppearsWithinFiftyMilliseconds`), Ctrl+C response while blocked on a prompt (<100ms, `CancelWhileBlockedOnPromptRespondsWithinAPollInterval`), and 500-file queue handling (`HandlesQueueOfSeveralHundredFilesWithoutStallingOrLosingItems`) all have real timer-based tests. >50 MB/s throughput and no-OOM-on-large-files are **not instrumented** in this environment — the chunked (1 MiB), streamed design structurally guarantees bounded memory regardless of file size (same guarantee DirectoryModel/PreviewService already rely on), but no test actually pushes a multi-GB file through to confirm it empirically. Left unchecked rather than marked done to avoid overclaiming.
+  - Conflict-detection latency (<50ms, `ConflictPromptAppearsWithinFiftyMilliseconds`), Ctrl+C response while blocked on a prompt (<100ms, `CancelWhileBlockedOnPromptRespondsWithinAPollInterval`), and 500-file queue handling (`HandlesQueueOfSeveralHundredFilesWithoutStallingOrLosingItems`) all have real timer-based tests.
+  - Approved revision: replace shared-process lifetime-peak subtraction with an isolated
+    2 GiB benchmark, 1 GiB RLIMIT_AS, current-RSS baseline and post-copy peak RSS.
+    Require >50 MiB/s and <200 MiB growth; validate using controlled allocations.
+    Passed independently: 2091.78 MiB/s, 1092 KiB growth under 1 GiB RLIMIT_AS.
+    Controlled allocation: old peak delta 0 KiB, corrected growth 327412 KiB.
+    Source: `tests/file_operation_memory_test.cpp`; see VERIFICATION.md for logs.
 
 - [~] T-128: Native prompt/focus automation and offscreen prompt captures passed and were inspected. Broader manual/scaling acceptance remains pending; see VERIFICATION.md.
 
