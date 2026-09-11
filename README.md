@@ -64,8 +64,10 @@ See [docs/BACKLOG.md](docs/BACKLOG.md) for the planned stages and
 Requires C++23, Qt 6.11+ (including the Svg component), CMake 3.25+, Ninja,
 Task, libexif (via pkg-config), and installed HolonightQt::Core /
 HolonightQt::Controls. Tests use Qt Test and GTest. Checks need clang-format,
-clang-tidy (run-clang-tidy), REUSE, desktop-file-utils and Python 3. On Arch,
-the [CI Dockerfile](packaging/Dockerfile.ci) lists the packages.
+clang-tidy (run-clang-tidy), REUSE, desktop-file-utils and Python 3.
+`task isolated-runtime-check` additionally needs Docker and a locally built
+`files-ci` image (`docker build -t files-ci -f packaging/Dockerfile.ci .`).
+On Arch, the [CI Dockerfile](packaging/Dockerfile.ci) lists the packages.
 
 ```sh
 task deps                 # builds sibling providers locally, without source changes
@@ -78,10 +80,18 @@ task build PRESET=release
 task format-check
 task tidy
 task qml-lint
+task lint                 # tidy + qml-lint
 task license-check
 task install-check
-task desktop-check        # isolated development/packaged registration checks
+task uninstall-check      # verifies scripts/uninstall.sh in disposable staged trees; no sudo, no real /usr
+task check                # (alias: verify) build×2, test, format-check, lint, license-check, install-check, uninstall-check, in order
 task visual-check         # captures under build/visual for inspection
+task isolated-runtime-check  # builds Release, verifies the staged payload in a network-isolated Docker container
+task clean                   # removes build/{debug,release,test,system-install}; preserves build/deps and check evidence
+
+# System install/uninstall (require sudo and system-wide HoloNight providers under /usr; host-mutating, not run in CI):
+task install                 # configures+builds the system-install preset against /usr, installs, refreshes desktop database
+task uninstall                 # removes the installed payload from /usr and refreshes the desktop database (uninstall before reinstalling)
 ```
 
 `--help` and `--version` are supported, along with an optional positional
@@ -100,10 +110,42 @@ Direct CMake users can set those cache variables with `cmake --preset debug
 debug/release/test presets default to the local prefix. Task run/test set the
 installed QML and library search paths.
 
-Install with `DESTDIR=/your/stage cmake --install build/release` (prefix
-/usr). The application package installs its executable, desktop entry, icon,
-and license; it depends on separately installed HoloNight provider libraries
-and QML modules. A system installation discovers providers via Qt's normal
+System installation is `task install`: it configures and builds Release
+against installed `/usr` providers (the `system-install` CMake preset, not
+the development dependency prefix — HoloNight providers must already be
+installed system-wide first), installs the five payload files to `/usr` with
+`sudo`, and refreshes the desktop database. `task uninstall` removes that
+payload and refreshes the desktop database again; run it before a repeat
+`task install` to avoid partial-overwrite states (uninstall-before-reinstall).
+Both require `sudo` and mutate the real system, so neither runs in CI — CI
+instead exercises the install path via `task install-check` (a staged,
+`DESTDIR`-based install with no `sudo`) and the uninstall path via
+`task uninstall-check` (mocked privileged commands, no real `/usr` writes).
+`task isolated-runtime-check` builds Release, stages its payload plus the
+provider builds under `DESTDIR`, and verifies the result as the ordinary files-test user — five regular root:root files with
+0755 executable and 0644 asset/license modes, no development RPATH/RUNPATH, `--version`, desktop entry validity, and desktop
+launch surviving three seconds after discovery (up to three seconds) — inside a disposable, network-isolated Docker container built `FROM`
+the CI image; it requires Docker and `task deps` having already produced
+`build/deps/holonight-config`/`build/deps/holonight-qt`. `task clean` removes
+only `build/{debug,release,test,system-install}`, preserving
+`build/deps/prefix` and check evidence. The full local pipeline is
+`task deps` → `task check` (alias `task verify`) → `task isolated-runtime-check`.
+After building the runtime image, `python3 scripts/check-runtime-fixtures.py` exercises
+healthy, delayed-exit, missing-file, permission, ownership, and pre-existing-process cases
+in disposable containers, retaining logs under `build/runtime-fixtures.*`.
+
+CI runs deps, gives files-test ownership of build/, and runs check in C.UTF-8
+and the additional en_US.UTF-8 tests. It prepares the runtime
+context inside the build container and builds/runs the runtime image from the
+runner using the repository-relative `build/runtime-check-context` marker.
+The runtime container has no workspace or Docker-socket mounts and no network;
+CI retains verification logs as an artifact.
+
+A manual staged install remains available with
+`DESTDIR=/your/stage cmake --install build/release` (prefix /usr). The
+application package installs its executable, desktop entry, icon, and
+license; it depends on separately installed HoloNight provider libraries and
+QML modules. A system installation discovers providers via Qt's normal
 module paths. A custom provider prefix needs
 QML_IMPORT_PATH=<prefix>/lib/qt6/qml and LD_LIBRARY_PATH=<prefix>/lib. No
 source-tree imports are embedded in the binary.
@@ -113,14 +155,9 @@ See [contributor workflow](CONTRIBUTING.md), [project brief](docs/PROJECT_BRIEF.
 [scaffold verification](docs/sdd/project-scaffold/VERIFICATION.md). Licensed
 GPL-3.0-or-later; see LICENSE.
 
-`task run` registers the selected development build's desktop entry and icon
-under `${XDG_DATA_HOME:-~/.local/share}` before launch, so the host portal can
-resolve `org.holonight.Files`. Use `task desktop-install` to register without
-opening a window. The entry launches the absolute build executable with its
-provider paths; rerun the task after moving the checkout or switching builds.
-This user entry takes precedence over a system installation; remove its
-applications/org.holonight.Files.desktop file when switching to a system
-package.
+`task run` builds and launches the selected preset directly; it does not
+register any desktop entry, and `${XDG_DATA_HOME:-~/.local/share}` is left
+untouched. Desktop integration is provided by the installed application.
 
 CI builds the committed checkout with contributor tools, stages Files and
 providers under `/usr`, then runs the same checks as

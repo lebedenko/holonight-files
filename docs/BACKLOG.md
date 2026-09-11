@@ -85,3 +85,12 @@ packaging/accessibility/performance hardening, not new v1 features.
 Stage 4 safety revision removes permanent deletion, retains complete sources on
 incomplete moves, and captures prompts ahead of editors. Remaining combined E2E,
 performance and native acceptance checks stay open in its verification record.
+
+
+System-maintenance hardening covers ordered uninstall failure handling, installed
+permissions and desktop startup observation, and CI maintenance checks. See the
+[current verification record](sdd/system-maintenance/VERIFICATION.md) for local
+evidence and pending hosted CI, real-host install/uninstall, and native acceptance.
+Development desktop-registration tasks and their generated launchers are retired;
+installed desktop validation remains part of maintenance checks. This work adds no
+application features.

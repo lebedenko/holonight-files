@@ -13,63 +13,106 @@ tasks:
     desc: Build sibling providers into project-local directories
     cmds: ['bash scripts/prepare-deps.sh']
   configure:
+    desc: Configure the selected build preset
     cmds: ['cmake --preset {{.PRESET}} -DHOLONIGHT_DEPENDENCY_PREFIX="{{.HOLONIGHT_DEPENDENCY_PREFIX}}" -DHOLONIGHT_QML_IMPORT_PATH="{{.HOLONIGHT_QML_IMPORT_PATH}}"']
   build:
+    desc: Configure and build the selected preset
     cmds:
       - task: configure
         vars: {PRESET: '{{.PRESET}}'}
       - cmake --build --preset {{.PRESET}}
-  desktop-install:
-    desc: Register the development build and icon in the user's XDG data directory
+  run:
+    desc: Build and launch the selected preset with CLI arguments
     cmds:
       - task: build
         vars: {PRESET: '{{.PRESET}}'}
-      - python3 scripts/register-desktop.py 'build/{{.PRESET}}/apps/files/holonight-files' '{{.HOLONIGHT_DEPENDENCY_PREFIX}}' '{{.HOLONIGHT_QML_IMPORT_PATH}}'
-  run:
-    cmds:
-      - task: desktop-install
-        vars: {PRESET: '{{.PRESET}}'}
       - build/{{.PRESET}}/apps/files/holonight-files {{.CLI_ARGS}}
 
+  install:
+    desc: Build Release against installed system providers, install to /usr and refresh desktop metadata
+    cmds:
+      - cmake --preset system-install
+      - cmake --build --preset system-install
+      - sudo cmake --install build/system-install
+      - sudo update-desktop-database /usr/share/applications
+
+  uninstall:
+    desc: Remove the installed Files payload from /usr and refresh desktop metadata
+    cmds: ['sudo env -u DESTDIR bash scripts/uninstall.sh']
+
+  uninstall-check:
+    desc: Verify uninstall in disposable staged filesystems with mocked privileged commands
+    cmds: ['python3 scripts/check-uninstall.py']
+
   test:
+    desc: Build and run tests
     cmds:
       - task: build
         vars: {PRESET: test}
       - ctest --preset test
   format:
+    desc: Format C++ and QML sources
     cmds:
       - clang-format -i apps/files/*.cpp apps/files/*.h tests/*.cpp tests/*.h
       - /usr/lib/qt6/bin/qmlformat -i apps/files/Main.qml apps/files/DirectoryListing.qml apps/files/PlacesPanel.qml apps/files/PreviewPane.qml apps/files/QuickLookOverlay.qml apps/files/ModeStatusBar.qml
   format-check:
+    desc: Check C++ and QML formatting
     cmds:
       - clang-format --dry-run --Werror apps/files/*.cpp apps/files/*.h tests/*.cpp tests/*.h
       - bash scripts/check-qml-format.sh
   tidy:
+    desc: Run C++ clang-tidy checks
     cmds:
       - task: build
         vars: {PRESET: test}
       - cmake --build build/test --target tidy
   qml-lint:
+    desc: Run QML lint checks
     deps: [build]
     cmds: ['cmake --build build/{{.PRESET}} --target qml-lint']
+  lint:
+    desc: Run C++ and QML lint checks
+    cmds:
+      - task: tidy
+      - task: qml-lint
   license-check:
+    desc: Check license metadata with REUSE
     cmds: [reuse lint]
   install-check:
+    desc: Stage Release and verify installed payload and desktop launch
     cmds:
       - task: build
         vars: {PRESET: release}
       - bash scripts/check-install.sh
+  check:
+    desc: Sequentially build, test, check formatting, lint, licenses, staged installation and uninstall
+    aliases: [verify]
+    cmds:
+      - task: build
+        vars: {PRESET: debug}
+      - task: build
+        vars: {PRESET: release}
+      - task: test
+      - task: format-check
+      - task: lint
+      - task: license-check
+      - task: install-check
+      - task: uninstall-check
+  clean:
+    desc: Remove Files debug/release/test/system-install build directories, preserving provider installs
+    cmds:
+      - rm -rf -- build/debug build/release build/test build/system-install
+  isolated-runtime-check:
+    desc: Build and verify the installed payload in a disposable, network-isolated container
+    cmds:
+      - task: build
+        vars: {PRESET: release}
+      - bash scripts/prepare-runtime-check.sh
+      - docker build -t holonight-files-runtime-check "$(cat build/runtime-check-context)"
+      - docker run --rm --network none holonight-files-runtime-check
   visual-check:
     desc: Capture dark/light renders at normal and fractional scale for inspection
     cmds:
       - task: build
         vars: {PRESET: test}
       - bash scripts/check-visual.sh
-  desktop-check:
-    desc: Verify development registration and packaged entry separation under build/
-    cmds:
-      - task: build
-        vars: {PRESET: debug}
-      - task: build
-        vars: {PRESET: release}
-      - python3 scripts/check-desktop.py

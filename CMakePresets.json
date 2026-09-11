@@ -50,6 +50,26 @@
         "QML_IMPORT_PATH": "${sourceDir}/build/deps/prefix/lib/qt6/qml",
         "LD_LIBRARY_PATH": "${sourceDir}/build/deps/prefix/lib"
       }
+    },
+    {
+      "name": "system-install",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/system-install",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr",
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "CMAKE_PREFIX_PATH": "/usr",
+        "HOLONIGHT_DEPENDENCY_PREFIX": "/usr",
+        "HOLONIGHT_QML_IMPORT_PATH": "/usr/lib/qt6/qml",
+        "HolonightQt_DIR": "/usr/lib/cmake/HolonightQt"
+      },
+      "environment": {
+        "QML_IMPORT_PATH": "/usr/lib/qt6/qml",
+        "QML2_IMPORT_PATH": "/usr/lib/qt6/qml",
+        "LD_LIBRARY_PATH": "/usr/lib"
+      }
     }
   ],
   "buildPresets": [
@@ -66,6 +86,11 @@
     {
       "name": "test",
       "configurePreset": "test",
+      "jobs": 2
+    },
+    {
+      "name": "system-install",
+      "configurePreset": "system-install",
       "jobs": 2
     }
   ],

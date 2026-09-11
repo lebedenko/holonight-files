@@ -18,13 +18,46 @@ jobs:
           repository: lebedenko/holonight-qt
           path: holonight-qt
       - name: Build CI image locally
-        run: docker build -t files-ci -f files/packaging/Dockerfile.ci files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p files/build
+          docker build -t files-ci -f files/packaging/Dockerfile.ci files \
+            2>&1 | tee files/build/ci-image.log
       - name: Build and verify
-        run: >-
-          docker run --rm -v "$GITHUB_WORKSPACE:/work" files-ci
-          bash -euc 'task deps; task build; task build PRESET=release;
-          chown -R files-test:files-test /work/files/build;
-          runuser -u files-test -- env LC_ALL=C.UTF-8 task test;
-          runuser -u files-test -- env LC_ALL=en_US.UTF-8 task test;
-          task format-check; task tidy; task qml-lint;
-          task license-check; task install-check; task desktop-check'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p files/build
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" files-ci \
+            bash -euc 'trap "chown -R $(stat -c %u:%g /work/files) /work/files/build" EXIT;
+            task deps;
+            chown -R files-test:files-test /work/files/build;
+            runuser -u files-test -- env LC_ALL=C.UTF-8 task check;
+            runuser -u files-test -- env LC_ALL=en_US.UTF-8 task test;
+            runuser -u files-test -- bash scripts/prepare-runtime-check.sh' \
+            2>&1 | tee files/build/ci-check.log
+      - name: Build isolated runtime image
+        working-directory: files
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -t holonight-files-runtime-check "$(cat build/runtime-check-context)" \
+            2>&1 | tee build/ci-runtime-build.log
+      - name: Verify isolated runtime
+        working-directory: files
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none holonight-files-runtime-check \
+            2>&1 | tee build/ci-runtime.log
+      - name: Retain verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maintenance-verification
+          path: |
+            files/build/*.log
+            files/build/test/Testing/Temporary/
+            files/build/uninstall-check.*/
+            files/build/install-check.*/runtime.log

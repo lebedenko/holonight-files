@@ -1,0 +1,9 @@
+# Reuse the exact Qt runtime used to build providers (their private Qt ABI matters).
+FROM files-ci
+COPY --chown=root:root payload/usr/ /usr/
+COPY check/ /opt/check/
+RUN ldconfig && install -d -o files-test -g files-test -m 0700 /run/files-test
+ENV HOME=/home/files-test XDG_RUNTIME_DIR=/run/files-test
+USER files-test
+WORKDIR /opt/check
+CMD ["bash", "scripts/isolated-runtime.sh"]
