@@ -365,3 +365,48 @@ TEST(DirectoryModel, ShutdownCompletesWhileSuspendedWithQueuedDeliveries) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return finished.count() == 1; }));
   EXPECT_EQ(model.rowCount(), 0);
 }
+
+TEST(DirectoryModel, IconNameRoleCarriesTheWorkerDerivedCandidateChain) {
+  QTemporaryDir dir(fixturePattern("icon-names"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(writeFile(dir, "notes.txt").isEmpty());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
+  ASSERT_TRUE(QFile::link(dir.filePath("folder"), dir.filePath("folder-link")));
+  ASSERT_TRUE(QFile::link(dir.filePath("missing.jpg"), dir.filePath("dangling.jpg")));
+  DirectoryModel model;
+  EXPECT_EQ(model.roleNames().value(DirectoryModel::IconNameRole), QByteArray("iconName"));
+  model.load(dir.path());
+  ASSERT_TRUE(settled(model));
+  ASSERT_EQ(model.rowCount(), 4);
+  QHash<QString, QString> iconNames;
+  for (int row = 0; row < model.rowCount(); ++row) {
+    const auto index = model.index(row);
+    iconNames.insert(model.data(index, DirectoryModel::NameRole).toString(),
+                     model.data(index, DirectoryModel::IconNameRole).toString());
+  }
+  EXPECT_EQ(iconNames.value("notes.txt"), "text-plain/text-x-generic/application-x-generic");
+  EXPECT_EQ(iconNames.value("folder"), "folder/inode-directory");
+  EXPECT_EQ(iconNames.value("folder-link"), "folder/inode-directory");  // stat() follows the link
+  EXPECT_EQ(iconNames.value("dangling.jpg"), "application-x-generic");  // not image-jpeg
+
+  const int placeholder = model.insertPlaceholderRow();
+  EXPECT_EQ(model.data(model.index(placeholder), DirectoryModel::IconNameRole).toString(), "application-x-generic");
+}
+
+TEST(DirectoryModel, RefreshEmitsDataChangedWhenAnEntrysIconChanges) {
+  QTemporaryDir dir(fixturePattern("icon-refresh"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(writeFile(dir, "entry").isEmpty());
+  DirectoryModel model;
+  model.load(dir.path());
+  ASSERT_TRUE(settled(model));
+  ASSERT_EQ(model.rowCount(), 1);
+  ASSERT_EQ(model.data(model.index(0), DirectoryModel::IconNameRole).toString(), "application-x-generic");
+  ASSERT_TRUE(QFile::remove(dir.filePath("entry")));
+  ASSERT_TRUE(QDir(dir.path()).mkdir("entry"));
+  QSignalSpy changedRows(&model, &QAbstractItemModel::dataChanged);
+  model.refresh();
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(changedRows.count(), 1);
+  EXPECT_EQ(model.data(model.index(0), DirectoryModel::IconNameRole).toString(), "folder/inode-directory");
+}

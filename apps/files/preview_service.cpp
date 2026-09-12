@@ -265,16 +265,17 @@ PreviewService::~PreviewService() {
 }
 
 void PreviewService::setTarget(const QString& path, bool isDir, qint64 size, const QDateTime& modified, quint32 mode,
-                               bool statFailed, const QString& statError, quint64 revision) {
+                               bool statFailed, const QString& statError, const QString& iconName, quint64 revision) {
   if (path.isEmpty()) {
     clear();
     return;
   }
   if (has_entry_ && path_ == path && size_ == size && modified_ == modified && mode_ == mode && is_dir_ == isDir &&
-      stat_failed_ == statFailed && stat_error_ == statError && revision_ == revision) {
+      stat_failed_ == statFailed && stat_error_ == statError && icon_name_ == iconName && revision_ == revision) {
     return;
   }
   mode_ = mode;
+  icon_name_ = iconName;
   stat_failed_ = statFailed;
   stat_error_ = statError;
   revision_ = revision;
@@ -322,6 +323,7 @@ void PreviewService::clear() {
   modified_ = QDateTime();
   permissions_.clear();
   mime_type_.clear();
+  icon_name_.clear();
   is_dir_ = false;
   busy_ = false;
   resetDisplayState();

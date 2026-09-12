@@ -1,0 +1,34 @@
+# REQ-F-021 wall-clock comparison — after file-type icons (T-021)
+
+Recorded: 2026-09-12, same machine, display, Qt, build preset and commands as baseline_pre_icons.txt
+Tree:     c213c4a + uncommitted main-view-icons implementation
+
+## Full suite: `ctest --preset test`
+
+rc=0, 8/8 passed, wall-clock 32.33 s (baseline 31.07 s, +4.1%; includes the new icon tests)
+  files-smoke                30.65 s  (baseline 29.32 s, +4.5%)
+  files-memory-benchmark      1.15 s  (RSS growth 1100 KiB, 2090.51 MiB/s — within its threshold;
+                                       baseline 1104 KiB, 2118.86 MiB/s)
+
+## Native listing benchmark (12000-entry fixture, FILES_BROWSE_BENCHMARK=1, QT_QPA_PLATFORM=wayland)
+
+| run | load_ms | first_rendered_ms | max_frame_gap_ms | max_input_ms | watcher_refresh_ms |
+|-----|---------|-------------------|------------------|--------------|--------------------|
+| 1   | 586     | 99.1              | 27.4             | 21.6         | 281                |
+| 2   | 507     | 92.3              | 35.5             | 19.5         | 283                |
+| 3   | 493     | 80.0              | 36.6             | 19.6         | 284                |
+| median | 507  | 92.3              | 35.5             | 19.6         | 283                |
+
+## Median deltas vs baseline
+
+| metric             | pre   | post  | delta   |
+|--------------------|-------|-------|---------|
+| load_ms            | 586   | 507   | -13.5%  |
+| first_rendered_ms  | 100.8 | 92.3  | -8.4%   |
+| max_frame_gap_ms   | 40.7  | 35.5  | -12.8%  |
+| max_input_ms       | 28.5  | 19.6  | -31.2%  |
+| watcher_refresh_ms | 315   | 283   | -10.2%  |
+
+Decision: PASS. Every median is within the 10% regression budget (all moved the favourable way,
+which is run-to-run noise of the same order as the baseline's own ~18% load_ms spread, not a real
+speed-up). No remediation needed.

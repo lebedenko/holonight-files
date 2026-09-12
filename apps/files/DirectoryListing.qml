@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import "IconFallbacks.js" as IconFallbacks
 import "InspectionKeys.js" as InspectionKeys
 import QtQuick
 import QtQuick.Layouts
@@ -14,6 +15,9 @@ Item {
     property bool previousQuickLookOpen: false
     property int previousMode: VimModeController.Normal
 
+    // Leading file-type icon cell (SPEC.md REQ-F-008/010); the header's Name label is inset by the
+    // same width plus columnSpacing so the two rows stay aligned (REQ-F-009).
+    readonly property real iconColumnWidth: 20
     readonly property real sizeColumnWidth: 88
     // Widest expected rendering of "yyyy-MM-dd HH:mm" (all-digit fields, so "9" stands in for the
     // widest glyph in every position); measured against an offstage label using the exact role/
@@ -70,6 +74,7 @@ Item {
                 rawText: qsTr("Name")
                 elide: Text.ElideRight
                 Layout.fillWidth: true
+                Layout.leftMargin: root.iconColumnWidth + root.columnSpacing
             }
             HnLabel {
                 objectName: "sizeColumnHeader"
@@ -178,6 +183,7 @@ Item {
             required property var modified
             required property bool statFailed
             required property string statError
+            required property string iconName
 
             readonly property bool editingThis: root.controller.vim.currentMode === VimModeController.Insert && root.controller.vim.editingRow === delegate.index
 
@@ -191,6 +197,66 @@ Item {
 
             contentItem: RowLayout {
                 spacing: root.columnSpacing
+                Item {
+                    id: iconCell
+                    objectName: "iconColumnField"
+                    Layout.minimumWidth: root.iconColumnWidth
+                    Layout.preferredWidth: root.iconColumnWidth
+                    Layout.maximumWidth: root.iconColumnWidth
+                    Layout.fillHeight: true
+
+                    // Deliberately not reactive to later failures: it only spares rows created after
+                    // an earlier row's miss from repeating the request (IconFallbacks.js).
+                    readonly property bool knownUnresolved: IconFallbacks.isUnresolved(delegate.iconName)
+                    // Once this row's own request fails, stop re-requesting (e.g. on a device pixel
+                    // ratio change) until the row's chain itself changes.
+                    property string failedChain
+                    readonly property bool skipRequest: knownUnresolved || failedChain === delegate.iconName
+                    readonly property bool showFallback: skipRequest || themeIcon.hasError
+
+                    // Theme icon, untinted in its own colours (REQ-F-003). The chain in iconName is
+                    // walked by the C++ image provider; a total miss surfaces as hasError.
+                    HnIcon {
+                        id: themeIcon
+                        objectName: "themeFileIcon"
+                        anchors.centerIn: parent
+                        size: root.iconColumnWidth
+                        source: iconCell.skipRequest ? "" : "image://icon/" + delegate.iconName
+                        visible: !iconCell.showFallback
+                        onHasErrorChanged: if (hasError) {
+                            const chain = delegate.iconName;
+                            IconFallbacks.markUnresolved(chain);
+                            // Deferred: the failure is reported from inside the source assignment itself.
+                            Qt.callLater(() => iconCell.failedChain = chain);
+                        }
+                    }
+                    // Bundled glyph, tinted with the palette (REQ-F-016/017); sourced only after a miss.
+                    HnIcon {
+                        id: fallbackIcon
+                        objectName: "fallbackFileIcon"
+                        anchors.centerIn: parent
+                        size: root.iconColumnWidth
+                        source: !iconCell.showFallback ? "" : delegate.isDir ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
+                        visible: iconCell.showFallback
+                    }
+                    // Keep a visible marker even if the packaged SVG cannot be decoded.
+                    Rectangle {
+                        objectName: "iconFailurePlaceholder"
+                        anchors.centerIn: parent
+                        width: root.iconColumnWidth
+                        height: root.iconColumnWidth
+                        radius: 3
+                        color: "transparent"
+                        border.color: HoloniightPalette.textMuted
+                        visible: iconCell.showFallback && fallbackIcon.hasError
+                        Text {
+                            anchors.centerIn: parent
+                            text: "?"
+                            color: HoloniightPalette.textMuted
+                            font.pixelSize: 14
+                        }
+                    }
+                }
                 Item {
                     objectName: "nameColumnField"
                     Layout.fillWidth: true

@@ -66,6 +66,9 @@ class PreviewService : public QObject {
   Q_PROPERTY(qint64 textTotalSize READ textTotalSize NOTIFY changed)
   Q_PROPERTY(PreviewErrorKind previewErrorKind READ previewErrorKind NOTIFY changed)
   Q_PROPERTY(QString previewErrorMessage READ previewErrorMessage NOTIFY changed)
+  // The selected row's DirectoryModel::IconNameRole chain, verbatim (SPEC.md REQ-F-015): the pane
+  // shows the listing's icon, never one derived from the content-sniffed mimeType above.
+  Q_PROPERTY(QString iconName READ iconName NOTIFY changed)
 
   explicit PreviewService(QObject* parent = nullptr);
   ~PreviewService() override;
@@ -92,11 +95,12 @@ class PreviewService : public QObject {
   qint64 textTotalSize() const { return text_.totalSize; }
   PreviewErrorKind previewErrorKind() const { return error_.kind; }
   QString previewErrorMessage() const { return error_.message; }
+  QString iconName() const { return icon_name_; }
 
   // Called only by DirectoryController::syncPreviewTarget(). Formats generic metadata
   // synchronously on the UI thread with zero I/O and emits changed() before returning.
   void setTarget(const QString& path, bool isDir, qint64 size, const QDateTime& modified, quint32 mode, bool statFailed,
-                 const QString& statError, quint64 revision = 0);
+                 const QString& statError, const QString& iconName = {}, quint64 revision = 0);
   void clear();  // REQ-F-009
   Q_INVOKABLE void setRequestedSize(PreviewConsumer consumer, QSize pixels);
   void setQuickLookActive(bool active);  // REQ-F-004/005, called by both QML consumers
@@ -137,6 +141,7 @@ class PreviewService : public QObject {
   quint32 mode_ = 0;
   bool stat_failed_ = false;
   QString stat_error_;
+  QString icon_name_;
   quint64 revision_ = 0;
 
   bool busy_ = false;

@@ -19,6 +19,10 @@ struct DirectoryEntry {
   quint32 mode = 0;
   bool stat_failed = false;
   QString stat_error;
+  // IconNameResolver's candidate chain joined with IconNameResolver::kChainSeparator, computed on
+  // the worker thread alongside stat(). Participates in operator== so a refresh diff that changes it
+  // emits dataChanged() like any other metadata.
+  QString icon_name;
   // Stage 3 (vim-modal-editing): a synchronous, UI-thread-only row standing in for an INSERT-mode
   // (o/O) create-in-progress — never produced by the walker, never diffed against. See
   // insertPlaceholderRow()/removePlaceholderRow().
@@ -42,6 +46,9 @@ class DirectoryModel : public QAbstractListModel {
     IsHiddenRole,
     StatFailedRole,
     StatErrorRole,
+    // SPEC.md REQ-C-001 (main-view-icons): the '/'-joined icon-name candidate chain, consumed from
+    // QML only as "image://icon/" + iconName and split apart only by IconImageProvider.
+    IconNameRole,
   };
   explicit DirectoryModel(QObject* parent = nullptr);
   ~DirectoryModel() override;

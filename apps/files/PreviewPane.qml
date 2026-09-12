@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import "IconFallbacks.js" as IconFallbacks
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
@@ -56,13 +57,66 @@ Item {
             id: imageArea
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(width, 240)
-            visible: root.preview.hasImage
+            // Reserved for every entry: a thumbnail when one exists, otherwise the listing's icon
+            // (SPEC.md REQ-F-012/013).
+            visible: root.preview.hasEntry
             onWidthChanged: root.reportImageAreaSize()
             onHeightChanged: root.reportImageAreaSize()
+
+            readonly property int iconExtent: Math.min(128, Math.floor(width))
+            // Re-read whenever the selected chain changes; a chain the listing already failed is not
+            // requested again (IconFallbacks.js).
+            readonly property bool knownUnresolved: IconFallbacks.isUnresolved(root.preview.iconName)
+            // Pinned on failure so a resize (new sourceSize) does not re-request a known miss.
+            property string failedChain
+            readonly property bool skipRequest: knownUnresolved || failedChain === root.preview.iconName
+            readonly property bool showFallback: skipRequest || previewThemeIcon.hasError
+            // Directory chains, and only they, begin with "folder" (IconNameResolver), so the one
+            // exposed iconName is enough to pick the fallback glyph.
+            readonly property bool isFolderIconName: root.preview.iconName === "folder" || root.preview.iconName.startsWith("folder/")
 
             PreviewImageItem {
                 anchors.fill: parent
                 image: root.preview.image
+                visible: root.preview.hasImage
+            }
+            HnIcon {
+                id: previewThemeIcon
+                objectName: "previewThemeIcon"
+                anchors.centerIn: parent
+                size: imageArea.iconExtent
+                source: !root.preview.hasEntry || root.preview.hasImage || imageArea.skipRequest ? "" : "image://icon/" + root.preview.iconName
+                visible: !root.preview.hasImage && !imageArea.showFallback
+                onHasErrorChanged: if (hasError) {
+                    const chain = root.preview.iconName;
+                    IconFallbacks.markUnresolved(chain);
+                    // Deferred: the failure is reported from inside the source assignment itself.
+                    Qt.callLater(() => imageArea.failedChain = chain);
+                }
+            }
+            HnIcon {
+                id: previewFallbackIcon
+                objectName: "previewFallbackIcon"
+                anchors.centerIn: parent
+                size: imageArea.iconExtent
+                source: root.preview.hasImage || !imageArea.showFallback ? "" : imageArea.isFolderIconName ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
+                visible: !root.preview.hasImage && imageArea.showFallback
+            }
+            Rectangle {
+                objectName: "previewIconFailurePlaceholder"
+                anchors.centerIn: parent
+                width: imageArea.iconExtent
+                height: imageArea.iconExtent
+                radius: 8
+                color: "transparent"
+                border.color: HoloniightPalette.textMuted
+                visible: !root.preview.hasImage && imageArea.showFallback && previewFallbackIcon.hasError
+                Text {
+                    anchors.centerIn: parent
+                    text: "?"
+                    color: HoloniightPalette.textMuted
+                    font.pixelSize: Math.min(64, imageArea.iconExtent * 0.6)
+                }
             }
         }
 

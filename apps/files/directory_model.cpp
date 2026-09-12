@@ -1,5 +1,7 @@
 #include "directory_model.h"
 
+#include "icon_name_resolver.h"
+
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -38,9 +40,12 @@ DirectoryEntry readEntry(const QString& path, const QString& name) {
     entry.mode = info.st_mode;
     entry.modified =
         QDateTime::fromMSecsSinceEpoch((qint64{info.st_mtim.tv_sec} * 1000) + (info.st_mtim.tv_nsec / 1000000));
+    entry.icon_name = IconNameResolver::candidateIconNames(info.st_mode, name).join(IconNameResolver::kChainSeparator);
   } else {
     const int error = errno;
     entry.stat_failed = true;
+    // A dangling link's own extension says nothing about a target that doesn't exist (REQ-F-006).
+    entry.icon_name = IconNameResolver::genericFallbackName(false);
     struct stat linkInfo{};
     const bool dangling = (error == ENOENT || error == ENOTDIR) && ::lstat(encoded.constData(), &linkInfo) == 0 &&
                           S_ISLNK(linkInfo.st_mode);
@@ -149,15 +154,19 @@ QVariant DirectoryModel::data(const QModelIndex& index, int role) const {
       return entry.stat_failed;
     case StatErrorRole:
       return entry.stat_error;
+    case IconNameRole:
+      return entry.icon_name;
     default:
       return {};
   }
 }
 QHash<int, QByteArray> DirectoryModel::roleNames() const {
   return {
-      {NameRole, "name"},           {PathRole, "path"}, {IsDirRole, "isDir"},       {SizeRole, "size"},
-      {ModifiedRole, "modified"},   {ModeRole, "mode"}, {IsHiddenRole, "isHidden"}, {StatFailedRole, "statFailed"},
-      {StatErrorRole, "statError"},
+      {NameRole, "name"},           {PathRole, "path"},
+      {IsDirRole, "isDir"},         {SizeRole, "size"},
+      {ModifiedRole, "modified"},   {ModeRole, "mode"},
+      {IsHiddenRole, "isHidden"},   {StatFailedRole, "statFailed"},
+      {StatErrorRole, "statError"}, {IconNameRole, "iconName"},
   };
 }
 void DirectoryModel::load(const QString& path) {
@@ -213,6 +222,7 @@ int DirectoryModel::insertPlaceholderRow() {
   const int row = static_cast<int>(entries_.size());
   DirectoryEntry placeholder;
   placeholder.is_placeholder = true;
+  placeholder.icon_name = IconNameResolver::genericFallbackName(false);  // REQ-F-011: never a folder
   beginInsertRows({}, row, row);
   entries_.append(placeholder);
   endInsertRows();

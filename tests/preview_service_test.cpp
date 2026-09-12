@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 using files_test::fixturePattern;
+using files_test::writeFile;
 using files_test::writeJpegWithExif;
 using files_test::writeLargeText;
 using files_test::writeSmallText;
@@ -126,6 +127,34 @@ TEST(PreviewService, StatFailedTargetIsReportedAsAnErrorWithoutWorkerDispatch) {
                     QStringLiteral("Broken symbolic link"));
   EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::BrokenSymlink);
   EXPECT_FALSE(service.busy());
+}
+
+TEST(PreviewService, IconNameIsTheListingChainVerbatimAndClearsWithTheTarget) {
+  QTemporaryDir dir(fixturePattern("preview-icon-name"));
+  ASSERT_TRUE(dir.isValid());
+  // Content is plain text, but the pane must show the listing's extension-derived icon (REQ-F-015).
+  const auto path = writeFile(dir, "script.py", "hello\n");
+  ASSERT_FALSE(path.isEmpty());
+  const QFileInfo info(path);
+  PreviewService service;
+  QSignalSpy changed(&service, &PreviewService::changed);
+  service.setTarget(path, false, info.size(), info.lastModified(), S_IFREG | 0644, false, {},
+                    QStringLiteral("text-x-python/text-x-generic/application-x-generic"));
+  EXPECT_EQ(service.iconName(), QStringLiteral("text-x-python/text-x-generic/application-x-generic"));
+  EXPECT_GE(changed.count(), 1);
+  ASSERT_TRUE(settled(service));
+
+  const auto otherPath = writeFile(dir, "photo.jpg", "not really a jpeg");
+  ASSERT_FALSE(otherPath.isEmpty());
+  service.setTarget(otherPath, false, 17, QFileInfo(otherPath).lastModified(), S_IFREG | 0644, false, {},
+                    QStringLiteral("image-jpeg/image-x-generic/application-x-generic"));
+  EXPECT_EQ(service.iconName(), QStringLiteral("image-jpeg/image-x-generic/application-x-generic"));
+  ASSERT_TRUE(settled(service));
+
+  changed.clear();
+  service.clear();
+  EXPECT_TRUE(service.iconName().isEmpty());
+  EXPECT_EQ(changed.count(), 1);
 }
 
 TEST(PreviewService, EmptyPathClearsTheService) {

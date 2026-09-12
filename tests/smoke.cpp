@@ -4,6 +4,8 @@
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QGuiApplication>
+#include <QIcon>
+#include <QImage>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -180,12 +182,16 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
   ASSERT_TRUE(QTest::qWaitFor(
       [&] { return !controller.scanning() && list->property("currentItem").value<QQuickItem*>() != nullptr; }));
   auto* row = list->property("currentItem").value<QQuickItem*>();
+  auto* icon = row->findChild<QQuickItem*>("iconColumnField");
+  auto* nameHeader = window->findChild<QQuickItem*>("nameColumnHeader");
   auto* name = row->findChild<QQuickItem*>("nameColumnField");
   auto* size = row->findChild<QQuickItem*>("sizeColumnField");
   auto* modified = row->findChild<QQuickItem*>("modifiedColumnField");
   auto* sizeHeader = window->findChild<QQuickItem*>("sizeColumnHeader");
   auto* modifiedHeader = window->findChild<QQuickItem*>("modifiedColumnHeader");
   auto* breadcrumb = window->findChild<QQuickItem*>("breadcrumbLabel");
+  ASSERT_NE(icon, nullptr);
+  ASSERT_NE(nameHeader, nullptr);
   ASSERT_NE(name, nullptr);
   ASSERT_NE(size, nullptr);
   ASSERT_NE(modified, nullptr);
@@ -197,7 +203,9 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
     ASSERT_TRUE(QTest::qWaitFor([&] {
       return name->width() >= 120 && size->isVisible() == (width != 700) && modified->isVisible() == (width == 1000);
     }));
-    EXPECT_NEAR(breadcrumb->mapToScene(QPointF()).x(), name->mapToScene(QPointF()).x(), 1);
+    // main-view-icons REQ-NF-002: the row's content now starts with the icon cell, so the breadcrumb
+    // (app-window-layout REQ-F-004) aligns with that leading edge rather than the Name text.
+    EXPECT_NEAR(breadcrumb->mapToScene(QPointF()).x(), icon->mapToScene(QPointF()).x(), 1);
     EXPECT_EQ(sizeHeader->isVisible(), size->isVisible());
     EXPECT_EQ(modifiedHeader->isVisible(), modified->isVisible());
     if (size->isVisible()) {
@@ -209,6 +217,170 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
       EXPECT_NEAR(modifiedHeader->width(), modified->width(), 1);
     }
   }
+  // main-view-icons REQ-F-008/009/026: fixed 20 px icon cell, header Name label inset to match.
+  for (const int width : {420, 700, 1000, 1600}) {
+    window->resize(width, 400);
+    ASSERT_TRUE(
+        QTest::qWaitFor([&] { return window->width() == width && qFuzzyCompare(row->width(), list->width()); }));
+    QTest::qWait(20);  // let both RowLayouts finish polishing at the new width
+    EXPECT_EQ(icon->width(), 20) << width;
+    EXPECT_NEAR(nameHeader->mapToScene(QPointF()).x(), name->mapToScene(QPointF()).x(), 1) << width;
+    EXPECT_LT(icon->mapToScene(QPointF()).x() + icon->width(), name->mapToScene(QPointF()).x()) << width;
+  }
+}
+
+namespace {
+// A one-icon theme providing only "folder", so a test can observe both the theme path and the
+// bundled-glyph path in one listing regardless of the icon themes installed on the machine.
+bool writeFolderOnlyTheme(const QTemporaryDir& root) {
+  const QDir themeDir(root.filePath("folder-only-theme"));
+  QFile index(themeDir.filePath("index.theme"));
+  QImage image(32, 32, QImage::Format_ARGB32);
+  image.fill(Qt::red);
+  return themeDir.mkpath("32x32/places") && index.open(QIODevice::WriteOnly) &&
+         index.write(
+             "[Icon Theme]\nName=folder-only-theme\nDirectories=32x32/places\n\n"
+             "[32x32/places]\nSize=32\nContext=Places\nType=Fixed\n") > 0 &&
+         index.flush() && image.save(themeDir.filePath("32x32/places/folder.png"));
+}
+
+struct RowIcons {
+  QQuickItem* theme = nullptr;
+  QQuickItem* fallback = nullptr;
+};
+RowIcons rowIcons(QQuickItem* list, int row) {
+  // Delegates are parented to the ListView's contentItem only visually, not in the QObject tree.
+  for (auto* delegate : list->property("contentItem").value<QQuickItem*>()->childItems()) {
+    if (delegate->objectName() == "directoryEntryDelegate" && delegate->property("index").toInt() == row) {
+      return {.theme = delegate->findChild<QQuickItem*>("themeFileIcon"),
+              .fallback = delegate->findChild<QQuickItem*>("fallbackFileIcon")};
+    }
+  }
+  return {};
+}
+bool imageReady(QQuickItem* icon) {
+  const auto images = icon->findChildren<QQuickItem*>();
+  return !images.isEmpty() && images.first()->property("status").toInt() == 1;  // Image.Ready
+}
+}  // namespace
+
+TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
+  QTemporaryDir themeRoot(files_test::fixturePattern("icon-theme"));
+  QTemporaryDir dir(files_test::fixturePattern("icon-window"));
+  ASSERT_TRUE(themeRoot.isValid());
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_TRUE(writeFolderOnlyTheme(themeRoot));
+  ASSERT_TRUE(QDir(dir.path()).mkdir("a-folder"));
+  ASSERT_FALSE(files_test::writeFile(dir, "b-notes.txt").isEmpty());
+  ASSERT_TRUE(QFile::link(dir.filePath("missing"), dir.filePath("c-dangling")));
+  // Test-only theme override; production never touches the theme (REQ-F-018).
+  const auto previousPaths = QIcon::themeSearchPaths();
+  const auto previousFallbackPaths = QIcon::fallbackSearchPaths();
+  const auto previousTheme = QIcon::themeName();
+  const auto previousFallbackTheme = QIcon::fallbackThemeName();
+  const auto restoreTheme = qScopeGuard([&] {
+    QIcon::setThemeSearchPaths(previousPaths);
+    QIcon::setFallbackSearchPaths(previousFallbackPaths);
+    QIcon::setThemeName(previousTheme);
+    QIcon::setFallbackThemeName(previousFallbackTheme);
+  });
+  QIcon::setThemeSearchPaths({themeRoot.path()});
+  QIcon::setFallbackSearchPaths({});
+  QIcon::setThemeName(QStringLiteral("folder-only-theme"));
+  QIcon::setFallbackThemeName(QStringLiteral("folder-only-theme"));
+
+  {
+    DirectoryController controller;
+    QQmlApplicationEngine engine;
+    engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+    engine.loadFromModule("HolonightFiles", "Main");
+    ASSERT_EQ(engine.rootObjects().size(), 1);
+    // Registered by the HolonightFiles plugin itself, not by this test (DESIGN.md §5.4).
+    EXPECT_NE(engine.imageProvider(QStringLiteral("icon")), nullptr);
+    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+    ASSERT_NE(window, nullptr);
+    window->resize(1000, 500);
+    window->releaseResources();  // earlier tests' cached image://icon/ results used another theme
+    controller.open(dir.path());
+    auto* list = window->findChild<QQuickItem*>("directoryListView");
+    ASSERT_NE(list, nullptr);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && list->property("count").toInt() == 3; }));
+
+    // Sorted folders first: 0 a-folder, 1 b-notes.txt, 2 c-dangling.
+    ASSERT_TRUE(QTest::qWaitFor([&] {
+      const auto folder = rowIcons(list, 0);
+      return folder.theme != nullptr && folder.theme->isVisible() && imageReady(folder.theme);
+    }));
+    EXPECT_FALSE(rowIcons(list, 0).fallback->isVisible());
+    for (const int row : {1, 2}) {
+      ASSERT_TRUE(QTest::qWaitFor([&] {
+        const auto icons = rowIcons(list, row);
+        return icons.fallback != nullptr && icons.fallback->isVisible() && imageReady(icons.fallback);
+      })) << row;
+      const auto icons = rowIcons(list, row);
+      EXPECT_FALSE(icons.theme->isVisible()) << row;
+      EXPECT_TRUE(icons.fallback->property("source").toString().endsWith("generic-file-fallback.svg")) << row;
+      EXPECT_TRUE(icons.fallback->property("tinted").toBool()) << row;
+    }
+    EXPECT_EQ(rowIcons(list, 0).theme->property("source").toString(), "image://icon/folder/inode-directory");
+
+    // Preview pane: the folder row's theme icon at up to 128 px; a file row falls back to its glyph.
+    auto* previewTheme = window->findChild<QQuickItem*>("previewThemeIcon");
+    auto* previewFallback = window->findChild<QQuickItem*>("previewFallbackIcon");
+    ASSERT_NE(previewTheme, nullptr);
+    ASSERT_NE(previewFallback, nullptr);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return previewTheme->isVisible() && imageReady(previewTheme); }));
+    EXPECT_FALSE(previewFallback->isVisible());
+    EXPECT_LE(previewTheme->width(), 128);
+    EXPECT_GT(previewTheme->width(), 0);
+    window->requestActivate();
+    ASSERT_TRUE(QTest::qWaitForWindowActive(window));
+    QTest::keyClick(window, Qt::Key_J);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return previewFallback->isVisible() && imageReady(previewFallback); }));
+    EXPECT_FALSE(previewTheme->isVisible());
+    EXPECT_TRUE(previewFallback->property("source").toString().endsWith("generic-file-fallback.svg"));
+    QTest::keyClick(window, Qt::Key_K);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return previewTheme->isVisible(); }));
+  }
+  QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+  // With no theme reachable at all, the folder row switches to the bundled folder glyph.
+  QIcon::setThemeSearchPaths({dir.filePath("a-folder")});
+  QIcon::setThemeName(QStringLiteral("nonexistent-test-theme"));
+  QIcon::setFallbackThemeName(QStringLiteral("nonexistent-test-theme"));
+  DirectoryController bareController;
+  QQmlApplicationEngine bareEngine;
+  bareEngine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&bareController)}});
+  bareEngine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(bareEngine.rootObjects().size(), 1);
+  EXPECT_NE(bareEngine.imageProvider(QStringLiteral("icon")), nullptr);
+  auto* bareWindow = qobject_cast<QQuickWindow*>(bareEngine.rootObjects().first());
+  ASSERT_NE(bareWindow, nullptr);
+  // Qt Quick caches decoded images per URL process-wide; drop the now-unreferenced theme hits from
+  // the first engine so the same image://icon/ URLs are requested again under the empty theme.
+  bareWindow->releaseResources();
+  bareController.open(dir.path());
+  auto* bareList = bareWindow->findChild<QQuickItem*>("directoryListView");
+  ASSERT_NE(bareList, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] {
+    const auto folder = rowIcons(bareList, 0);
+    return folder.fallback != nullptr && folder.fallback->isVisible() && imageReady(folder.fallback);
+  }));
+  EXPECT_TRUE(rowIcons(bareList, 0).fallback->property("source").toString().endsWith("folder-fallback.svg"));
+  // A missing packaged SVG must still leave a visible marker in the fixed icon cell (REQ-F-022).
+  auto* bareRowPlaceholder =
+      rowIcons(bareList, 0).fallback->parentItem()->findChild<QQuickItem*>("iconFailurePlaceholder");
+  ASSERT_NE(bareRowPlaceholder, nullptr);
+  rowIcons(bareList, 0).fallback->setProperty("source", QUrl("qrc:/missing-folder-icon.svg"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return bareRowPlaceholder->isVisible(); }));
+  auto* barePreviewFallback = bareWindow->findChild<QQuickItem*>("previewFallbackIcon");
+  ASSERT_NE(barePreviewFallback, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return barePreviewFallback->isVisible() && imageReady(barePreviewFallback); }));
+  EXPECT_TRUE(barePreviewFallback->property("source").toString().endsWith("folder-fallback.svg"));
+  auto* barePreviewPlaceholder = bareWindow->findChild<QQuickItem*>("previewIconFailurePlaceholder");
+  ASSERT_NE(barePreviewPlaceholder, nullptr);
+  barePreviewFallback->setProperty("source", QUrl("qrc:/missing-preview-icon.svg"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return barePreviewPlaceholder->isVisible(); }));
 }
 
 TEST(Files, WindowAndKeyboard) {

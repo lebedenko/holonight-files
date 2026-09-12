@@ -65,6 +65,14 @@ The listing prioritizes filenames when space is limited, hiding Modified and the
 Size columns. See the [layout verification record](docs/sdd/app-window-layout/VERIFICATION.md)
 for review fixes and remaining minimum-window limitations.
 
+Each listing row starts with a file-type icon, and the preview pane shows the same
+icon (up to 128px) when no thumbnail is available. Icons come from the icon theme
+Qt already selected (`QIcon::fromTheme`), matched by filename and extension, never
+by reading file contents. When the theme has no match, bundled folder and generic-file
+glyphs are drawn in the palette colours instead. Files never changes the icon theme
+or its search paths; an icon theme installed while Files is running is picked up
+after a restart. See the [icons verification record](docs/sdd/main-view-icons/VERIFICATION.md).
+
 Requires C++23, Qt 6.11+ (including the Svg component), CMake 3.25+, Ninja,
 Task, libexif (via pkg-config), and installed HolonightQt::Core /
 HolonightQt::Controls. Tests use Qt Test and GTest. Checks need clang-format,

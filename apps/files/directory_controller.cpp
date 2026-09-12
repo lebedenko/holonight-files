@@ -694,7 +694,8 @@ void DirectoryController::syncPreviewTarget() {
                      model_.data(sourceIndex, DirectoryModel::ModifiedRole).toDateTime(),
                      model_.data(sourceIndex, DirectoryModel::ModeRole).toUInt(),
                      model_.data(sourceIndex, DirectoryModel::StatFailedRole).toBool(),
-                     model_.data(sourceIndex, DirectoryModel::StatErrorRole).toString(), preview_revision_);
+                     model_.data(sourceIndex, DirectoryModel::StatErrorRole).toString(),
+                     model_.data(sourceIndex, DirectoryModel::IconNameRole).toString(), preview_revision_);
 }
 void DirectoryController::handleWorkerShutdown() {
   if (++workers_finished_ == 3) {
