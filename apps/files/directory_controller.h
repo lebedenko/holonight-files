@@ -3,6 +3,7 @@
 #include "clipboard_register.h"
 #include "directory_model.h"
 #include "directory_proxy_model.h"
+#include "jump_list.h"
 #include "places_model.h"
 #include "preview_service.h"
 #include "task_manager.h"
@@ -32,6 +33,8 @@ class DirectoryController : public QObject {
   Q_PROPERTY(VimModeController* vim READ vim CONSTANT)
   Q_PROPERTY(TaskManager* tasks READ tasks CONSTANT)
   Q_PROPERTY(bool quickLookOpen READ quickLookOpen NOTIFY changed)
+  Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY changed)
+  Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
  public:
   explicit DirectoryController(QObject* parent = nullptr);
   QString currentPath() const { return current_path_; }
@@ -45,10 +48,18 @@ class DirectoryController : public QObject {
   VimModeController* vim() { return &vim_; }
   TaskManager* tasks() { return &tasks_; }
   bool quickLookOpen() const { return quick_look_open_; }
+  bool canGoBack() const { return jump_list_.canGoBack(); }
+  bool canGoForward() const { return jump_list_.canGoForward(); }
   Q_INVOKABLE void open(const QString& path, const QString& fallbackReason = {});
   Q_INVOKABLE void navigateInto(int proxyRow);
   Q_INVOKABLE void navigateParent();
   Q_INVOKABLE void openEntry(int proxyRow);
+  // Header buttons: always one step, discarding any pending vim count (REQ-F-033).
+  Q_INVOKABLE void goBack();
+  Q_INVOKABLE void goForward();
+  // Ctrl+O / Ctrl+I: consume the pending vim count as the step count (REQ-F-007/011/023).
+  Q_INVOKABLE void navigateHistoryBack();
+  Q_INVOKABLE void navigateHistoryForward();
   Q_INVOKABLE void toggleHidden();
   Q_INVOKABLE void toggleSortDirection();
   // Returns true when key was recognized and consumed. key is either the raw event.text (e.g.
@@ -76,6 +87,14 @@ class DirectoryController : public QObject {
   friend struct DirectoryControllerTestAccess;
   std::function<void(const VimModeController::InsertCommitResult&)> before_commit_for_test_;
   void resetForNavigation();
+  // restoreName is the entry the cursor lands on once the new listing settles; empty means row 0.
+  // recordHistory is false only for history traversal, which has already moved the jump list.
+  void openInternal(const QString& requestedPath, const QString& fallbackReason, const QString& restoreName,
+                    bool recordHistory);
+  void traverseHistory(int direction, int count);
+  QString outgoingCursorName() const;
+  void maybeApplyPendingRestore();
+  void cancelPendingRestore();
   void listingChanged();
   void ensureSearchCurrent();
   quint64 listing_revision_ = 0;
@@ -121,6 +140,10 @@ class DirectoryController : public QObject {
   ClipboardRegister register_;
   QFileSystemWatcher watcher_;
   QString current_path_;
+  JumpList jump_list_;
+  QString pending_restore_name_;
+  // True from a navigation until its first settled load; cleared by any explicit cursor move.
+  bool awaiting_initial_load_ = false;
   QString status_message_;
   QString preview_target_path_;
   quint64 preview_revision_ = 0;

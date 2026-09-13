@@ -99,3 +99,7 @@ Application-window layout review fixes preserve filenames in narrow listing pane
 and align breadcrumb/header text with the data columns. See the
 [layout verification record](sdd/app-window-layout/VERIFICATION.md). The existing
 420px sidebar/preview width conflict and native visual acceptance remain pending.
+
+Navigation history is complete: Ctrl+O/Ctrl+I and header buttons traverse an
+in-memory jump list and restore the cursor on return. See the
+[navigation history verification record](sdd/navigation-history/VERIFICATION.md).

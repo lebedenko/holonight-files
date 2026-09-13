@@ -11,6 +11,16 @@ function normalized(event) {
 }
 
 function press(event, controller, popup) {
+    // The modal Quick Look popup blocks window Shortcuts, so Ctrl+O/Ctrl+I are forwarded from here
+    // (navigation-history DESIGN.md §4.3); elsewhere Main.qml's Shortcuts handle them.
+    if (popup && (event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_O || event.key === Qt.Key_I)) {
+        if (event.key === Qt.Key_O)
+            controller.navigateHistoryBack();
+        else
+            controller.navigateHistoryForward();
+        event.accepted = true;
+        return;
+    }
     const key = normalized(event);
     if (popup && key !== " " && key !== "Escape" && key !== "j" && key !== "k")
         return;

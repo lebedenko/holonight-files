@@ -73,6 +73,16 @@ glyphs are drawn in the palette colours instead. Files never changes the icon th
 or its search paths; an icon theme installed while Files is running is picked up
 after a restart. See the [icons verification record](docs/sdd/main-view-icons/VERIFICATION.md).
 
+Navigation history works like Vim's jump list: `Ctrl+O` goes back and `Ctrl+I` goes forward
+through previously visited folders (count prefixes such as `3 Ctrl+O` work), as do the back/forward
+arrow buttons at the left of the header. Returning to a folder puts the cursor back on the entry it
+was on, and `h` places the cursor on the folder you just left. Revisiting a folder moves it to the
+end of the history instead of discarding forward entries. History holds up to 100 folders, lives in
+memory only (not kept across restarts), works in NORMAL mode only, and pauses while a prompt is open.
+Folders that no longer exist are skipped and dropped, with a "Skipped missing" status message.
+See the [navigation history specification](docs/sdd/navigation-history/SPEC.md) and
+[verification record](docs/sdd/navigation-history/VERIFICATION.md).
+
 Requires C++23, Qt 6.11+ (including the Svg component), CMake 3.25+, Ninja,
 Task, libexif (via pkg-config), and installed HolonightQt::Core /
 HolonightQt::Controls. Tests use Qt Test and GTest. Checks need clang-format,

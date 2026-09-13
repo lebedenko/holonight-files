@@ -46,6 +46,18 @@ HnApplicationWindow {
         onActivated: window.close()
     }
     Shortcut {
+        // navigation-history REQ-F-020: matched by key code, so Ctrl+I is never mistaken for Tab.
+        // Window context reaches it from the listing, a delegate editor or Quick Look alike.
+        sequence: "Ctrl+O"
+        enabled: !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
+        onActivated: window.controller.navigateHistoryBack()
+    }
+    Shortcut {
+        sequence: "Ctrl+I"
+        enabled: !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
+        onActivated: window.controller.navigateHistoryForward()
+    }
+    Shortcut {
         // REQ-F-030/REQ-C-009: fires regardless of which mode owns keyboard focus — including
         // while SEARCH's own TextField holds it — which handleKey()'s per-character dispatch
         // chain can't guarantee without special-casing every mode (see DESIGN.md Interfaces).

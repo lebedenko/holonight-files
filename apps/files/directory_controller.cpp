@@ -25,6 +25,9 @@ constexpr qint64 kPendingGTimeoutMs = 600;
 DirectoryController::DirectoryController(QObject* parent) : QObject(parent) {
   QCoreApplication::instance()->installEventFilter(this);
   proxy_.setSourceModel(&model_);
+  // Ahead of the forwarding connection, so observers never see a settled listing whose cursor has
+  // not yet been restored.
+  connect(&model_, &DirectoryModel::changed, this, &DirectoryController::maybeApplyPendingRestore);
   connect(&model_, &DirectoryModel::changed, this, &DirectoryController::changed);
   connect(&model_, &DirectoryModel::shutdownFinished, this, &DirectoryController::handleWorkerShutdown);
   connect(&preview_, &PreviewService::shutdownFinished, this, &DirectoryController::handleWorkerShutdown);
@@ -67,6 +70,17 @@ DirectoryController::DirectoryController(QObject* parent) : QObject(parent) {
   });
 }
 void DirectoryController::open(const QString& path, const QString& fallbackReason) {
+  openInternal(path, fallbackReason, /*restoreName=*/{}, /*recordHistory=*/true);
+}
+void DirectoryController::openInternal(const QString& requestedPath, const QString& fallbackReason,
+                                       const QString& restoreName, bool recordHistory) {
+  // Cleaned but not symlink-resolved, so history entries dedup by what the breadcrumb shows
+  // (REQ-C-003).
+  const auto path =
+      requestedPath.isEmpty() ? requestedPath : QDir::cleanPath(QFileInfo(requestedPath).absoluteFilePath());
+  if (recordHistory) {
+    jump_list_.recordVisit(path, outgoingCursorName());
+  }
   const auto watched = watcher_.directories() + watcher_.files();
   if (!watched.isEmpty()) {
     watcher_.removePaths(watched);
@@ -75,10 +89,71 @@ void DirectoryController::open(const QString& path, const QString& fallbackReaso
   current_path_ = path;
   status_message_ = fallbackReason;
   cursor_row_ = 0;
+  // Every navigation replaces whatever restore a superseded one was still waiting on (REQ-F-016).
+  awaiting_initial_load_ = false;
+  pending_restore_name_ = restoreName;
   model_.load(path);
+  // Armed only after load() returns: its synchronous reset emits changed() against an empty
+  // listing, which must not count as the load settling.
+  awaiting_initial_load_ = true;
   watcher_.addPath(path);
   emit navigated();
   emit changed();
+}
+QString DirectoryController::outgoingCursorName() const {
+  // A listing that never settled has no trustworthy row to come back to (REQ-F-039).
+  return awaiting_initial_load_ ? QString{} : entryNameAt(cursor_row_);
+}
+void DirectoryController::goBack() {
+  takeCount();  // a click always means one step, whatever digits were typed (REQ-F-033)
+  traverseHistory(-1, 1);
+}
+void DirectoryController::goForward() {
+  takeCount();
+  traverseHistory(1, 1);
+}
+void DirectoryController::navigateHistoryBack() { traverseHistory(-1, takeCount()); }
+void DirectoryController::navigateHistoryForward() { traverseHistory(1, takeCount()); }
+void DirectoryController::traverseHistory(int direction, int count) {
+  // Rechecked here, not only in QML bindings, so direct callers get the same gating
+  // (REQ-F-021/022). The count was already consumed by the caller (REQ-F-023).
+  if (tasks_.hasPrompt() || vim_.currentMode() != VimModeController::Mode::Normal) {
+    return;
+  }
+  const auto result = jump_list_.traverse(direction, count, outgoingCursorName(),
+                                          [](const QString& path) { return QFileInfo(path).isDir(); });
+  const auto skipped = result.skipped_paths.isEmpty()
+                           ? QString{}
+                           : tr("Skipped missing: %1").arg(result.skipped_paths.join(QStringLiteral(", ")));
+  if (result.moved) {
+    openInternal(result.target_path, skipped, result.restore_name, /*recordHistory=*/false);
+  } else if (!skipped.isEmpty()) {
+    status_message_ = skipped;
+    emit changed();
+  }
+}
+void DirectoryController::cancelPendingRestore() {
+  awaiting_initial_load_ = false;
+  pending_restore_name_.clear();
+}
+void DirectoryController::maybeApplyPendingRestore() {
+  // Watcher refreshes also settle through changed(), but by then the flag is already cleared
+  // (REQ-F-017).
+  if (!awaiting_initial_load_ || model_.scanning()) {
+    return;
+  }
+  const auto name = pending_restore_name_;
+  cancelPendingRestore();
+  int row = 0;
+  if (!name.isEmpty()) {
+    for (int candidate = 0; candidate < proxy_.rowCount(); ++candidate) {
+      if (entryNameAt(candidate) == name) {  // case-sensitive (REQ-C-004)
+        row = candidate;
+        break;
+      }
+    }
+  }
+  setCursorRow(row);
 }
 void DirectoryController::navigateInto(int proxyRow) {
   const auto sourceIndex = proxy_.mapToSource(proxy_.index(proxyRow, 0));
@@ -91,7 +166,9 @@ void DirectoryController::navigateParent() {
   if (current_path_.isEmpty()) {
     return;
   }
-  open(QFileInfo(current_path_).absolutePath());
+  const QFileInfo exited(current_path_);
+  // Land on the directory just left (REQ-F-018); row 0 when it is no longer listed (REQ-F-019).
+  openInternal(exited.absolutePath(), {}, exited.fileName(), /*recordHistory=*/true);
 }
 void DirectoryController::openEntry(int proxyRow) {
   if (proxyRow < 0 || proxyRow >= proxy_.rowCount()) {
@@ -125,6 +202,9 @@ int DirectoryController::takeCount() {
   return count;
 }
 void DirectoryController::setCursorRow(qint64 row) {
+  // Any cursor placement other than the restore's own supersedes a pending restore (REQ-F-015);
+  // maybeApplyPendingRestore() clears the pending state before calling here.
+  cancelPendingRestore();
   const int last = proxy_.rowCount() - 1;
   cursor_row_ = static_cast<int>(qBound(qint64{0}, row, qint64{qMax(0, last)}));
   if (vim_.currentMode() == VimModeController::Mode::Visual) {
@@ -148,6 +228,9 @@ QString DirectoryController::entryNameAt(int proxyRow) const {
   return model_.data(proxy_.mapToSource(proxy_.index(proxyRow, 0)), DirectoryModel::NameRole).toString();
 }
 void DirectoryController::beginRename(VimModeController::InsertKind kind) {
+  // Entering a mode commits to the current cursor; suspendUpdates() below would otherwise settle
+  // the partial listing and apply the restore under the editor.
+  cancelPendingRestore();
   if (cursor_row_ < 0 || cursor_row_ >= proxy_.rowCount()) {
     return;  // nothing selected to rename; the key is still consumed by the caller
   }
@@ -156,6 +239,7 @@ void DirectoryController::beginRename(VimModeController::InsertKind kind) {
   vim_.enterInsert(kind, cursor_row_, current_path_, entryNameAt(cursor_row_));
 }
 void DirectoryController::beginCreate(VimModeController::InsertKind kind) {
+  cancelPendingRestore();
   proxy_.setEditing(true);
   model_.suspendUpdates();
   const bool below = kind == VimModeController::InsertKind::CreateBelow;
@@ -266,6 +350,7 @@ bool DirectoryController::handleModeTransitionKey(const QString& key) {
   }
   if (key == u"v" || key == u"V") {
     takeCount();
+    cancelPendingRestore();
     vim_.enterVisual(cursor_row_);
     return true;
   }
@@ -291,6 +376,7 @@ bool DirectoryController::handleModeTransitionKey(const QString& key) {
   }
   if (key == u"/") {
     takeCount();
+    cancelPendingRestore();
     pre_search_name_ = entryNameAt(cursor_row_);
     vim_.enterSearch(cursor_row_);
     return true;
