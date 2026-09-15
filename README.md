@@ -129,8 +129,30 @@ one positional argument is rejected.
 
 Provider defaults are ../holonight-config and ../holonight-qt. Override their
 locations with HOLONIGHT_CONFIG_SOURCE and HOLONIGHT_QT_SOURCE for `task deps`.
-Builds and the staging prefix live under build/deps. Set JOBS to control
-provider parallelism. Override HOLONIGHT_DEPENDENCY_PREFIX and
+Builds and the staging prefix live under build/deps. Files and dependency builds
+use CMake/Ninja automatic parallelism by default, including in CI. Ninja chooses
+its worker count; this is not necessarily exactly the logical CPU count.
+Dependency providers remain sequential because later providers use earlier
+installations. `task check`, `task lint`, and tidy's prerequisite build also run
+in sequence, while each build or analysis stage can use the available CPUs.
+
+Use explicit limits when needed:
+
+```sh
+CMAKE_BUILD_PARALLEL_LEVEL=2 task build  # limit Files compiler jobs
+CMAKE_BUILD_PARALLEL_LEVEL=2 task deps   # limit provider compiler jobs
+JOBS=2 task deps                        # explicit provider limit; overrides CMake's environment limit
+cmake --build --preset debug --parallel 2  # direct CMake override
+```
+
+Unset or empty `JOBS` adds no parallel option, so CMake's environment override
+or Ninja's default applies. `JOBS` only affects dependency builds.
+`run-clang-tidy` keeps its default of all detected CPUs: compiler job limits
+(`JOBS`, `CMAKE_BUILD_PARALLEL_LEVEL`, or build `--parallel`) do not limit tidy
+workers. See the [build parallelism verification](docs/sdd/automatic-parallelism/VERIFICATION.md)
+for observed results; automatic scheduling does not promise a specific speedup.
+
+Override HOLONIGHT_DEPENDENCY_PREFIX and
 HOLONIGHT_QML_IMPORT_PATH as Task variables for an existing installation.
 Direct CMake users can set those cache variables with `cmake --preset debug
 -D...`; CMAKE_PREFIX_PATH can supply additional installed packages. The

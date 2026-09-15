@@ -109,3 +109,7 @@ memory/disk reuse and direct decoding above 1024px. Native scaling and latency
 acceptance remain tracked in [verification](sdd/sharp-previews/VERIFICATION.md).
 Broader reuse of other applications' thumbnails remains deferred; strict Files
 revision validation is retained. No eager cache migration or deletion is needed.
+
+Build parallelism uses CMake/Ninja automatic defaults with explicit compiler-job
+overrides; provider and quality-check stages remain sequential. See the
+[build parallelism verification](sdd/automatic-parallelism/VERIFICATION.md).

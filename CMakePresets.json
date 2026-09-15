@@ -75,23 +75,19 @@
   "buildPresets": [
     {
       "name": "debug",
-      "configurePreset": "debug",
-      "jobs": 2
+      "configurePreset": "debug"
     },
     {
       "name": "release",
-      "configurePreset": "release",
-      "jobs": 2
+      "configurePreset": "release"
     },
     {
       "name": "test",
-      "configurePreset": "test",
-      "jobs": 2
+      "configurePreset": "test"
     },
     {
       "name": "system-install",
-      "configurePreset": "system-install",
-      "jobs": 2
+      "configurePreset": "system-install"
     }
   ],
   "testPresets": [
