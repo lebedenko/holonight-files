@@ -12,10 +12,15 @@ permissions/MIME type, an EXIF summary for images, and a text preview with a
 truncation notice for large files; press `Space` to open the same preview in
 a full-window Quick Look overlay, which live-updates as you move with `j`/`k`
 and closes on `Space`/`Escape`. Image thumbnails are cached per the
-freedesktop Thumbnail Managing Standard (`$XDG_CACHE_HOME/thumbnails/normal/`).
+freedesktop Thumbnail Managing Standard in on-demand 128/256/512/1024px tiers
+under `$XDG_CACHE_HOME/thumbnails/`. Only the needed tier is generated; adequate
+larger entries are reused. Views above 1024px decode directly into memory.
 Space is consumed before delegate button activation; Enter/`l` still opens files.
-Previews use one verified regular-file descriptor, progressive thumbnail/full-image
-updates, bounded EXIF reads, and a two-entry/64 MiB full-image cache. Selected-file
+Previews use one verified regular-file descriptor, display-quality image
+updates before EXIF, bounded EXIF reads, and a two-entry/64 MiB image cache.
+New selections show the icon/loading state until adequate pixels are ready;
+resizing retains the current image during upgrades. Small originals stay at native
+resolution. See the [sharp previews cycle](docs/sdd/sharp-previews/VERIFICATION.md). Selected-file
 changes refresh previews without moving the cursor. See the
 [inspection verification](docs/sdd/inspect-selection/VERIFICATION.md) for evidence
 and remaining acceptance limitations.

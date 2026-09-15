@@ -133,3 +133,82 @@ TEST(ThumbnailService, DecodeScaledProducesFullResolutionTierBoundedToRequestedS
   EXPECT_LE(full.width(), 512);
   EXPECT_LE(full.height(), 512);
 }
+
+TEST(ThumbnailService, TierBoundariesAndPhysicalAspectFit) {
+  using namespace ThumbnailService;
+  for (const auto tier : {Tier::Normal, Tier::Large, Tier::XLarge, Tier::XXLarge}) {
+    const auto extent = static_cast<int>(tier);
+    EXPECT_EQ(tierForSize({extent, extent}), tier);
+    if (extent > 128) {
+      EXPECT_EQ(tierForSize({(extent / 2) + 1, 1}), tier);
+    }
+  }
+  EXPECT_FALSE(tierForSize({1025, 1}));
+  EXPECT_FALSE(tierForSize({}));
+  EXPECT_EQ(requiredSize({64, 48}, {512, 512}), QSize(64, 48));
+  for (const double dpr : {1.0, 1.5, 2.0}) {
+    const QSize physical(qRound(300 * dpr), qRound(200 * dpr));
+    EXPECT_EQ(requiredSize({3000, 2000}, physical), physical);
+    EXPECT_EQ(requiredSize({2000, 3000}, physical), QSize(physical.height() * 2 / 3, physical.height()));
+  }
+}
+
+TEST(ThumbnailService, OnlySelectedTierIsWrittenAndLargerTierIsReused) {
+  FakeCacheHome home;
+  QTemporaryDir dir(fixturePattern("tier-cache"));
+  const auto path = files_test::writeFile(dir, "image.jpg", renderJpegBytes({2000, 1000}));
+  QFile file(path);
+  ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+  using namespace ThumbnailService;
+  EXPECT_EQ(lookupOrDecode(file, path, "revision", Tier::XLarge, {400, 200}, nullptr).size(), QSize(512, 256));
+  const auto root = home.dir.path() + "/thumbnails/";
+  EXPECT_EQ(QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot), QStringList{"x-large"});
+  EXPECT_EQ(lookup(file, path, "revision", Tier::Large, {200, 100}).size(), QSize(512, 256));
+  EXPECT_TRUE(lookup(file, path, "changed", Tier::Large, {200, 100}).isNull());
+  EXPECT_TRUE(lookup(file, path, "revision", Tier::XXLarge, {600, 300}).isNull());
+  // Disk lookup remains usable without a readable source descriptor: no original image decode.
+  file.close();
+  EXPECT_EQ(lookup(file, path, "revision", Tier::Large, {200, 100}).size(), QSize(512, 256));
+}
+
+TEST(ThumbnailService, RejectsUndersizedCorruptAndIncorrectMetadata) {
+  FakeCacheHome home;
+  QTemporaryDir dir(fixturePattern("tier-invalid"));
+  const auto path = files_test::writeFile(dir, "image.jpg", renderJpegBytes({1000, 500}));
+  QFile file(path);
+  ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+  using namespace ThumbnailService;
+  lookupOrDecode(file, path, "revision", Tier::Large, {200, 100}, nullptr);
+  const auto cachePath = cachePathFor(home.dir.path(), path).replace("/normal/", "/large/");
+  const QImage valid(cachePath);
+  ASSERT_FALSE(valid.isNull());
+  auto small = valid.scaled(100, 50);
+  ASSERT_TRUE(small.save(cachePath));
+  EXPECT_TRUE(lookup(file, path, "revision", Tier::Large, {200, 100}).isNull());
+  for (const auto& key : {"Thumb::URI", "Thumb::MTime", "Thumb::Size", "Files::Revision"}) {
+    auto invalid = valid;
+    invalid.setText(QString::fromLatin1(key), "invalid");
+    ASSERT_TRUE(invalid.save(cachePath));
+    EXPECT_TRUE(lookup(file, path, "revision", Tier::Large, {200, 100}).isNull());
+  }
+  QFile corrupt(cachePath);
+  ASSERT_TRUE(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));
+  corrupt.write("not a PNG");
+  corrupt.close();
+  EXPECT_TRUE(lookup(file, path, "revision", Tier::Large, {200, 100}).isNull());
+  EXPECT_EQ(lookupOrDecode(file, path, "revision", Tier::Large, {200, 100}, nullptr).size(), QSize(256, 128));
+}
+
+TEST(ThumbnailService, CacheWriteFailureDoesNotPreventDecode) {
+  FakeCacheHome home;
+  QTemporaryDir dir(fixturePattern("tier-unwritable"));
+  const auto path = files_test::writeFile(dir, "image.jpg", renderJpegBytes({1000, 500}));
+  QFile blocker(home.dir.path() + "/thumbnails");
+  ASSERT_TRUE(blocker.open(QIODevice::WriteOnly));
+  blocker.close();
+  QFile file(path);
+  ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+  EXPECT_EQ(ThumbnailService::lookupOrDecode(file, path, "revision", ThumbnailService::Tier::Large, {200, 100}, nullptr)
+                .size(),
+            QSize(256, 128));
+}

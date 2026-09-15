@@ -146,8 +146,6 @@ class PreviewService : public QObject {
 
   bool busy_ = false;
   bool timed_out_ = false;
-  QImage thumbnail_image_;
-  QImage full_image_;
   QImage display_image_;
   QSize source_pixel_size_;
   ExifReader::ExifSummary exif_;

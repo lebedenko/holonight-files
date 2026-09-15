@@ -103,3 +103,9 @@ and align breadcrumb/header text with the data columns. See the
 Navigation history is complete: Ctrl+O/Ctrl+I and header buttons traverse an
 in-memory jump list and restore the cursor on return. See the
 [navigation history verification record](sdd/navigation-history/VERIFICATION.md).
+
+Sharp previews use on-demand freedesktop 128/256/512/1024px tiers, adequate
+memory/disk reuse and direct decoding above 1024px. Native scaling and latency
+acceptance remain tracked in [verification](sdd/sharp-previews/VERIFICATION.md).
+Broader reuse of other applications' thumbnails remains deferred; strict Files
+revision validation is retained. No eager cache migration or deletion is needed.

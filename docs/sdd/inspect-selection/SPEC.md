@@ -343,3 +343,10 @@ The following fixtures and test data are required to verify this specification. 
 - REQ-R-008: Metadata shall use KiB/MiB/GiB/TiB with exact bytes, locale timestamps with ISO fallback and explicit unavailable values.
 
 Native acceptance remains required: cached <100ms, initial/uncached <500ms, Quick Look updates <200ms; 100+ images over 5MB at 10+ movements/s, peak memory <500MB and >=30 FPS. Verify both locales as non-root, dark/light, fractional scaling, splitter resizing and fullscreen restoration. Unavailable checks remain pending. Hard preemption of Qt decoding is outside scope; bounded allocation, cooperative cancellation and a three-second visible deadline are the limits.
+
+## Sharp preview supersession
+
+The approved [sharp previews cycle](../sharp-previews/SPEC.md) supersedes the
+normal-only acceptance in REQ-F-017/019/020, exact decoded sizing in REQ-F-005,
+thumbnail-first REQ-R-004, and exact-size/normal-only caching in REQ-R-005.
+Other inspection requirements remain in effect.

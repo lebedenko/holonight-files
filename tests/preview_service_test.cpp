@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QProcess>
 #include <QProcessEnvironment>
@@ -15,6 +16,7 @@
 #include <QThread>
 
 #include <gtest/gtest.h>
+#include <iostream>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -168,26 +170,39 @@ TEST(PreviewService, EmptyPathClearsTheService) {
   EXPECT_FALSE(service.hasEntry());
 }
 
-TEST(PreviewService, ThumbnailIsDeliveredWhileFullDecodeIsPending) {
+TEST(PreviewService, NoImageAppearsUntilAdequateDecodeCompletes) {
   QTemporaryDir dir(fixturePattern("progressive"));
-  const auto path = writeJpegWithExif(dir);
+  const auto path = writeFile(
+      dir, "large.jpg",
+      files_test::spliceJpegExif(files_test::renderJpegBytes({2000, 1500}), files_test::buildSampleExifBlob()));
   PreviewService service;
   PreviewServiceTestAccess::beforeFullDecode(service, [] { QThread::msleep(400); });
   setTargetFromFile(service, path);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return service.hasImage(); }, 1000));
+  QTest::qWait(150);
+  EXPECT_FALSE(service.hasImage());
   EXPECT_TRUE(service.busy());
-  EXPECT_LE(service.image().width(), 128);
+  qint64 imageKey = 0;
+  QObject::connect(&service, &PreviewService::changed, &service, [&] {
+    if (service.hasImage()) {
+      EXPECT_EQ(service.image().size(), QSize(1024, 768));
+      if (imageKey == 0) {
+        imageKey = service.image().cacheKey();
+      }
+      EXPECT_EQ(service.image().cacheKey(), imageKey);
+    }
+  });
   ASSERT_TRUE(settled(service));
   EXPECT_TRUE(service.exifPresent());
 }
 
-TEST(PreviewService, TimeoutClearsAlreadyDeliveredThumbnail) {
+TEST(PreviewService, TimeoutDuringAdequateDecodeNeverPublishesPixels) {
   QTemporaryDir dir(fixturePattern("progressive-timeout"));
   const auto path = writeJpegWithExif(dir);
   PreviewService service;
   PreviewServiceTestAccess::beforeFullDecode(service, [] { QThread::msleep(3400); });
   setTargetFromFile(service, path);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return service.hasImage(); }, 1000));
+  QTest::qWait(150);
+  EXPECT_FALSE(service.hasImage());
   ASSERT_TRUE(QTest::qWaitFor([&] { return !service.busy(); }, 4000));
   EXPECT_FALSE(service.hasImage());
   EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::DecodeTimeout);
@@ -225,7 +240,7 @@ TEST(PreviewService, PendingRequestsAreReplacedAndFullImagesAreReused) {
 
 TEST(PreviewService, GradualGrowthAndConsumerChangesUseActualRequiredPixels) {
   QTemporaryDir dir(fixturePattern("consumer-size"));
-  const auto path = writeJpegWithExif(dir);
+  const auto path = writeFile(dir, "large.jpg", files_test::renderJpegBytes({2000, 1500}));
   PreviewService service;
   service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {200, 200});
   setTargetFromFile(service, path);
@@ -237,13 +252,13 @@ TEST(PreviewService, GradualGrowthAndConsumerChangesUseActualRequiredPixels) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return service.image().width() > first.width(); }));
   service.setRequestedSize(PreviewService::PreviewConsumer::QuickLook, {600, 600});
   QTest::qWait(200);
-  EXPECT_LE(service.image().width(), 260);
+  EXPECT_EQ(service.image().width(), 512);
   service.setQuickLookActive(true);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return service.image().width() == 600; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return service.image().width() == 1024; }));
   service.setQuickLookActive(false);
   service.setRequestedSize(PreviewService::PreviewConsumer::QuickLook, {900, 900});
   QTest::qWait(200);
-  EXPECT_EQ(service.image().width(), 600);
+  EXPECT_EQ(service.image().width(), 1024);
 }
 
 TEST(PreviewService, SpecialFilesAndReplacementCannotBlockWorkerOrShutdown) {
@@ -305,10 +320,11 @@ TEST(PreviewService, SpecialFilesAndReplacementCannotBlockWorkerOrShutdown) {
 
 TEST(PreviewService, FullResolutionCacheEnforcesEntryAndByteLimitsAndSourceRevision) {
   QTemporaryDir dir(fixturePattern("lru-budget"));
-  const auto first = writeJpegWithExif(dir, "first.jpg");
-  const auto second = writeJpegWithExif(dir, "second.jpg");
-  const auto third = writeJpegWithExif(dir, "third.jpg");
+  const auto first = writeFile(dir, "first.jpg", files_test::renderJpegBytes({6000, 4500}));
+  const auto second = writeFile(dir, "second.jpg", files_test::renderJpegBytes({6000, 4500}));
+  const auto third = writeFile(dir, "third.jpg", files_test::renderJpegBytes({6000, 4500}));
   PreviewService service;
+  service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {1200, 1200});
   std::atomic_int decodes = 0;
   PreviewServiceTestAccess::beforeFullDecode(service, [&] { ++decodes; });
   const auto preview = [&](const QString& path) {
@@ -401,4 +417,46 @@ TEST(PreviewService, RegularSymlinkAndPermissionDeniedRecovery) {
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   EXPECT_TRUE(service.hasText());
+}
+
+TEST(PreviewService, WarmDiskAndMemoryReuseAvoidSourceDecodeAndUpgradeRetainsPixels) {
+  QTemporaryDir dir(fixturePattern("warm-tier"));
+  const auto path = writeFile(dir, "image.jpg", files_test::renderJpegBytes({2400, 1600}));
+  std::atomic_int decodes = 0;
+  const auto start = [&](PreviewService& service) {
+    PreviewServiceTestAccess::beforeFullDecode(service, [&] { ++decodes; });
+    service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {300, 200});
+    QElapsedTimer timer;
+    timer.start();
+    setTargetFromFile(service, path);
+    EXPECT_TRUE(settled(service));
+    std::cout << "Preview latency ms: " << timer.elapsed() << "; source decodes: " << decodes.load() << '\n';
+  };
+  {
+    PreviewService cold;
+    start(cold);
+  }
+  EXPECT_EQ(decodes.load(), 1);
+  PreviewService service;
+  start(service);  // A fresh service has no memory entries.
+  EXPECT_EQ(decodes.load(), 1);
+  const auto retained = service.image().cacheKey();
+  service.clear();
+  service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {200, 100});
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.image().cacheKey(), retained);
+  PreviewServiceTestAccess::beforeFullDecode(service, [&] {
+    ++decodes;
+    QThread::msleep(300);
+  });
+  service.setRequestedSize(PreviewService::PreviewConsumer::QuickLook, {1500, 1000});
+  service.setQuickLookActive(true);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return decodes.load() == 2; }));
+  EXPECT_EQ(service.image().cacheKey(), retained);
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.image().size(), QSize(1500, 1000));
+  service.setQuickLookActive(false);
+  QTest::qWait(200);
+  EXPECT_EQ(service.image().size(), QSize(1500, 1000));
 }

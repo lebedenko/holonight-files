@@ -21,8 +21,7 @@ struct PreviewResult {
   quint64 generation = 0;
   bool final = true;
   QString mime_type;
-  QImage thumbnail_image;
-  QImage full_image;
+  QImage image;
   QSize source_pixel_size;
   ExifReader::ExifSummary exif;
   bool has_text = false;
@@ -33,14 +32,13 @@ struct PreviewResult {
 struct PreviewWorkerCache {
   struct Entry {
     QString key;
-    QSize size;
     QImage image;
   };
   std::list<Entry> entries;
   qint64 bytes = 0;
   QImage lookup(const QString& key, QSize size) {
     for (auto it = entries.begin(); it != entries.end(); ++it) {
-      if (it->key == key && it->size == size) {
+      if (it->key == key && it->image.width() >= size.width() && it->image.height() >= size.height()) {
         auto image = it->image;
         entries.splice(entries.begin(), entries, it);
         return image;
@@ -48,16 +46,24 @@ struct PreviewWorkerCache {
     }
     return {};
   }
-  void insert(const QString& key, QSize size, const QImage& image) {
+  void insert(const QString& key, const QImage& image) {
     constexpr qint64 budget = 64LL * 1024 * 1024;
     if (image.isNull() || image.sizeInBytes() > budget) {
       return;
+    }
+    for (auto it = entries.begin(); it != entries.end();) {
+      if (it->key == key) {
+        bytes -= it->image.sizeInBytes();
+        it = entries.erase(it);
+      } else {
+        ++it;
+      }
     }
     while (!entries.empty() && (entries.size() >= 2 || bytes + image.sizeInBytes() > budget)) {
       bytes -= entries.back().image.sizeInBytes();
       entries.pop_back();
     }
-    entries.push_front({.key = key, .size = size, .image = image});
+    entries.push_front({.key = key, .image = image});
     bytes += image.sizeInBytes();
   }
 };
@@ -114,43 +120,42 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
                           const std::shared_ptr<std::atomic_bool>& cancel, QSize requestedSize,
                           PreviewWorkerCache& cache, const std::function<void(const PreviewResult&)>& publish,
                           const std::function<void()>& beforeFullDecode) {
-  QString thumbError;
-  result.thumbnail_image = ThumbnailService::lookupOrDecode(file, path, identity, &thumbError);
-  if (cancel->load()) {
-    return result;
-  }
   file.seek(0);
   {
     const QImageReader sizer(&file);
     result.source_pixel_size = sizer.size();
   }
-  if (!result.thumbnail_image.isNull()) {
-    result.final = false;
-    publish(result);
-    result.final = true;
+  const auto needed = ThumbnailService::requiredSize(result.source_pixel_size, requestedSize);
+  const auto tier = result.source_pixel_size.isValid() && !result.source_pixel_size.isEmpty()
+                        ? ThumbnailService::tierForSize(needed)
+                        : std::nullopt;
+  result.image = cache.lookup(identity, needed);
+  if (result.image.isNull() && tier) {
+    result.image = ThumbnailService::lookup(file, path, identity, *tier, needed);
   }
-  result.full_image = cache.lookup(identity, requestedSize);
-  QString fullError;
-  if (result.full_image.isNull()) {
+  QString error;
+  if (result.image.isNull()) {
     if (beforeFullDecode) {
       beforeFullDecode();
     }
     if (cancel->load()) {
       return result;
     }
-    result.full_image = ThumbnailService::decodeScaled(file, requestedSize, &fullError);
-    if (!cancel->load()) {
-      cache.insert(identity, requestedSize, result.full_image);
-    }
-  }
-  if (result.thumbnail_image.isNull() && result.full_image.isNull()) {
-    result.error = {.kind = PreviewService::PreviewErrorKind::DecodeFailed,
-                    .message = !thumbError.isEmpty() ? thumbError : fullError};
-    return result;
+    result.image = tier ? ThumbnailService::lookupOrDecode(file, path, identity, *tier, needed, &error)
+                        : ThumbnailService::decodeScaled(file, needed, &error);
   }
   if (cancel->load()) {
     return result;
   }
+  if (result.image.isNull()) {
+    result.error = {.kind = PreviewService::PreviewErrorKind::DecodeFailed, .message = error};
+    return result;
+  }
+  cache.insert(identity, result.image);
+  result.final = false;
+  publish(result);
+  result.final = true;
+  result.image = {};  // EXIF completion updates metadata without replacing pixels.
   result.exif = ExifReader::read(file, result.mime_type.toUtf8(), cancel);
   return result;
 }
@@ -245,9 +250,8 @@ PreviewService::PreviewService(QObject* parent)
   resize_debounce_timer_.setSingleShot(true);
   connect(&resize_debounce_timer_, &QTimer::timeout, this, [this] {
     if (has_entry_ && !is_dir_ && !timed_out_) {
-      const auto needed = source_pixel_size_.isValid() ? source_pixel_size_.scaled(requested_size_, Qt::KeepAspectRatio)
-                                                       : requested_size_;
-      const auto available = busy_ ? dispatched_size_ : full_image_.size();
+      const auto needed = ThumbnailService::requiredSize(source_pixel_size_, requested_size_);
+      const auto available = busy_ ? dispatched_size_ : display_image_.size();
       if (needed.width() > available.width() || needed.height() > available.height()) {
         dispatch();
       }
@@ -392,7 +396,7 @@ void PreviewService::startJob() {
   const auto cancel = cancellation_;
   const auto path = path_;
   const auto size = requested_size_.isValid() && !requested_size_.isEmpty() ? requested_size_ : QSize(1024, 1024);
-  dispatched_size_ = source_pixel_size_.isValid() ? source_pixel_size_.scaled(size, Qt::KeepAspectRatio) : size;
+  dispatched_size_ = ThumbnailService::requiredSize(source_pixel_size_, size);
   const auto beforeDispatch = before_dispatch_for_test_;
   const auto beforeFull = before_full_decode_for_test_;
   QMetaObject::invokeMethod(
@@ -433,15 +437,19 @@ void PreviewService::applyResult(const PreviewResult& result) {
   }
   busy_ = !result.final;
   mime_type_ = result.mime_type;
-  thumbnail_image_ = result.thumbnail_image;
-  full_image_ = result.full_image;
-  display_image_ = !full_image_.isNull() ? full_image_ : thumbnail_image_;
+  if (!result.image.isNull() && (display_image_.isNull() || (result.image.width() >= display_image_.width() &&
+                                                             result.image.height() >= display_image_.height()))) {
+    display_image_ = result.image;
+  }
   source_pixel_size_ = result.source_pixel_size;
   exif_ = result.exif;
   has_text_ = result.has_text;
   text_ = result.text;
   error_ = result.error;
   emit changed();
+  if (result.final && mime_type_.startsWith(QStringLiteral("image/")) && !display_image_.isNull()) {
+    resize_debounce_timer_.start(kResizeDebounceMs);
+  }
 }
 
 void PreviewService::cancelInFlight() {
@@ -457,8 +465,6 @@ void PreviewService::cancelInFlight() {
 }
 
 void PreviewService::resetDisplayState() {
-  thumbnail_image_ = QImage();
-  full_image_ = QImage();
   display_image_ = QImage();
   source_pixel_size_ = QSize();
   exif_ = ExifReader::ExifSummary();

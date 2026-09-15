@@ -624,7 +624,11 @@ TEST(Files, NativeInspectionAcceptance) {
 TEST(Files, InspectionImageSplitterAndPixelSizing) {
   QTemporaryDir dir(files_test::fixturePattern("image-splitter"));
   QImage source(800, 600, QImage::Format_RGB32);
-  source.fill(Qt::darkCyan);
+  for (int row = 0; row < source.height(); ++row) {
+    for (int column = 0; column < source.width(); ++column) {
+      source.setPixelColor(column, row, (((column / 8) + (row / 8)) % 2) == 0 ? Qt::darkCyan : Qt::white);
+    }
+  }
   ASSERT_TRUE(source.save(dir.filePath("image.bmp")));
   DirectoryController controller;
   QQmlApplicationEngine engine;
@@ -667,7 +671,8 @@ TEST(Files, InspectionImageSplitterAndPixelSizing) {
   auto* area = window->findChild<QQuickItem*>("quickLookImageArea");
   ASSERT_NE(area, nullptr);
   ASSERT_TRUE(QTest::qWaitFor([&] {
-    const auto needed = source.size().scaled((area->size() * window->devicePixelRatio()).toSize(), Qt::KeepAspectRatio);
+    const auto needed = source.size().scaled(
+        (area->size() * window->devicePixelRatio()).toSize().boundedTo(source.size()), Qt::KeepAspectRatio);
     return needed.isValid() && controller.preview()->image().width() >= needed.width() &&
            controller.preview()->image().height() >= needed.height();
   }));
