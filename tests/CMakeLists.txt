@@ -42,9 +42,9 @@ set_tests_properties(files-fsops-window-smoke PROPERTIES ENVIRONMENT
   TIMEOUT 60)
 set_target_properties(files-fsops-window-smoke PROPERTIES QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
 
-add_test(NAME files-help COMMAND holonight-files --help)
-add_test(NAME files-version COMMAND holonight-files --version)
-add_test(NAME files-reject-argument COMMAND holonight-files one two)
+add_test(NAME files-help COMMAND hn-files --help)
+add_test(NAME files-version COMMAND hn-files --version)
+add_test(NAME files-reject-argument COMMAND hn-files one two)
 set_tests_properties(files-help files-version files-reject-argument PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 set_tests_properties(files-reject-argument PROPERTIES WILL_FAIL TRUE)
 
@@ -55,7 +55,7 @@ add_test(NAME files-qml-failure COMMAND ${CMAKE_COMMAND} -E env
   "QT_QPA_PLATFORM=offscreen"
   "QML_IMPORT_PATH=${CMAKE_CURRENT_BINARY_DIR}/invalid-import:${HOLONIGHT_QML_IMPORT_PATH}"
   "LD_LIBRARY_PATH=${HOLONIGHT_DEPENDENCY_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
-  $<TARGET_FILE:holonight-files>)
+  $<TARGET_FILE:hn-files>)
 set_tests_properties(files-qml-failure PROPERTIES WILL_FAIL TRUE TIMEOUT 5)
 
 set_target_properties(files-smoke PROPERTIES QT_QML_MODULE_NO_IMPORT_SCAN TRUE)

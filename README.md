@@ -129,7 +129,7 @@ task uninstall                 # removes the installed payload from /usr and ref
 ```
 
 `--help` and `--version` are supported, along with an optional positional
-folder argument (`task run -- ~/Downloads`, or `holonight-files ~/Downloads`
+folder argument (`task run -- ~/Downloads`, or `hn-files ~/Downloads`
 directly): a missing, nonexistent, non-directory, or unreadable path falls
 back to the home directory with a status message explaining why. More than
 one positional argument is rejected.
@@ -263,3 +263,21 @@ The result records initial/cached/Quick Look latency, stale-image count, movemen
 rate, process peak RSS and rendered FPS. Qt image decoding remains cooperatively
 cancellable between stages; the three-second timeout is a visible deadline, not
 hard preemption of a decoder call.
+
+### Executable migration and folder handling
+
+The supported command is `hn-files`; no `holonight-files` alias is installed.
+For an existing installation, run `task uninstall` followed by `task install`.
+Uninstall removes both executable names, including legacy-only and mixed installs;
+the project name, application identity, desktop ID, icon and license path stay stable.
+
+The installed desktop entry advertises `inode/directory` and launches
+`hn-files -- %f`. Files can be selected in the desktop's default file-manager
+chooser; installation does not change your default. After reinstalling, use
+`gio mime inode/directory` to check that `org.holonight.Files.desktop` appears.
+Folder handling accepts one local folder, including spaces and Unicode, using
+the existing startup fallback for invalid folders. Remote URIs and multiple
+folders are outside this integration.
+
+See [folder-handler verification](docs/sdd/folder-handler/VERIFICATION.md) for
+automated evidence and pending host chooser/display acceptance.

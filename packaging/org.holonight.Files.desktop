@@ -2,7 +2,8 @@
 Type=Application
 Name=HoloNight Files
 Comment=A keyboard-driven file manager
-Exec=holonight-files
+Exec=hn-files -- %f
+MimeType=inode/directory;
 Icon=org.holonight.Files
 Terminal=false
 Categories=System;FileTools;FileManager;

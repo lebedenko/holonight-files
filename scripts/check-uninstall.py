@@ -12,6 +12,7 @@ MOCK = WORK / "commands"
 MOCK.mkdir()
 LOG = WORK / "commands.log"
 PAYLOAD = (
+    "bin/hn-files",
     "bin/holonight-files",
     "share/applications/org.holonight.Files.desktop",
     "share/icons/hicolor/scalable/apps/org.holonight.Files.svg",
@@ -62,11 +63,22 @@ user = stage / "home/user/.config/HoloNight/Files.conf"
 user.parent.mkdir(parents=True)
 user.write_text("settings")
 lines = run(stage)
-assert lines == ["removal"] * 5 + ["directory", f"database:{stage}/usr/share/applications"]
+assert lines == ["removal"] * len(PAYLOAD) + ["directory", f"database:{stage}/usr/share/applications"]
 assert all(not (stage / "usr" / p).exists() for p in PAYLOAD)
 assert all((stage / "usr" / p).read_text() == p for p in preserved)
 assert user.read_text() == "settings"
 assert run(stage) == lines
+
+for name, binaries in (
+    ("legacy-only", ("bin/holonight-files",)),
+    ("new-only", ("bin/hn-files",)),
+    ("mixed", PAYLOAD[:2]),
+):
+    migration = WORK / name
+    seed(migration, binaries + PAYLOAD[2:])
+    run(migration)
+    assert all(not (migration / "usr" / p).exists() for p in PAYLOAD)
+    run(migration)
 
 partial = WORK / "partial"
 seed(partial, PAYLOAD[:2])
@@ -74,18 +86,18 @@ run(partial)
 assert not (partial / "usr/share/licenses/holonight-files").exists()
 assert not (partial / "usr/bin/holonight-files").exists()
 run(partial)
-assert run(WORK / "absent") == ["removal"] * 5
+assert run(WORK / "absent") == ["removal"] * len(PAYLOAD)
 
 failed = WORK / "failure"
 seed(failed, PAYLOAD)
 assert run(failed, 23, REMOVE_STATUS="23") == ["removal"]
 assert all((failed / "usr" / p).exists() for p in PAYLOAD)
-assert run(failed, 24, DIRECTORY_STATUS="24") == ["removal"] * 5 + ["directory"]
+assert run(failed, 24, DIRECTORY_STATUS="24") == ["removal"] * len(PAYLOAD) + ["directory"]
 seed(failed, PAYLOAD)
 assert run(failed, 25, DATABASE_STATUS="25")[-1].startswith("database:")
 assert all(not (failed / "usr" / p).exists() for p in PAYLOAD)
 # A blocked first or middle file must preserve every later payload.
-for index in (0, 2):
+for index in (0, 1, 2):
     blocked = WORK / f"blocked-{index}"
     seed(blocked, PAYLOAD[:index] + PAYLOAD[index + 1:])
     target = blocked / "usr" / PAYLOAD[index]
@@ -125,7 +137,7 @@ for sudo_status in (26, 0):
         assert all((task_stage / "usr" / p).exists() for p in PAYLOAD)
     else:
         assert result.returncode == 0, result.stderr
-        assert lines[1:] == ["removal"] * 5 + ["directory", f"database:{task_stage}/usr/share/applications"]
+        assert lines[1:] == ["removal"] * len(PAYLOAD) + ["directory", f"database:{task_stage}/usr/share/applications"]
         assert all(not (task_stage / "usr" / p).exists() for p in PAYLOAD)
 for failure in ("REMOVE_STATUS", "DIRECTORY_STATUS", "DATABASE_STATUS"):
     seed(task_stage, PAYLOAD)
@@ -141,7 +153,7 @@ for failure in ("REMOVE_STATUS", "DIRECTORY_STATUS", "DATABASE_STATUS"):
     if failure == "REMOVE_STATUS":
         assert len(lines) == 2
     elif failure == "DIRECTORY_STATUS":
-        assert lines[1:] == ["removal"] * 5 + ["directory"]
+        assert lines[1:] == ["removal"] * len(PAYLOAD) + ["directory"]
     else:
-        assert lines[1:] == ["removal"] * 5 + ["directory", f"database:{task_stage}/usr/share/applications"]
+        assert lines[1:] == ["removal"] * len(PAYLOAD) + ["directory", f"database:{task_stage}/usr/share/applications"]
 print(f"Uninstall checks passed: {WORK}")

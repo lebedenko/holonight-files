@@ -2,7 +2,7 @@
 FROM files-ci
 COPY --chown=root:root payload/usr/ /usr/
 COPY check/ /opt/check/
-RUN ldconfig && install -d -o files-test -g files-test -m 0700 /run/files-test
+RUN update-desktop-database /usr/share/applications && ldconfig && install -d -o files-test -g files-test -m 0700 /run/files-test
 ENV HOME=/home/files-test XDG_RUNTIME_DIR=/run/files-test
 USER files-test
 WORKDIR /opt/check

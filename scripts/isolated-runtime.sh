@@ -15,20 +15,22 @@ test -w "$HOME"
 test -d "$XDG_RUNTIME_DIR"
 test "$(stat -c '%u:%a' "$XDG_RUNTIME_DIR")" = "$(id -u):700"
 
-for file in /usr/bin/holonight-files \
+for file in /usr/bin/hn-files \
   /usr/share/applications/org.holonight.Files.desktop \
   /usr/share/icons/hicolor/scalable/apps/org.holonight.Files.svg \
   /usr/share/licenses/holonight-files/LICENSE \
   /usr/share/licenses/holonight-files/GPL-3.0-or-later.txt; do
   mode=644
-  if [[ "$file" == /usr/bin/holonight-files ]]; then mode=755; fi
+  if [[ "$file" == /usr/bin/hn-files ]]; then mode=755; fi
   if [[ ! -f "$file" || -L "$file" || ! -s "$file" || ! -r "$file" ]] ||
     [[ "$(stat -c '%u:%g:%a' "$file")" != "0:0:$mode" ]]; then
     printf 'Invalid installed payload (expected root:root mode %s): %s\n' "$mode" "$file" >&2
     exit 1
   fi
 done
-test -x /usr/bin/holonight-files
+test -x /usr/bin/hn-files
+test ! -e /usr/bin/holonight-files
+test ! -L /usr/bin/holonight-files
 
 # Installed runtime search paths must not refer to development locations.
 while IFS= read -r -d '' file; do
@@ -36,11 +38,12 @@ while IFS= read -r -d '' file; do
     printf 'Development runtime path in %s\n' "$file" >&2
     exit 1
   fi
-done < <(find /usr/bin/holonight-files /usr/lib -type f \( -name 'holonight-files' -o -iname '*holonight*' \) -print0)
+done < <(find /usr/bin/hn-files /usr/lib -type f \( -name 'hn-files' -o -iname '*holonight*' \) -print0)
 
-QT_QPA_PLATFORM=offscreen holonight-files --version
+QT_QPA_PLATFORM=offscreen hn-files --version
 
 desktop-file-validate /usr/share/applications/org.holonight.Files.desktop
+gio mime inode/directory | rg -F org.holonight.Files.desktop
 
 # gio returns before its child has finished startup. Observe process identity and
 # lifetime independently, retaining diagnostics and using a pidfd for safe cleanup.
@@ -52,7 +55,7 @@ import subprocess
 import tempfile
 import time
 
-EXECUTABLE = "/usr/bin/holonight-files"
+EXECUTABLE = "/usr/bin/hn-files"
 
 
 def matching_pids():
@@ -60,7 +63,7 @@ def matching_pids():
     for entry in Path("/proc").iterdir():
         if entry.name.isdecimal():
             try:
-                if (entry / "comm").read_text().strip() == "holonight-files":
+                if (entry / "comm").read_text().strip() == "hn-files":
                     found.append(int(entry.name))
             except (FileNotFoundError, ProcessLookupError):
                 pass
@@ -78,13 +81,14 @@ def identity(pid):
 
 
 pid = start = pidfd = None
-with tempfile.TemporaryFile(mode="w+") as diagnostics:
+with tempfile.TemporaryDirectory(prefix="Files folder Україна ") as folder, \
+        tempfile.TemporaryFile(mode="w+") as diagnostics:
     try:
         if matching_pids():
-            raise RuntimeError("Pre-existing holonight-files process")
+            raise RuntimeError("Pre-existing hn-files process")
         deadline = time.monotonic() + 3
         subprocess.run(
-            ["gio", "launch", "/usr/share/applications/org.holonight.Files.desktop"],
+            ["gio", "launch", "/usr/share/applications/org.holonight.Files.desktop", folder],
             stdout=diagnostics, stderr=diagnostics, check=True, timeout=3,
         )
         while time.monotonic() < deadline:
@@ -103,6 +107,9 @@ with tempfile.TemporaryFile(mode="w+") as diagnostics:
                     raise RuntimeError("Desktop process changed during discovery")
                 if os.readlink(f"/proc/{pid}/exe") != EXECUTABLE:
                     raise RuntimeError("Desktop process executable is not " + EXECUTABLE)
+                arguments = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+                if arguments[1:] != [b"--", os.fsencode(folder), b""]:
+                    raise RuntimeError(f"Incorrect desktop folder arguments: {arguments!r}")
                 break
             time.sleep(0.05)
         else:
@@ -115,6 +122,9 @@ with tempfile.TemporaryFile(mode="w+") as diagnostics:
             if os.readlink(f"/proc/{pid}/exe") != EXECUTABLE:
                 raise RuntimeError("Desktop process changed executable during observation")
             if time.monotonic() >= deadline:
+                arguments = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+                if arguments[1:] != [b"--", os.fsencode(folder), b""]:
+                    raise RuntimeError(f"Incorrect desktop folder arguments: {arguments!r}")
                 break
             time.sleep(0.05)
         print(f"Desktop launch passed: PID {pid}, start {start}, observed for three seconds")

@@ -9,11 +9,11 @@ import time
 ROOT = Path(__file__).resolve().parent.parent
 WORK = Path(tempfile.mkdtemp(prefix="runtime-fixtures.", dir=ROOT / "build"))
 IMAGE = sys.argv[1] if len(sys.argv) > 1 else "holonight-files-runtime-check"
-EXECUTABLE = "/usr/bin/holonight-files"
+EXECUTABLE = "/usr/bin/hn-files"
 DESKTOP = "/usr/share/applications/org.holonight.Files.desktop"
 CASES = {
     "healthy": ("true", None),
-    "delayed-exit": ("""cc -x c -o /usr/bin/holonight-files - <<'C'
+    "delayed-exit": ("""cc -x c -o /usr/bin/hn-files - <<'C'
 #include <string.h>
 #include <unistd.h>
 int main(int argc, char **argv) {
@@ -22,15 +22,19 @@ int main(int argc, char **argv) {
     return 1;
 }
 C
-chmod 755 /usr/bin/holonight-files
+chmod 755 /usr/bin/hn-files
 """, "exited or was replaced during observation"),
+    "missing-folder-argument": (
+        f"sed -i 's/Exec=hn-files -- %f/Exec=hn-files/' {DESKTOP}",
+        "Incorrect desktop folder arguments",
+    ),
     "missing-executable": (f"rm -- {EXECUTABLE}", "Invalid installed payload"),
     "root-only-executable": (f"chmod 700 {EXECUTABLE}", "Invalid installed payload"),
     "unreadable-desktop": (f"chmod 600 {DESKTOP}", "Invalid installed payload"),
     "incorrect-ownership": (f"chown files-test:files-test {DESKTOP}", "Invalid installed payload"),
     "pre-existing-process": (
         f"runuser -u files-test -- {EXECUTABLE} >/tmp/pre-existing.log 2>&1 &\nsleep 1",
-        "Pre-existing holonight-files process",
+        "Pre-existing hn-files process",
     ),
 }
 for name, (setup, expected_error) in CASES.items():

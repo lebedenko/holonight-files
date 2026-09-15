@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 prefix="${DESTDIR:-}/usr"
-for file in "$prefix/bin/holonight-files" \
+for file in "$prefix/bin/hn-files" \
+  "$prefix/bin/holonight-files" \
   "$prefix/share/applications/org.holonight.Files.desktop" \
   "$prefix/share/icons/hicolor/scalable/apps/org.holonight.Files.svg" \
   "$prefix/share/licenses/holonight-files/LICENSE" \

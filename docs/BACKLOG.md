@@ -117,3 +117,10 @@ Bookmark management, Trash, Devices and Network sidebar sections remain deferred
 Build parallelism uses CMake/Ninja automatic defaults with explicit compiler-job
 overrides; provider and quality-check stages remain sequential. See the
 [build parallelism verification](sdd/automatic-parallelism/VERIFICATION.md).
+
+Executable and folder-handler integration introduces `hn-files` and registers
+`inode/directory` without selecting a default application. This approved cycle
+supersedes the scaffold restriction on folder-handler registration; historical
+scaffold records remain unchanged. Migration uses `task uninstall` then
+`task install`. See [verification](sdd/folder-handler/VERIFICATION.md) for
+automated evidence and pending host chooser and native folder-display checks.

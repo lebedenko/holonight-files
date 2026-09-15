@@ -26,7 +26,7 @@ tasks:
     cmds:
       - task: build
         vars: {PRESET: '{{.PRESET}}'}
-      - build/{{.PRESET}}/apps/files/holonight-files {{.CLI_ARGS}}
+      - build/{{.PRESET}}/apps/files/hn-files {{.CLI_ARGS}}
 
   install:
     desc: Build Release against installed system providers, install to /usr and refresh desktop metadata
