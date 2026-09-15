@@ -6,7 +6,7 @@ qt_add_executable(files-smoke smoke.cpp directory_model_test.cpp directory_proxy
   name_validator_test.cpp fuzzy_matcher_test.cpp vim_mode_controller_test.cpp
   clipboard_register_test.cpp file_operation_service_test.cpp trash_service_test.cpp
   task_manager_test.cpp directory_controller_file_ops_test.cpp icon_name_resolver_test.cpp icon_image_provider_test.cpp
-  jump_list_test.cpp history_navigation_window_test.cpp)
+  jump_list_test.cpp history_navigation_window_test.cpp places_model_test.cpp places_window_test.cpp)
 qt_add_resources(files-smoke test-config PREFIX "/" BASE ../apps/files FILES ../apps/files/qtquickcontrols2.conf)
 target_link_libraries(files-smoke PRIVATE files-ui files-uiplugin Qt6::Test GTest::gtest)
 target_compile_definitions(files-smoke PRIVATE FILES_FIXTURE_DIR="${CMAKE_CURRENT_BINARY_DIR}/fixtures/files")

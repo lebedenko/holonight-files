@@ -569,20 +569,6 @@ TEST(DirectoryController, ColonIsANoOpInNormalMode) {
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
 }
 
-TEST(PlacesModel, FixedStandardLocations) {
-  const PlacesModel places;
-  ASSERT_EQ(places.rowCount(), 4);
-  const QList<QStandardPaths::StandardLocation> locations{
-      QStandardPaths::HomeLocation, QStandardPaths::DocumentsLocation, QStandardPaths::DownloadLocation,
-      QStandardPaths::PicturesLocation};
-  const QStringList names{"Home", "Documents", "Downloads", "Pictures"};
-  for (int row = 0; row < places.rowCount(); ++row) {
-    EXPECT_EQ(places.data(places.index(row), PlacesModel::NameRole).toString(), names[row]);
-    EXPECT_EQ(places.data(places.index(row), PlacesModel::PathRole).toString(),
-              QDir::cleanPath(QStandardPaths::writableLocation(locations[row])));
-  }
-}
-
 struct DirectoryControllerTestAccess {
   static DirectoryModel& model(DirectoryController& controller) { return controller.model_; }
   static const JumpList& jumpList(const DirectoryController& controller) { return controller.jump_list_; }

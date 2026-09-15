@@ -54,7 +54,7 @@ start in-tree; only extract them into a shared HoloNight library once a second
 consuming application (e.g. holonight-viewer, a future launcher) needs them.
 
 - **Stage 1 — Browse a folder**: `DirectoryModel` (async populate, natural
-  filename sort, size/mtime columns), `PlacesModel` (fixed standard places only), `FileWatcher` for live updates.
+  filename sort, size/mtime columns), `PlacesModel` (standard places and optional startup `~/Projects`), `FileWatcher` for live updates.
   NORMAL-mode movement only: `j/k`, `gg`/`G`, count-prefixed motions (`5j`),
   `h` parent, `l`/Enter open, sort toggles, hidden-files toggle. Fixtures:
   empty, large (10k+ entries), permission-denied, Unicode-named directories.
@@ -109,6 +109,10 @@ memory/disk reuse and direct decoding above 1024px. Native scaling and latency
 acceptance remain tracked in [verification](sdd/sharp-previews/VERIFICATION.md).
 Broader reuse of other applications' thumbnails remains deferred; strict Files
 revision validation is retained. No eager cache migration or deletion is needed.
+
+The compact Places sidebar adds themed icons, keyboard activation and optional
+`~/Projects`; acceptance evidence is in [Places verification](sdd/places/VERIFICATION.md).
+Bookmark management, Trash, Devices and Network sidebar sections remain deferred.
 
 Build parallelism uses CMake/Ninja automatic defaults with explicit compiler-job
 overrides; provider and quality-check stages remain sequential. See the

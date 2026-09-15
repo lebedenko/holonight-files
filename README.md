@@ -6,6 +6,13 @@ acceptance status is tracked in [browse-folder verification](docs/sdd/browse-fol
 sorted directory listing with a fixed places sidebar, live filesystem
 watching, and NORMAL-mode keyboard navigation (`j`/`k`, count-prefixed
 motions, `gg`/`G`, `h`/`l`/Enter, `.` for hidden files, `s` to reverse filename sorting).
+The compact Places sidebar includes Home, Documents, Downloads, Pictures, Music
+and Videos, plus `~/Projects` when that directory exists at startup. Missing
+configured folders stay visible and use the normal directory error display.
+Tab into Places, move with Up/Down, and activate with Enter/Space or a click;
+activation requires NORMAL mode without a prompt or Quick Look. Navigation
+returns focus to the listing and participates in history. See the
+[Places verification](docs/sdd/places/VERIFICATION.md).
 Stage 2 ("Inspect a selection") is also implemented: a docked preview pane
 (resizable via a divider next to the listing) shows name/size/date/
 permissions/MIME type, an EXIF summary for images, and a text preview with a

@@ -1,17 +1,21 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QStandardPaths>
 #include <QtQml/qqmlregistration.h>
 
-// Fixed, hardcoded list of standard places (Home, Documents, Downloads, Pictures). No
-// removable-media discovery in this stage — see docs/sdd/browse-folder/SPEC.md REQ-F-008.
+#include <functional>
+
+// Startup snapshot of standard places and the optional ~/Projects directory.
 class PlacesModel : public QAbstractListModel {
   Q_OBJECT
   QML_ELEMENT
   QML_UNCREATABLE("Created by the application")
  public:
-  enum Role { NameRole = Qt::UserRole + 1, PathRole };
+  enum Role { NameRole = Qt::UserRole + 1, PathRole, IconNameRole };
   explicit PlacesModel(QObject* parent = nullptr);
+  using LocationProvider = std::function<QString(QStandardPaths::StandardLocation)>;
+  explicit PlacesModel(const LocationProvider& location, QObject* parent = nullptr);
   int rowCount(const QModelIndex& parent = {}) const override;
   QVariant data(const QModelIndex& index, int role) const override;
   QHash<int, QByteArray> roleNames() const override;
@@ -20,6 +24,7 @@ class PlacesModel : public QAbstractListModel {
   struct Place {
     QString name;
     QString path;
+    QString iconName;
   };
   QList<Place> places_;
 };
