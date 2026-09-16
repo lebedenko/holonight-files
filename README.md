@@ -93,7 +93,12 @@ See [docs/BACKLOG.md](docs/BACKLOG.md) for the planned stages and
 [docs/mockups/moc1.png](docs/mockups/moc1.png) for visual direction.
 
 The listing prioritizes filenames when space is limited, hiding Modified and then
-Size columns. See the [layout verification record](docs/sdd/app-window-layout/VERIFICATION.md)
+Size columns. Each row begins with a Vim-style hybrid line-number gutter: the cursor
+row shows its absolute 1-based number and every other row its distance from the cursor,
+which matches count prefixes such as `5j`. The gutter is at least three digits wide,
+grows with the entry count, and is always shown. The header breadcrumb lines up with the
+gutter's left edge. The column-hiding widths do not yet account for the gutter, so
+filenames are narrower in small windows. See the [layout verification record](docs/sdd/app-window-layout/VERIFICATION.md)
 for review fixes and remaining minimum-window limitations.
 
 Each listing row starts with a file-type icon, and the preview pane shows the same

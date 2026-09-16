@@ -11,7 +11,9 @@ HnHeaderBar {
     required property DirectoryController controller
     required property real sidebarWidth
 
-    readonly property real breadcrumbLeftInset: root.sidebarWidth + HnMetrics.internalSpacing(HnControlSize.Normal) + HnMetrics.horizontalPadding(HnControlSize.Normal)
+    // Breadcrumb text starts at the listing's left edge (Main.qml content row: sidebar + spacing), which
+    // is also the line-number gutter's left edge (line-number-gutter REQ-F-015).
+    readonly property real breadcrumbLeftInset: root.sidebarWidth + HnMetrics.internalSpacing(HnControlSize.Normal)
     readonly property real breadcrumbPadding: HnMetrics.horizontalPadding(HnControlSize.Compact)
     // Same gating as the Ctrl+O/Ctrl+I shortcuts (REQ-F-032).
     readonly property bool historyEnabled: root.controller.vim.currentMode === VimModeController.Normal && !root.controller.tasks.hasPrompt

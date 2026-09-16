@@ -15,6 +15,7 @@
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQmlExpression>
 #include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickStyle>
@@ -27,6 +28,8 @@
 #include <QtQml/QQmlExtensionPlugin>
 
 #include <atomic>
+#include <cmath>
+#include <cstdlib>
 #include <gtest/gtest.h>
 #include <iostream>
 #include <memory>
@@ -201,6 +204,11 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
   auto* sizeHeader = window->findChild<QQuickItem*>("sizeColumnHeader");
   auto* modifiedHeader = window->findChild<QQuickItem*>("modifiedColumnHeader");
   auto* breadcrumb = window->findChild<QQuickItem*>("breadcrumbLabel");
+  auto* gutter = row->findChild<QQuickItem*>("lineNumberGutterField");
+  auto* gutterHeader = window->findChild<QQuickItem*>("lineNumberGutterHeader");
+  auto* listing = list->parentItem();
+  ASSERT_NE(gutter, nullptr);
+  ASSERT_NE(gutterHeader, nullptr);
   ASSERT_NE(icon, nullptr);
   ASSERT_NE(nameHeader, nullptr);
   ASSERT_NE(name, nullptr);
@@ -209,14 +217,14 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
   ASSERT_NE(sizeHeader, nullptr);
   ASSERT_NE(modifiedHeader, nullptr);
   ASSERT_NE(breadcrumb, nullptr);
-  for (const int width : {1000, 850, 700, 1000}) {
+  // line-number-gutter keeps the showSize/showModified formulas unchanged (its non-goal 8), so the
+  // gutter narrows Name below them; 740 px (not 700) is the narrowest width that still hides Size
+  // while leaving Name its 120 px.
+  for (const int width : {1000, 850, 740, 1000}) {
     window->resize(width, 400);
     ASSERT_TRUE(QTest::qWaitFor([&] {
-      return name->width() >= 120 && size->isVisible() == (width != 700) && modified->isVisible() == (width == 1000);
+      return name->width() >= 120 && size->isVisible() == (width != 740) && modified->isVisible() == (width == 1000);
     }));
-    // main-view-icons REQ-NF-002: the row's content now starts with the icon cell, so the breadcrumb
-    // (app-window-layout REQ-F-004) aligns with that leading edge rather than the Name text.
-    EXPECT_NEAR(breadcrumb->mapToScene(QPointF()).x(), icon->mapToScene(QPointF()).x(), 1);
     EXPECT_EQ(sizeHeader->isVisible(), size->isVisible());
     EXPECT_EQ(modifiedHeader->isVisible(), modified->isVisible());
     if (size->isVisible()) {
@@ -237,7 +245,300 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
     EXPECT_EQ(icon->width(), 20) << width;
     EXPECT_NEAR(nameHeader->mapToScene(QPointF()).x(), name->mapToScene(QPointF()).x(), 1) << width;
     EXPECT_LT(icon->mapToScene(QPointF()).x() + icon->width(), name->mapToScene(QPointF()).x()) << width;
+    // line-number-gutter REQ-F-009/010: a blank header spacer as wide as the gutter keeps every column aligned.
+    const auto gutterWidth = listing->property("lineNumberGutterWidth").toReal();
+    EXPECT_EQ(gutterHeader->width(), gutterWidth) << width;
+    EXPECT_EQ(gutter->width(), gutterWidth) << width;
+    EXPECT_NEAR(gutter->mapToScene(QPointF()).x(), list->mapToScene(QPointF()).x(), 1) << width;
+    EXPECT_NEAR(gutterHeader->mapToScene(QPointF()).x(), gutter->mapToScene(QPointF()).x(), 1) << width;
+    EXPECT_EQ(sizeHeader->isVisible(), size->isVisible()) << width;
+    EXPECT_EQ(modifiedHeader->isVisible(), modified->isVisible()) << width;
+    if (size->isVisible()) {
+      EXPECT_NEAR(sizeHeader->mapToScene(QPointF()).x(), size->mapToScene(QPointF()).x(), 1) << width;
+    }
+    if (modified->isVisible()) {
+      EXPECT_NEAR(modifiedHeader->mapToScene(QPointF()).x(), modified->mapToScene(QPointF()).x(), 1) << width;
+    }
+    // line-number-gutter REQ-F-015 (replacing main-view-icons REQ-NF-002's icon-column anchor): the row
+    // now starts with the gutter, so the breadcrumb aligns with the list view's left edge instead —
+    // a fixed offset that doesn't move when the gutter widens.
+    EXPECT_NEAR(breadcrumb->mapToScene(QPointF()).x(), list->mapToScene(QPointF()).x(), 1) << width;
   }
+}
+
+namespace {
+struct LoadedWindow {
+  std::unique_ptr<QQmlApplicationEngine> engine = std::make_unique<QQmlApplicationEngine>();
+  QQuickWindow* window = nullptr;
+  QQuickItem* list = nullptr;
+  QQuickItem* listing = nullptr;
+};
+LoadedWindow loadActiveWindow(DirectoryController& controller, const QString& path) {
+  LoadedWindow loaded;
+  loaded.engine->setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  loaded.engine->loadFromModule("HolonightFiles", "Main");
+  if (loaded.engine->rootObjects().size() != 1) {
+    return loaded;
+  }
+  loaded.window = qobject_cast<QQuickWindow*>(loaded.engine->rootObjects().first());
+  loaded.window->requestActivate();
+  if (!QTest::qWaitForWindowActive(loaded.window)) {
+    return loaded;
+  }
+  controller.open(path);
+  if (QTest::qWaitFor([&] { return !controller.scanning(); })) {
+    loaded.list = loaded.window->findChild<QQuickItem*>("directoryListView");
+    loaded.listing = loaded.list != nullptr ? loaded.list->parentItem() : nullptr;
+  }
+  return loaded;
+}
+
+// Visible gutter labels keyed by row; delegates hang off the ListView's contentItem only visually.
+QMap<int, QQuickItem*> gutterLabels(QQuickItem* list) {
+  QMap<int, QQuickItem*> labels;
+  for (auto* delegate : list->property("contentItem").value<QQuickItem*>()->childItems()) {
+    if (delegate->objectName() == "directoryEntryDelegate" && delegate->isVisible()) {
+      if (auto* label = delegate->findChild<QQuickItem*>("lineNumberGutterField")) {
+        labels.insert(delegate->property("index").toInt(), label);
+      }
+    }
+  }
+  return labels;
+}
+
+QVariant evaluateInContext(QQuickItem* item, const QString& expression) {
+  QQmlExpression evaluated(qmlContext(item), item, expression);
+  return evaluated.evaluate();
+}
+
+// line-number-gutter REQ-F-002: absolute 1-based number on the cursor row, relative distance elsewhere.
+QString expectedGutterText(int row, int cursor) {
+  return QString::number(row == cursor ? row + 1 : std::abs(row - cursor));
+}
+
+// Every visible label must match its current proxy index and cursorRow, in text and palette colour.
+::testing::AssertionResult gutterMatchesCursor(QQuickItem* list, const DirectoryController& controller) {
+  const auto labels = gutterLabels(list);
+  if (labels.isEmpty()) {
+    return ::testing::AssertionFailure() << "no visible gutter labels";
+  }
+  const int cursor = controller.cursorRow();
+  for (auto it = labels.cbegin(); it != labels.cend(); ++it) {
+    const auto text = it.value()->property("text").toString();
+    const auto expectedColor = evaluateInContext(
+        it.value(), it.key() == cursor ? "HoloniightPalette.accentViolet" : "HoloniightPalette.textMuted");
+    if (text != expectedGutterText(it.key(), cursor) || it.value()->property("color") != expectedColor) {
+      return ::testing::AssertionFailure()
+             << "row " << it.key() << " shows " << text.toStdString() << " for cursor " << cursor;
+    }
+  }
+  return ::testing::AssertionSuccess();
+}
+}  // namespace
+
+TEST(Files, LineNumberGutterHybridNumberingFollowsCursorSortAndFilter) {
+  QTemporaryDir dir(files_test::fixturePattern("gutter"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::populateEntries(dir, 5);
+  ASSERT_FALSE(files_test::writeFile(dir, ".hidden").isEmpty());
+  DirectoryController controller;
+  auto loaded = loadActiveWindow(controller, dir.path());
+  ASSERT_NE(loaded.list, nullptr);
+  auto* window = loaded.window;
+  auto* list = loaded.list;
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 5; }));
+
+  QTest::keyClick(window, Qt::Key_2);
+  QTest::keyClick(window, Qt::Key_J);
+  ASSERT_EQ(controller.cursorRow(), 2);
+  auto labels = gutterLabels(list);
+  QStringList texts;
+  for (auto* label : labels) {
+    texts.append(label->property("text").toString());
+  }
+  EXPECT_EQ(texts, (QStringList{"2", "1", "3", "1", "2"}));
+  EXPECT_TRUE(gutterMatchesCursor(list, controller));
+  for (auto* label : labels) {
+    EXPECT_EQ(label->property("font").value<QFont>().family(),
+              evaluateInContext(label, "HolonightTheme.monospaceFont").toString());
+    EXPECT_EQ(label->property("horizontalAlignment").toInt(), Qt::AlignRight);
+    EXPECT_EQ(label->width(), loaded.listing->property("lineNumberGutterWidth").toReal());
+    // REQ-F-005: flush at the row's left edge; REQ-NF-004: a visual aid only.
+    EXPECT_EQ(label->mapToItem(label->parentItem()->parentItem(), QPointF()).x(), 0);
+    EXPECT_TRUE(QQmlProperty(label, QStringLiteral("Accessible.ignored"), qmlContext(label)).read().toBool());
+  }
+
+  // REQ-F-006 / REQ-NF-002: j/k rebinds the same label instances instead of recreating delegates.
+  auto* rowZero = labels.value(0);
+  const auto rowZeroText = rowZero->property("text").toString();
+  QTest::keyClick(window, Qt::Key_J);
+  ASSERT_EQ(controller.cursorRow(), 3);
+  EXPECT_TRUE(gutterMatchesCursor(list, controller));
+  EXPECT_EQ(gutterLabels(list).value(0), rowZero);
+  EXPECT_NE(rowZero->property("text").toString(), rowZeroText);
+  QTest::keyClick(window, Qt::Key_K);
+  QTest::keyClick(window, Qt::Key_K);
+  ASSERT_EQ(controller.cursorRow(), 1);
+  EXPECT_TRUE(gutterMatchesCursor(list, controller));
+
+  // VISUAL-selected rows keep their relative, muted numbers (non-goal 7).
+  QTest::keyClick(window, Qt::Key_V);
+  QTest::keyClick(window, Qt::Key_J);
+  ASSERT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Visual);
+  ASSERT_TRUE(controller.vim()->isRowSelected(1));
+  EXPECT_TRUE(gutterMatchesCursor(list, controller));
+  QTest::keyClick(window, Qt::Key_Escape);
+
+  // REQ-F-007: hidden-files toggle and sort-order changes renumber every visible row.
+  QTest::keyClick(window, Qt::Key_Period);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 6; }));
+  EXPECT_TRUE(gutterMatchesCursor(list, controller));
+  QTest::keyClick(window, Qt::Key_S);
+  ASSERT_TRUE(controller.listing()->sortDescending());
+  EXPECT_TRUE(QTest::qWaitFor([&] { return gutterMatchesCursor(list, controller); }));
+  QTest::keyClick(window, Qt::Key_S);
+  QTest::keyClick(window, Qt::Key_Period);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 5; }));
+  EXPECT_TRUE(gutterMatchesCursor(list, controller));
+
+  // REQ-F-008: a watcher refresh adding an entry above the cursor renumbers the rows.
+  QTest::keyClick(window, 'G', Qt::ShiftModifier);
+  ASSERT_EQ(controller.cursorRow(), 4);
+  ASSERT_FALSE(files_test::writeFile(dir, "a-first.txt").isEmpty());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 6; }));
+  EXPECT_TRUE(QTest::qWaitFor([&] { return gutterMatchesCursor(list, controller); }));
+}
+
+TEST(Files, LineNumberGutterWidthGrowsWithDigitsButBreadcrumbStays) {
+  QTemporaryDir dir(files_test::fixturePattern("gutter-width"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::populateEntries(dir, 999);
+  DirectoryController controller;
+  auto loaded = loadActiveWindow(controller, dir.path());
+  ASSERT_NE(loaded.list, nullptr);
+  auto* listing = loaded.listing;
+
+  // REQ-C-004: string-length digits with a three-digit minimum.
+  const QList<std::pair<int, int>> digits{{0, 3},   {1, 3},    {9, 3},    {10, 3},    {99, 3},   {100, 3},
+                                          {999, 3}, {1000, 4}, {9999, 4}, {10000, 5}, {99999, 5}};
+  for (const auto& [rows, expected] : digits) {
+    int actual = 0;
+    ASSERT_TRUE(
+        QMetaObject::invokeMethod(listing, "lineNumberGutterDigitsFor", Q_RETURN_ARG(int, actual), Q_ARG(int, rows)));
+    EXPECT_EQ(actual, expected) << rows;
+  }
+
+  // REQ-F-004 / REQ-NF-001: measured off a hidden Code-role label of nines, plus 8 px either side.
+  ASSERT_TRUE(QTest::qWaitFor([&] { return loaded.list->property("count").toInt() == 999; }));
+  QQuickItem* metric = nullptr;
+  for (auto* child : listing->childItems()) {
+    if (!child->isVisible() && child->property("rawText").toString().startsWith("999")) {
+      metric = child;
+    }
+  }
+  ASSERT_NE(metric, nullptr);
+  EXPECT_EQ(metric->property("rawText").toString(), "999");
+  const auto narrow = listing->property("lineNumberGutterWidth").toReal();
+  EXPECT_EQ(narrow, std::ceil(metric->implicitWidth()) + 16);
+  auto* breadcrumb = loaded.window->findChild<QQuickItem*>("breadcrumbLabel");
+  ASSERT_NE(breadcrumb, nullptr);
+  const auto breadcrumbX = breadcrumb->mapToScene(QPointF()).x();
+
+  // One real crossing: the 1000th entry arrives through the watcher.
+  ASSERT_FALSE(files_test::writeFile(dir, "entry-99999.txt").isEmpty());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return loaded.list->property("count").toInt() == 1000; }));
+  EXPECT_EQ(metric->property("rawText").toString(), "9999");
+  EXPECT_TRUE(QTest::qWaitFor([&] { return listing->property("lineNumberGutterWidth").toReal() > narrow; }));
+  EXPECT_EQ(listing->property("lineNumberGutterWidth").toReal(), std::ceil(metric->implicitWidth()) + 16);
+  auto* header = loaded.window->findChild<QQuickItem*>("lineNumberGutterHeader");
+  ASSERT_NE(header, nullptr);
+  EXPECT_TRUE(QTest::qWaitFor([&] { return header->width() > narrow; }));
+  EXPECT_NEAR(breadcrumb->mapToScene(QPointF()).x(), breadcrumbX, 1);
+}
+
+TEST(Files, LineNumberGutterNumbersPlaceholderRowsAndClearsForInlineEditor) {
+  QTemporaryDir dir(files_test::fixturePattern("gutter-placeholder"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::populateEntries(dir, 4);
+  DirectoryController controller;
+  auto loaded = loadActiveWindow(controller, dir.path());
+  ASSERT_NE(loaded.list, nullptr);
+  auto* window = loaded.window;
+  auto* list = loaded.list;
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 4; }));
+  QTest::keyClick(window, Qt::Key_J);
+  ASSERT_EQ(controller.cursorRow(), 1);
+
+  // REQ-F-012: the o placeholder (below the cursor, which moves onto it) is numbered like any row.
+  QTest::keyClick(window, Qt::Key_O);
+  ASSERT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Insert);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 5; }));
+  const int placeholderRow = controller.vim()->editingRow();
+  EXPECT_EQ(placeholderRow, 2);
+  EXPECT_TRUE(gutterMatchesCursor(list, controller));
+  auto* placeholderLabel = gutterLabels(list).value(placeholderRow);
+  ASSERT_NE(placeholderLabel, nullptr);
+  EXPECT_EQ(placeholderLabel->property("text").toString(), expectedGutterText(placeholderRow, controller.cursorRow()));
+
+  // REQ-F-011: the inline editor starts at or after the gutter's right edge.
+  auto* editor = window->activeFocusItem();
+  ASSERT_NE(editor, nullptr);
+  ASSERT_EQ(editor->objectName(), "inlineNameEditor");
+  auto* row = editor->parentItem();
+  EXPECT_GE(editor->mapToItem(row, QPointF()).x(),
+            placeholderLabel->mapToItem(row, QPointF()).x() + placeholderLabel->width());
+
+  // Cancelling removes the placeholder and renumbers the remaining rows.
+  QTest::keyClick(window, Qt::Key_Escape);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 4; }));
+  EXPECT_TRUE(QTest::qWaitFor([&] { return gutterMatchesCursor(list, controller); }));
+
+  // Committing re-sorts the new entry; every row still matches its proxy index.
+  QTest::keyClick(window, 'O', Qt::ShiftModifier);
+  ASSERT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Insert);
+  editor = window->activeFocusItem();
+  ASSERT_NE(editor, nullptr);
+  editor->setProperty("text", "zz-last.txt");
+  QTest::keyClick(window, Qt::Key_Return);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && gutterLabels(list).size() == 5; }));
+  EXPECT_TRUE(QFile::exists(dir.filePath("zz-last.txt")));
+  EXPECT_TRUE(QTest::qWaitFor([&] { return gutterMatchesCursor(list, controller); }));
+}
+
+TEST(Files, LineNumberGutterHeaderStaysForEmptyAndUnreadableDirectories) {
+  QTemporaryDir dir(files_test::fixturePattern("gutter-empty"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("empty"));
+  ASSERT_TRUE(QDir(dir.path()).mkdir("blocked"));
+  files_test::writeFile(dir, "blocked/secret.txt");
+  DirectoryController controller;
+  auto loaded = loadActiveWindow(controller, dir.path());
+  ASSERT_NE(loaded.list, nullptr);
+  auto* list = loaded.list;
+  auto* header = loaded.window->findChild<QQuickItem*>("lineNumberGutterHeader");
+  ASSERT_NE(header, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !gutterLabels(list).isEmpty(); }));
+
+  // REQ-F-013: an empty directory has no gutter numbers but keeps the header spacer.
+  controller.open(dir.filePath("empty"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+  EXPECT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).isEmpty(); }));
+  EXPECT_EQ(list->property("count").toInt(), 0);
+  EXPECT_TRUE(header->isVisible());
+  EXPECT_EQ(header->width(), loaded.listing->property("lineNumberGutterWidth").toReal());
+
+  // REQ-F-014: likewise for a permission-denied listing error.
+  if (files_test::runningAsRoot()) {
+    GTEST_SKIP() << "root bypasses directory permission bits";
+  }
+  const auto blocked = dir.filePath("blocked");
+  ASSERT_EQ(::chmod(blocked.toLocal8Bit().constData(), 0), 0);
+  const auto restore = qScopeGuard([&] { ::chmod(blocked.toLocal8Bit().constData(), 0755); });
+  controller.open(blocked);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+  ASSERT_FALSE(controller.directoryError().isEmpty());
+  EXPECT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).isEmpty(); }));
+  EXPECT_TRUE(header->isVisible());
 }
 
 namespace {

@@ -25,12 +25,29 @@ Item {
     readonly property real columnPadding: HnMetrics.horizontalPadding(HnControlSize.Normal)
     readonly property bool showSize: width >= 2 * columnPadding + 120 + columnSpacing + sizeColumnWidth
     readonly property bool showModified: width >= 2 * columnPadding + 120 + 2 * columnSpacing + sizeColumnWidth + modifiedColumnWidth
+    // Vim-hybrid line-number gutter (line-number-gutter SPEC.md REQ-F-004/REQ-C-004): wide enough
+    // for at least "999", growing with the row count (listView.count includes an o/O placeholder).
+    readonly property int lineNumberGutterDigits: lineNumberGutterDigitsFor(listView.count)
+    // Measured text width plus 8px leading and 8px trailing padding inside the gutter cell (REQ-C-002).
+    readonly property real lineNumberGutterWidth: Math.ceil(lineNumberGutterMetric.implicitWidth) + 16
+
+    // String length rather than log10 so exact powers of ten never round wrong.
+    function lineNumberGutterDigitsFor(rowCount: int): int {
+        return Math.max(3, String(rowCount).length);
+    }
 
     HnLabel {
         id: modifiedColumnMetric
         visible: false
         role: HnTypographyRole.Caption
         rawText: "9999-99-99 99:99"
+    }
+
+    HnLabel {
+        id: lineNumberGutterMetric
+        visible: false
+        role: HnTypographyRole.Code
+        rawText: "9".repeat(root.lineNumberGutterDigits)
     }
 
     Rectangle {
@@ -47,10 +64,19 @@ Item {
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: HnMetrics.horizontalPadding(HnControlSize.Normal)
+            // The gutter spacer replaces the leading padding, matching the delegates' leftPadding: 0.
+            anchors.leftMargin: 0
             anchors.rightMargin: HnMetrics.horizontalPadding(HnControlSize.Normal)
             spacing: root.columnSpacing
 
+            // Blank: no label and no separator above the line-number gutter (REQ-F-009).
+            Item {
+                objectName: "lineNumberGutterHeader"
+                Layout.minimumWidth: root.lineNumberGutterWidth
+                Layout.preferredWidth: root.lineNumberGutterWidth
+                Layout.maximumWidth: root.lineNumberGutterWidth
+                Layout.fillHeight: true
+            }
             HnLabel {
                 objectName: "nameColumnHeader"
                 role: HnTypographyRole.Body
@@ -183,6 +209,9 @@ Item {
 
             objectName: "directoryEntryDelegate"
             width: listView.width
+            // The gutter sits flush at the row's left edge; the selection background spans the whole
+            // delegate regardless of padding, so it still covers the gutter (REQ-F-005).
+            leftPadding: 0
             highlighted: ListView.isCurrentItem || (root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(delegate.index))
             title: name
             subtitle: statFailed ? statError : (isDir ? qsTr("Folder") : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm"))
@@ -191,6 +220,25 @@ Item {
 
             contentItem: RowLayout {
                 spacing: root.columnSpacing
+                HnLabel {
+                    readonly property bool isCursorRow: delegate.index === root.controller.cursorRow
+
+                    objectName: "lineNumberGutterField"
+                    role: HnTypographyRole.Code
+                    textFormat: Text.PlainText
+                    // Vim hybrid numbering: absolute on the cursor row, relative distance elsewhere.
+                    rawText: isCursorRow ? String(delegate.index + 1) : String(Math.abs(delegate.index - root.controller.cursorRow))
+                    color: isCursorRow ? HoloniightPalette.accentViolet : HoloniightPalette.textMuted
+                    horizontalAlignment: Text.AlignRight
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 8
+                    rightPadding: 8
+                    Layout.minimumWidth: root.lineNumberGutterWidth
+                    Layout.preferredWidth: root.lineNumberGutterWidth
+                    Layout.maximumWidth: root.lineNumberGutterWidth
+                    Layout.fillHeight: true
+                    Accessible.ignored: true
+                }
                 Item {
                     id: iconCell
                     objectName: "iconColumnField"
@@ -356,7 +404,9 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.margins: 8
+                // Starts after the gutter so line numbers stay visible while editing (REQ-F-011).
+                anchors.leftMargin: root.lineNumberGutterWidth
+                anchors.rightMargin: 8
                 visible: delegate.editingThis
                 text: root.controller.vim.insertText
                 hasError: !root.controller.vim.insertValid
