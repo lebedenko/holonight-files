@@ -11,4 +11,6 @@ struct PreviewServiceTestAccess {
   static void beforeDispatch(PreviewService& service, std::function<void()> callback) {
     service.before_dispatch_for_test_ = std::move(callback);
   }
+  // The size last passed to setRequestedSize(QuickLook, ...), whether or not it is the active one.
+  static QSize quickLookRequestedSize(const PreviewService& service) { return service.quick_look_size_; }
 };

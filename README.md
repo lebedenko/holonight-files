@@ -22,8 +22,14 @@ table. Both tables share left-aligned label and value columns. Rows without a va
 cut off. The sidebar scrolls vertically when its content exceeds the window height.
 Size text matches the listing exactly, and folders show `Dir`. The
 sidebar no longer shows text content or permissions; press `Space` to open
-Quick Look, a full-window preview that includes the text of text files. It
-live-updates as you move with `j`/`k` and closes on `Space`/`Escape`.
+Quick Look, a centered card over the dimmed window (at most 92% of it). Images
+are framed at their own aspect ratio, text files get a scrollable monospace view,
+and folders, errors and other files get a compact icon card. Below the preview
+it shows the name, a metadata line (`6000 × 4000 · 8.3 MB`, the size, `Dir`, or
+the error) and a close hint. It live-updates as you move with `j`/`k` (keeping its
+size with a spinner while the next file loads, refitting on window resize) and closes
+on `Space`/`Escape`. See the [Quick Look verification](docs/sdd/quick-look-redesign/VERIFICATION.md)
+for automated evidence and pending native acceptance.
 See the [info sidebar redesign verification](docs/sdd/info-sidebar-redesign/VERIFICATION.md)
 for evidence and pending manual acceptance. Image thumbnails are cached per the
 freedesktop Thumbnail Managing Standard in on-demand 128/256/512/1024px tiers

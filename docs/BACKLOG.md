@@ -127,3 +127,8 @@ supersedes the scaffold restriction on folder-handler registration; historical
 scaffold records remain unchanged. Migration uses `task uninstall` then
 `task install`. See [verification](sdd/folder-handler/VERIFICATION.md) for
 automated evidence and pending host chooser and native folder-display checks.
+
+Quick Look now uses a centered, captioned preview card and retains the previous
+layout while loading, refitting it when the window resizes. Review remediation
+and pending native 1.5× rendering/latency acceptance are tracked in
+[Quick Look verification](sdd/quick-look-redesign/VERIFICATION.md).

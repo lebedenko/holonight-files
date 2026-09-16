@@ -139,7 +139,9 @@ Item {
         Connections {
             target: root.controller
             function onNavigated(): void {
-                listView.forceActiveFocus();
+                // j/k inside Quick Look also reach a new file; focus must stay in the modal popup.
+                if (!root.controller.quickLookOpen)
+                    listView.forceActiveFocus();
             }
             function onChanged(): void {
                 if (root.previousQuickLookOpen && !root.controller.quickLookOpen)

@@ -1,6 +1,7 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
 #include "preview_fixtures.h"
+#include "preview_service_test_access.h"
 
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -16,7 +17,9 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QScopeGuard>
+#include <QSignalSpy>
 #include <QTest>
+#include <QThread>
 #include <QWheelEvent>
 #include <QtQml/QQmlExtensionPlugin>
 
@@ -1287,4 +1290,570 @@ TEST(Files, PreviewSidebarScrollsToWrappedExifInShortWindows) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return scroll->property("contentY").toReal() == 0; }));
   EXPECT_GE(fileName->mapToItem(scroll, QPointF()).y(), 0);
   EXPECT_LE(fileName->mapToItem(scroll, QPointF(0, fileName->height())).y(), scroll->height());
+}
+
+namespace {
+
+// quick-look-redesign: a rendered main window at a fixed size with the overlay located.
+struct QuickLookHarness {
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  QQuickWindow* window = nullptr;
+  QObject* popup = nullptr;
+  QQuickItem* overlay = nullptr;
+};
+
+void loadQuickLookHarness(QuickLookHarness& harness, const QString& path, QSize size = QSize(1280, 800)) {
+  harness.engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&harness.controller)}});
+  harness.engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(harness.engine.rootObjects().size(), 1);
+  harness.window = qobject_cast<QQuickWindow*>(harness.engine.rootObjects().first());
+  ASSERT_NE(harness.window, nullptr);
+  harness.window->resize(size);
+  harness.window->requestActivate();
+  ASSERT_TRUE(QTest::qWaitForWindowActive(harness.window));
+  harness.popup = harness.window->findChild<QObject*>("quickLookOverlay");
+  ASSERT_NE(harness.popup, nullptr);
+  harness.overlay = harness.popup->property("parent").value<QQuickItem*>();
+  ASSERT_NE(harness.overlay, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->size() == QSizeF(size); }));
+  harness.controller.open(path);
+  ASSERT_TRUE(
+      QTest::qWaitFor([&] { return !harness.controller.scanning() && harness.controller.preview()->hasEntry(); }));
+}
+
+void openQuickLook(QuickLookHarness& harness) {
+  QTest::keyClick(harness.window, Qt::Key_Space);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.popup->property("opened").toBool(); }));
+}
+
+QColor paletteColor(QQmlEngine& engine, const char* name) {
+  auto* palette = engine.singletonInstance<QObject*>("Holonight.Core", "HoloniightPalette");
+  return palette != nullptr ? palette->property(name).value<QColor>() : QColor();
+}
+
+QSizeF popupSize(const QuickLookHarness& harness) {
+  return {harness.popup->property("width").toReal(), harness.popup->property("height").toReal()};
+}
+
+QSizeF quickLookBounds(const QuickLookHarness& harness) { return harness.overlay->size() * 0.92; }
+
+// SPEC.md "preview bounds": bounds minus card padding minus the caption reserve.
+QSizeF quickLookPreviewBounds(const QuickLookHarness& harness) {
+  const auto padding = harness.popup->property("cardPadding").toReal();
+  const auto gap = harness.popup->property("frameCaptionGap").toReal();
+  const auto reserve = harness.popup->property("captionReserve").toReal();
+  const auto bounds = quickLookBounds(harness);
+  return {bounds.width() - (2 * padding), bounds.height() - (2 * padding) - gap - reserve};
+}
+
+QString quickLookText(const QuickLookHarness& harness, const char* objectName) {
+  auto* item = harness.window->findChild<QQuickItem*>(objectName);
+  return item != nullptr ? item->property("text").toString() : QString();
+}
+
+QColor quickLookColor(const QuickLookHarness& harness, const char* objectName) {
+  auto* item = harness.window->findChild<QQuickItem*>(objectName);
+  return item != nullptr ? item->property("color").value<QColor>() : QColor();
+}
+
+// Worker-side gate for PreviewServiceTestAccess::beforeDispatch: jobs wait while `held` is set.
+struct DispatchGate {
+  std::atomic_bool held{false};
+  std::atomic_int waiting{0};
+};
+
+void installDispatchGate(PreviewService& service, DispatchGate& gate) {
+  PreviewServiceTestAccess::beforeDispatch(service, [&gate] {
+    gate.waiting.fetch_add(1);
+    while (gate.held.load()) {
+      QThread::msleep(1);
+    }
+    gate.waiting.fetch_sub(1);
+  });
+}
+
+void expectCardWithinBounds(const QuickLookHarness& harness) {
+  const auto bounds = quickLookBounds(harness);
+  const auto size = popupSize(harness);
+  EXPECT_GT(size.width(), 0);
+  EXPECT_GT(size.height(), 0);
+  EXPECT_LE(size.width(), bounds.width() + 1);
+  EXPECT_LE(size.height(), bounds.height() + 1);
+  const auto centerX = harness.popup->property("x").toReal() + (size.width() / 2);
+  const auto centerY = harness.popup->property("y").toReal() + (size.height() / 2);
+  EXPECT_NEAR(centerX, harness.overlay->width() / 2, 1);
+  EXPECT_NEAR(centerY, harness.overlay->height() / 2, 1);
+}
+
+}  // namespace
+
+// quick-look-redesign REQ-F-001/002/005.
+TEST(Files, QuickLookCardStaysWithinBoundsForEveryKind) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-card"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
+  ASSERT_FALSE(files_test::writeFile(dir, "01-image.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
+  files_test::writeSmallText(dir, "02-notes.txt");
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_TRUE(stepPreviewTo(harness.controller, "folder"));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  auto* card = harness.window->findChild<QQuickItem*>("quickLookCard");
+  ASSERT_NE(card, nullptr);
+  const auto textDisabled = paletteColor(harness.engine, "textDisabled");
+  const auto textMuted = paletteColor(harness.engine, "textMuted");
+  ASSERT_TRUE(textDisabled.isValid());
+  EXPECT_NE(textDisabled, textMuted);
+  for (const auto* name : {"folder", "01-image.jpg", "02-notes.txt"}) {
+    SCOPED_TRACE(name);
+    ASSERT_TRUE(stepPreviewTo(harness.controller, name));
+    QTest::qWait(20);
+    expectCardWithinBounds(harness);
+    EXPECT_GT(card->property("radius").toReal(), 0);
+    EXPECT_NEAR(card->width(), popupSize(harness).width(), 1);
+    EXPECT_NEAR(card->height(), popupSize(harness).height(), 1);
+    EXPECT_TRUE(harness.window->findChild<QQuickItem*>("quickLookHint")->isVisible());
+    EXPECT_EQ(quickLookText(harness, "quickLookHint"), QStringLiteral("Press Space or Esc to close"));
+    EXPECT_EQ(quickLookColor(harness, "quickLookHint"), textDisabled);
+    EXPECT_EQ(quickLookColor(harness, "quickLookMetadata"), textMuted);
+  }
+  EXPECT_EQ(harness.popup->property("closePolicy").toInt(), 0);
+}
+
+// quick-look-redesign REQ-F-003, REQ-C-004.
+TEST(Files, QuickLookBackdropCoversWindowWithScrim) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-backdrop"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::writeSmallText(dir, "notes.txt");
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  QQuickItem* backdrop = nullptr;
+  for (auto* child : harness.overlay->childItems()) {
+    if (child->objectName() == QStringLiteral("quickLookBackdrop")) {
+      backdrop = child;
+    }
+  }
+  ASSERT_NE(backdrop, nullptr);
+  EXPECT_TRUE(backdrop->isVisible());
+  EXPECT_EQ(backdrop->size(), harness.overlay->size());
+  EXPECT_EQ(backdrop->property("color").value<QColor>(), paletteColor(harness.engine, "scrim"));
+  QTest::mouseClick(harness.window, Qt::LeftButton, Qt::NoModifier, QPoint(4, 4));
+  QTest::qWait(50);
+  EXPECT_TRUE(harness.controller.quickLookOpen());
+  EXPECT_TRUE(harness.popup->property("visible").toBool());
+}
+
+// quick-look-redesign REQ-F-004.
+TEST(Files, QuickLookNameElidesLongFilenamesAndStaysCentered) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-name"));
+  ASSERT_TRUE(dir.isValid());
+  const auto longName = QString(196, 'a') + QStringLiteral(".txt");
+  ASSERT_FALSE(files_test::writeFile(dir, longName).isEmpty());
+  ASSERT_FALSE(files_test::writeFile(dir, "b.txt").isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  auto* label = harness.window->findChild<QQuickItem*>("quickLookName");
+  auto* card = harness.window->findChild<QQuickItem*>("quickLookCard");
+  ASSERT_NE(label, nullptr);
+  ASSERT_NE(card, nullptr);
+  const auto expectCentered = [&] {
+    const auto contentWidth = harness.popup->property("availableWidth").toReal();
+    EXPECT_LE(label->width(), contentWidth + 1);
+    const auto center = label->mapToItem(card, QPointF(label->width() / 2, 0)).x();
+    EXPECT_NEAR(center, card->width() / 2, 1);
+  };
+  ASSERT_TRUE(stepPreviewTo(harness.controller, longName));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return label->property("truncated").toBool(); }));
+  expectCentered();
+  ASSERT_TRUE(stepPreviewTo(harness.controller, "b.txt"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return label->property("text").toString() == QStringLiteral("b.txt"); }));
+  QTest::qWait(20);
+  EXPECT_FALSE(label->property("truncated").toBool());
+  expectCentered();
+}
+
+// quick-look-redesign REQ-F-006/007/008.
+TEST(Files, QuickLookImageFrameAspectFitsPreviewBounds) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-image"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(files_test::writeFile(dir, "01-landscape.jpg", files_test::renderJpegBytes({6000, 4000})).isEmpty());
+  ASSERT_FALSE(files_test::writeFile(dir, "02-tall.jpg", files_test::renderJpegBytes({1000, 5000})).isEmpty());
+  ASSERT_FALSE(files_test::writeFile(dir, "03-wide.jpg", files_test::renderJpegBytes({5000, 1000})).isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }, 10000));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  auto* area = harness.window->findChild<QQuickItem*>("quickLookImageArea");
+  ASSERT_NE(area, nullptr);
+  const auto preview = quickLookPreviewBounds(harness);
+  const auto waitForImage = [&](const QString& name) {
+    return stepPreviewTo(harness.controller, name) &&
+           QTest::qWaitFor([&] { return harness.controller.preview()->hasImage() && area->isVisible(); });
+  };
+
+  ASSERT_TRUE(waitForImage("01-landscape.jpg"));
+  EXPECT_LE(qAbs((area->width() * 4000) - (area->height() * 6000)), 6000);
+  const auto widthMatches = qAbs(area->width() - preview.width()) <= 1;
+  const auto heightMatches = qAbs(area->height() - preview.height()) <= 1;
+  EXPECT_NE(widthMatches, heightMatches);
+  EXPECT_LE(area->width(), preview.width() + 1);
+  EXPECT_LE(area->height(), preview.height() + 1);
+  expectCardWithinBounds(harness);
+  const auto items = area->childItems();
+  ASSERT_FALSE(items.isEmpty());
+  EXPECT_GT(items.first()->property("radius").toReal(), 0);
+  EXPECT_EQ(items.first()->size(), area->size());
+  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"),
+            QStringLiteral("6000 × 4000 · ") + quickLookText(harness, "previewSizeValue"));
+
+  ASSERT_TRUE(waitForImage("02-tall.jpg"));
+  EXPECT_NEAR(area->height(), preview.height(), 1);
+  EXPECT_LT(area->width(), preview.width());
+  EXPECT_LE(qAbs((area->width() * 5000) - (area->height() * 1000)), 5000);
+
+  ASSERT_TRUE(waitForImage("03-wide.jpg"));
+  EXPECT_NEAR(area->width(), preview.width(), 1);
+  EXPECT_LT(area->height(), preview.height());
+  EXPECT_LE(qAbs((area->width() * 1000) - (area->height() * 5000)), 5000);
+  expectCardWithinBounds(harness);
+}
+
+// quick-look-redesign REQ-F-008: size only until the source dimensions are known.
+TEST(Files, QuickLookImageMetadataLineShowsDimensionsThenSizeOnly) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-image-metadata"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(files_test::writeFile(dir, "a.txt").isEmpty());
+  ASSERT_FALSE(files_test::writeFile(dir, "b.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
+  DispatchGate gate;
+  QuickLookHarness harness;
+  const auto release = qScopeGuard([&gate] { gate.held.store(false); });
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  installDispatchGate(*harness.controller.preview(), gate);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  gate.held.store(true);
+  harness.controller.handleKey(QStringLiteral("j"));
+  ASSERT_EQ(harness.controller.preview()->name(), QStringLiteral("b.jpg"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gate.waiting.load() > 0; }));
+  const auto sizeText = quickLookText(harness, "previewSizeValue");
+  ASSERT_FALSE(sizeText.isEmpty());
+  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), sizeText);
+  EXPECT_FALSE(quickLookText(harness, "quickLookMetadata").contains(QChar(0x00d7)));
+  gate.held.store(false);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
+  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), QStringLiteral("600 × 400 · ") + sizeText);
+}
+
+// quick-look-redesign REQ-F-009/010.
+TEST(Files, QuickLookTextFrameFillsPreviewBoundsWithMonospaceView) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-text"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::writeLargeText(dir, "01-large.txt");
+  files_test::writeSmallText(dir, "02-small.txt");
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_TRUE(stepPreviewTo(harness.controller, "01-large.txt"));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  auto* text = harness.window->findChild<QQuickItem*>("quickLookText");
+  ASSERT_NE(text, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return text->isVisible(); }));
+  // TextEdit -> Flickable contentItem -> Flickable -> rounded surface -> preview frame.
+  auto* flickable = text->parentItem() != nullptr ? text->parentItem()->parentItem() : nullptr;
+  ASSERT_NE(flickable, nullptr);
+  ASSERT_TRUE(flickable->inherits("QQuickFlickable"));
+  auto* frame = flickable->parentItem() != nullptr ? flickable->parentItem()->parentItem() : nullptr;
+  ASSERT_NE(frame, nullptr);
+  const auto preview = quickLookPreviewBounds(harness);
+  EXPECT_NEAR(frame->width(), preview.width(), 1);
+  EXPECT_NEAR(frame->height(), preview.height(), 1);
+  EXPECT_TRUE(text->property("readOnly").toBool());
+  EXPECT_NE(text->property("wrapMode").toInt(), 0);
+  auto* theme = harness.engine.singletonInstance<QObject*>("Holonight.Core", "HolonightTheme");
+  ASSERT_NE(theme, nullptr);
+  EXPECT_EQ(text->property("font").value<QFont>().family(), theme->property("monospaceFont").toString());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return flickable->property("contentHeight").toReal() > flickable->height(); }));
+  EXPECT_EQ(flickable->property("contentWidth").toReal(), flickable->width());
+  expectCardWithinBounds(harness);
+
+  ASSERT_TRUE(harness.controller.preview()->textTruncated());
+  const auto largeSize = quickLookText(harness, "previewSizeValue");
+  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), largeSize + QStringLiteral(" · truncated"));
+  ASSERT_TRUE(stepPreviewTo(harness.controller, "02-small.txt"));
+  ASSERT_FALSE(harness.controller.preview()->textTruncated());
+  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), quickLookText(harness, "previewSizeValue"));
+}
+
+// quick-look-redesign REQ-F-011/012.
+TEST(Files, QuickLookCompactCardShowsDirIconAndStaysSmall) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-compact"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_TRUE(stepPreviewTo(harness.controller, "folder"));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  auto* icon = harness.window->findChild<QQuickItem*>("quickLookIcon");
+  ASSERT_NE(icon, nullptr);
+  EXPECT_TRUE(icon->isVisible());
+  EXPECT_FALSE(icon->property("source").toUrl().isEmpty());
+  const auto bounds = quickLookBounds(harness);
+  const auto size = popupSize(harness);
+  EXPECT_LT(size.width(), bounds.width() / 2);
+  EXPECT_LT(size.height(), bounds.height() / 2);
+  expectCardWithinBounds(harness);
+  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), QStringLiteral("Dir"));
+  EXPECT_EQ(quickLookColor(harness, "quickLookMetadata"), paletteColor(harness.engine, "textMuted"));
+  harness.window->resize(1920, 1080);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->width() == 1920; }));
+  EXPECT_EQ(popupSize(harness), size);
+  expectCardWithinBounds(harness);
+}
+
+// quick-look-redesign REQ-F-012: errors in the error color, other types by description.
+TEST(Files, QuickLookCompactCardShowsErrorAndMimeDescription) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-errors"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::writeRandomBinary(dir, "01-random.bin");
+  files_test::writeBrokenSymlink(dir, "02-broken");
+  files_test::writeCorruptJpeg(dir, "03-corrupt.jpg");
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_TRUE(stepPreviewTo(harness.controller, "01-random.bin"));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  const auto* preview = harness.controller.preview();
+  const auto metadata = quickLookText(harness, "quickLookMetadata");
+  EXPECT_FALSE(metadata.isEmpty());
+  EXPECT_TRUE(metadata == preview->mimeTypeDescription() || metadata == preview->mimeType()) << metadata.toStdString();
+  EXPECT_LT(popupSize(harness).width(), quickLookBounds(harness).width() / 2);
+  const auto error = paletteColor(harness.engine, "error");
+  for (const auto* name : {"02-broken", "03-corrupt.jpg"}) {
+    SCOPED_TRACE(name);
+    ASSERT_TRUE(stepPreviewTo(harness.controller, name));
+    ASSERT_NE(preview->previewErrorKind(), PreviewService::PreviewErrorKind::None);
+    ASSERT_FALSE(preview->previewErrorMessage().isEmpty());
+    EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), preview->previewErrorMessage());
+    EXPECT_EQ(quickLookColor(harness, "quickLookMetadata"), error);
+    EXPECT_TRUE(harness.window->findChild<QQuickItem*>("quickLookIcon")->isVisible());
+    expectCardWithinBounds(harness);
+  }
+}
+
+// quick-look-redesign REQ-F-013/014/015.
+TEST(Files, QuickLookRetainsSettledGeometryWhilePending) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-pending"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(files_test::writeFile(dir, "01-landscape.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
+  ASSERT_FALSE(files_test::writeFile(dir, "02-portrait.jpg", files_test::renderJpegBytes({400, 600})).isEmpty());
+  DispatchGate gate;
+  QuickLookHarness harness;
+  const auto release = qScopeGuard([&gate] { gate.held.store(false); });
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  installDispatchGate(*harness.controller.preview(), gate);
+  ASSERT_TRUE(QTest::qWaitFor(
+      [&] { return !harness.controller.preview()->busy() && harness.controller.preview()->hasImage(); }));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  QTest::qWait(400);  // Let the Quick Look sized re-decode finish.
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
+  const auto settled = popupSize(harness);
+  auto* busy = harness.window->findChild<QQuickItem*>("quickLookBusy");
+  auto* area = harness.window->findChild<QQuickItem*>("quickLookImageArea");
+  ASSERT_NE(busy, nullptr);
+  ASSERT_NE(area, nullptr);
+  EXPECT_FALSE(busy->isVisible());
+
+  QSignalSpy widthChanges(harness.popup, SIGNAL(widthChanged()));
+  QSignalSpy heightChanges(harness.popup, SIGNAL(heightChanged()));
+  gate.held.store(true);
+  harness.controller.handleKey(QStringLiteral("j"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gate.waiting.load() > 0; }));
+  QTest::qWait(50);
+  EXPECT_EQ(popupSize(harness), settled);
+  EXPECT_EQ(widthChanges.count(), 0);
+  EXPECT_EQ(heightChanges.count(), 0);
+  EXPECT_EQ(quickLookText(harness, "quickLookName"), QStringLiteral("02-portrait.jpg"));
+  const auto sizeText = quickLookText(harness, "previewSizeValue");
+  EXPECT_FALSE(sizeText.isEmpty());
+  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), sizeText);
+  EXPECT_TRUE(busy->isVisible());
+  EXPECT_TRUE(busy->property("running").toBool());
+  EXPECT_FALSE(area->isVisible());
+
+  gate.held.store(false);
+  ASSERT_TRUE(QTest::qWaitFor(
+      [&] { return !harness.controller.preview()->busy() && harness.controller.preview()->hasImage(); }));
+  QTest::qWait(400);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
+  EXPECT_LE(widthChanges.count(), 1);
+  EXPECT_LE(heightChanges.count(), 1);
+  const auto portrait = popupSize(harness);
+  EXPECT_LT(portrait.width(), settled.width());
+  EXPECT_GT(portrait.height(), settled.height() - 1);
+  EXPECT_FALSE(busy->isVisible());
+  EXPECT_TRUE(area->isVisible());
+  EXPECT_LE(qAbs((area->width() * 600) - (area->height() * 400)), 600);
+}
+
+// quick-look-redesign REQ-F-016.
+TEST(Files, QuickLookReopenOnDifferentKindUsesNewGeometry) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-reopen"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
+  ASSERT_FALSE(files_test::writeFile(dir, "image.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_TRUE(stepPreviewTo(harness.controller, "folder"));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  const auto compact = popupSize(harness);
+  QTest::keyClick(harness.window, Qt::Key_Escape);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.popup->property("visible").toBool(); }));
+  ASSERT_TRUE(stepPreviewTo(harness.controller, "image.jpg"));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  auto* area = harness.window->findChild<QQuickItem*>("quickLookImageArea");
+  ASSERT_NE(area, nullptr);
+  const auto preview = quickLookPreviewBounds(harness);
+  const auto expected = QSizeF(600, 400).scaled(preview, Qt::KeepAspectRatio);
+  EXPECT_NEAR(area->width(), expected.width(), 1);
+  EXPECT_NEAR(area->height(), expected.height(), 1);
+  EXPECT_GT(popupSize(harness).width(), compact.width());
+  EXPECT_GT(popupSize(harness).height(), compact.height());
+  expectCardWithinBounds(harness);
+}
+
+// quick-look-redesign REQ-F-017/018.
+TEST(Files, QuickLookRequestedSizeStableAcrossNavigationButNotResize) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-request"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(files_test::writeFile(dir, "01.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
+  ASSERT_FALSE(files_test::writeFile(dir, "02.jpg", files_test::renderJpegBytes({400, 600})).isEmpty());
+  ASSERT_FALSE(files_test::writeFile(dir, "03.jpg", files_test::renderJpegBytes({1000, 200})).isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  const auto& preview = *harness.controller.preview();
+  const auto requested = PreviewServiceTestAccess::quickLookRequestedSize(preview);
+  const auto calls = harness.popup->property("requestedSizeCallCount").toInt();
+  EXPECT_TRUE(requested.isValid() && !requested.isEmpty());
+  for (const auto* name : {"02.jpg", "03.jpg"}) {
+    ASSERT_TRUE(stepPreviewTo(harness.controller, name));
+    QTest::qWait(50);
+    EXPECT_EQ(PreviewServiceTestAccess::quickLookRequestedSize(preview), requested);
+    EXPECT_EQ(harness.popup->property("requestedSizeCallCount").toInt(), calls);
+  }
+  harness.window->resize(1000, 700);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->width() == 1000; }));
+  EXPECT_GT(harness.popup->property("requestedSizeCallCount").toInt(), calls);
+  EXPECT_NE(PreviewServiceTestAccess::quickLookRequestedSize(preview), requested);
+}
+
+// quick-look-redesign REQ-NF-001.
+TEST(Files, QuickLookNavigationAndResizeProduceNoBindingLoops) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-loops"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
+  ASSERT_FALSE(files_test::writeFile(dir, "01.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
+  ASSERT_FALSE(files_test::writeFile(dir, "02.jpg", files_test::renderJpegBytes({200, 900})).isEmpty());
+  files_test::writeSmallText(dir, "03.txt");
+  files_test::writeCorruptJpeg(dir, "04.jpg");
+  files_test::writeBrokenSymlink(dir, "05-broken");
+
+  bindingLoopCounter().warnings.store(0);
+  bindingLoopCounter().previous = qInstallMessageHandler(countBindingLoops);
+  const auto restoreHandler = qScopeGuard([] { qInstallMessageHandler(bindingLoopCounter().previous); });
+
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  const QList<QSize> sizes{{1280, 800}, {640, 420}, {1600, 1000}};
+  for (const auto size : sizes) {
+    harness.window->resize(size);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->size() == QSizeF(size); }));
+    for (const auto* name : {"folder", "01.jpg", "02.jpg", "03.txt", "04.jpg", "05-broken"}) {
+      ASSERT_TRUE(stepPreviewTo(harness.controller, name));
+      expectCardWithinBounds(harness);
+    }
+    for (int step = 0; step < 5; ++step) {
+      QTest::keyClick(harness.window, Qt::Key_K);
+    }
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
+  }
+  EXPECT_EQ(bindingLoopCounter().warnings.load(), 0);
+}
+
+// quick-look-redesign regression: navigating onto files inside Quick Look emits navigated(), which
+// used to pull focus onto the listing behind the modal popup.
+TEST(Files, QuickLookKeepsFocusWhileNavigatingAndCloses) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-close"));
+  ASSERT_TRUE(dir.isValid());
+  for (int i = 0; i < 40; ++i) {
+    const QSize size = (i % 2) == 0 ? QSize(300, 200) : QSize(120, 240);
+    ASSERT_FALSE(files_test::writeFile(dir, QStringLiteral("%1.jpg").arg(i, 2, 10, QLatin1Char('0')),
+                                       files_test::renderJpegBytes(size))
+                     .isEmpty());
+  }
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  auto* content = harness.window->findChild<QQuickItem*>("quickLookContent");
+  ASSERT_NE(content, nullptr);
+  for (const auto closeKey : {Qt::Key_Escape, Qt::Key_Space}) {
+    SCOPED_TRACE(closeKey);
+    ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+    const auto startRow = harness.controller.cursorRow();
+    for (int step = 0; step < 30; ++step) {
+      QTest::keyClick(harness.window, closeKey == Qt::Key_Escape ? Qt::Key_J : Qt::Key_K);
+      QTest::qWait(5);
+      ASSERT_EQ(harness.window->activeFocusItem(), content) << "step " << step;
+    }
+    EXPECT_NE(harness.controller.cursorRow(), startRow);
+    QTest::keyClick(harness.window, closeKey);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.popup->property("visible").toBool(); }));
+    EXPECT_FALSE(harness.controller.quickLookOpen());
+    EXPECT_TRUE(harness.window->findChild<QQuickItem*>("directoryListView")->hasActiveFocus());
+  }
+}
+
+// REQ-F-001/005/013: pending geometry follows resized bounds, including its caption.
+TEST(Files, QuickLookPendingResizeKeepsCaptionInsideCard) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-pending-resize"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(files_test::writeFile(dir, "01.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
+  ASSERT_FALSE(files_test::writeFile(dir, "02.jpg", files_test::renderJpegBytes({400, 600})).isEmpty());
+  DispatchGate gate;
+  QuickLookHarness harness;
+  const auto release = qScopeGuard([&gate] { gate.held.store(false); });
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  QTest::qWait(400);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
+  installDispatchGate(*harness.controller.preview(), gate);
+  gate.held.store(true);
+  harness.controller.handleKey(QStringLiteral("j"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gate.waiting.load() > 0; }));
+  const auto settled = popupSize(harness);
+  harness.window->resize(640, 420);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->size() == QSizeF(640, 420); }));
+  auto* hint = harness.window->findChild<QQuickItem*>("quickLookHint");
+  auto* card = harness.window->findChild<QQuickItem*>("quickLookCard");
+  ASSERT_NE(hint, nullptr);
+  ASSERT_NE(card, nullptr);
+  const auto bottom = hint->mapToItem(card, QPointF(0, hint->height())).y();
+  EXPECT_LE(bottom, card->height());
+  auto* area = harness.window->findChild<QQuickItem*>("quickLookImageArea");
+  ASSERT_NE(area, nullptr);
+  auto* frame = area->parentItem();
+  ASSERT_NE(frame, nullptr);
+  EXPECT_GE(frame->mapToItem(card, QPointF()).x(), 0);
+  EXPECT_LE(frame->mapToItem(card, QPointF(frame->width(), frame->height())).x(), card->width());
+  expectCardWithinBounds(harness);
+  EXPECT_LE(hint->mapToScene(QPointF(0, hint->height())).y(), harness.window->height());
+  harness.window->resize(1280, 800);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->size() == QSizeF(1280, 800); }));
+  EXPECT_EQ(popupSize(harness), settled);
+  EXPECT_LE(hint->mapToItem(card, QPointF(0, hint->height())).y(), card->height());
+  EXPECT_TRUE(harness.controller.preview()->busy());
+  EXPECT_FALSE(harness.controller.preview()->hasImage());
 }
