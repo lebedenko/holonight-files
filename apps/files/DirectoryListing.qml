@@ -1,8 +1,5 @@
 pragma ComponentBehavior: Bound
 
-import "IconFallbacks.js" as IconFallbacks
-import "InspectionKeys.js" as InspectionKeys
-import "SizeFormat.js" as SizeFormat
 import QtQuick
 import QtQuick.Layouts
 import Holonight.Core
@@ -133,9 +130,18 @@ Item {
         }
 
         Keys.priority: Keys.BeforeItem
-        Keys.onShortcutOverride: event => InspectionKeys.overrideShortcut(event, false, root.controller.vim.currentMode === VimModeController.Visual)
-        Keys.onPressed: event => InspectionKeys.press(event, root.controller, false)
-        Keys.onReleased: event => InspectionKeys.release(event)
+        Keys.onShortcutOverride: event => {
+            if (InspectionKeys.overrideShortcut(event.key, false, root.controller.vim.currentMode === VimModeController.Visual))
+                event.accepted = true;
+        }
+        Keys.onPressed: event => {
+            if (InspectionKeys.press(event.key, event.text, event.modifiers, event.isAutoRepeat, root.controller, false))
+                event.accepted = true;
+        }
+        Keys.onReleased: event => {
+            if (InspectionKeys.release(event.key))
+                event.accepted = true;
+        }
         Connections {
             target: root.controller
             function onNavigated(): void {
@@ -194,7 +200,7 @@ Item {
                     Layout.fillHeight: true
 
                     // Deliberately not reactive to later failures: it only spares rows created after
-                    // an earlier row's miss from repeating the request (IconFallbacks.js).
+                    // an earlier row's miss from repeating the request (IconFallbacks).
                     readonly property bool knownUnresolved: IconFallbacks.isUnresolved(delegate.iconName)
                     // Once this row's own request fails, stop re-requesting (e.g. on a device pixel
                     // ratio change) until the row's chain itself changes.
@@ -324,9 +330,18 @@ Item {
             }
 
             Keys.priority: Keys.BeforeItem
-            Keys.onShortcutOverride: event => InspectionKeys.overrideShortcut(event, false, root.controller.vim.currentMode === VimModeController.Visual)
-            Keys.onPressed: event => InspectionKeys.press(event, root.controller, false)
-            Keys.onReleased: event => InspectionKeys.release(event)
+            Keys.onShortcutOverride: event => {
+                if (InspectionKeys.overrideShortcut(event.key, false, root.controller.vim.currentMode === VimModeController.Visual))
+                    event.accepted = true;
+            }
+            Keys.onPressed: event => {
+                if (InspectionKeys.press(event.key, event.text, event.modifiers, event.isAutoRepeat, root.controller, false))
+                    event.accepted = true;
+            }
+            Keys.onReleased: event => {
+                if (InspectionKeys.release(event.key))
+                    event.accepted = true;
+            }
 
             onClicked: root.controller.openEntry(delegate.index)
 

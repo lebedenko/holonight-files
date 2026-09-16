@@ -1,8 +1,10 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
+#include "icon_fallbacks.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
 #include "quick_look_presentation_model_test_access.h"
+#include "size_format.h"
 
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -376,6 +378,18 @@ TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
     return folder.fallback != nullptr && folder.fallback->isVisible() && imageReady(folder.fallback);
   }));
   EXPECT_TRUE(rowIcons(bareList, 0).fallback->property("source").toString().endsWith("folder-fallback.svg"));
+  auto* failedIcons = bareEngine.singletonInstance<IconFallbacks*>("HolonightFiles", "IconFallbacks");
+  ASSERT_NE(failedIcons, nullptr);
+  EXPECT_TRUE(failedIcons->isUnresolved("folder/inode-directory"));
+  // Recreate delegates after the failure: the source binding skips the provider entirely.
+  bareController.open(dir.filePath("a-folder"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !bareController.scanning(); }));
+  bareController.open(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] {
+    const auto icons = rowIcons(bareList, 0);
+    return !bareController.scanning() && icons.fallback != nullptr && icons.fallback->isVisible();
+  }));
+  EXPECT_TRUE(rowIcons(bareList, 0).theme->property("source").toUrl().isEmpty());
   // A missing packaged SVG must still leave a visible marker in the fixed icon cell (REQ-F-022).
   auto* bareRowPlaceholder =
       rowIcons(bareList, 0).fallback->parentItem()->findChild<QQuickItem*>("iconFailurePlaceholder");
@@ -805,6 +819,11 @@ TEST(Files, ModalEditingWindowKeyboardAndHighlighting) {
   }
   window->showFullScreen();
   QTest::qWait(60);
+  QTest::keyClick(window, Qt::Key_V);
+  ASSERT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Visual);
+  QTest::keyClick(window, Qt::Key_Escape);
+  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+  EXPECT_EQ(window->visibility(), QWindow::FullScreen);
   QTest::keyClick(window, Qt::Key_Escape);
   EXPECT_NE(window->visibility(), QWindow::FullScreen);
   capture("normal");
@@ -1541,6 +1560,12 @@ TEST(Files, QuickLookImageMetadataLineShowsDimensionsThenSizeOnly) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return gate.waiting.load() > 0; }));
   const auto sizeText = quickLookText(harness, "previewSizeValue");
   ASSERT_FALSE(sizeText.isEmpty());
+  EXPECT_EQ(sizeText, SizeFormat{}.formatSize(harness.controller.preview()->size()));
+  auto* listing = harness.window->findChild<QQuickItem*>("directoryListView");
+  ASSERT_NE(listing, nullptr);
+  auto* row = listing->property("currentItem").value<QQuickItem*>();
+  ASSERT_NE(row, nullptr);
+  EXPECT_EQ(row->property("metadata").toString(), sizeText);
   EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), sizeText);
   EXPECT_FALSE(quickLookText(harness, "quickLookMetadata").contains(QChar(0x00d7)));
   gate.held.store(false);

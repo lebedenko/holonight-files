@@ -1,5 +1,5 @@
 set_source_files_properties(../apps/files/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
-qt_add_executable(files-smoke smoke.cpp directory_model_test.cpp directory_proxy_model_test.cpp
+qt_add_executable(files-smoke smoke.cpp size_format_test.cpp inspection_helpers_test.cpp directory_model_test.cpp directory_proxy_model_test.cpp
   directory_controller_test.cpp directory_performance_test.cpp initial_directory_test.cpp
   thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp preview_service_test.cpp
   quick_look_presentation_model_test.cpp preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp

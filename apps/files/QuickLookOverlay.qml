@@ -1,8 +1,5 @@
 pragma ComponentBehavior: Bound
 
-import "IconFallbacks.js" as IconFallbacks
-import "InspectionKeys.js" as InspectionKeys
-import "SizeFormat.js" as SizeFormat
 import QtQuick
 import QtQuick.Controls.Basic as C
 import QtQuick.Window
@@ -99,9 +96,18 @@ C.Popup {
         objectName: "quickLookContent"
         focus: true
         Keys.priority: Keys.BeforeItem
-        Keys.onShortcutOverride: event => InspectionKeys.overrideShortcut(event, true)
-        Keys.onPressed: event => InspectionKeys.press(event, root.controller, true)
-        Keys.onReleased: event => InspectionKeys.release(event)
+        Keys.onShortcutOverride: event => {
+            if (InspectionKeys.overrideShortcut(event.key, true, false))
+                event.accepted = true;
+        }
+        Keys.onPressed: event => {
+            if (InspectionKeys.press(event.key, event.text, event.modifiers, event.isAutoRepeat, root.controller, true))
+                event.accepted = true;
+        }
+        Keys.onReleased: event => {
+            if (InspectionKeys.release(event.key))
+                event.accepted = true;
+        }
 
         Item {
             id: previewFrame
@@ -161,7 +167,7 @@ C.Popup {
                 objectName: "quickLookIcon"
                 anchors.centerIn: parent
                 size: root.iconExtent
-                // A chain the listing or this icon already failed is not requested again (IconFallbacks.js).
+                // A chain the listing or this icon already failed is not requested again (IconFallbacks).
                 property string failedChain
                 readonly property bool useFallback: IconFallbacks.isUnresolved(root.preview.iconName) || compactIcon.failedChain === root.preview.iconName
                 readonly property bool isFolderIconName: root.preview.iconName === "folder" || root.preview.iconName.startsWith("folder/")

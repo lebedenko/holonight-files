@@ -137,3 +137,7 @@ Quick Look geometry, classification and decode-size coordination now belong to a
 C++ presentation model. QML retains measurement, styling, captions and input
 handling. Automated evidence and pending native 1.5× acceptance are tracked in
 [C++ presentation verification](sdd/quick-look-cpp-presentation/VERIFICATION.md).
+
+Standalone JavaScript helpers have moved to C++ singletons without changing browsing
+behavior. Automated checks and pending native visual acceptance are tracked in
+[helper migration verification](sdd/javascript-to-cpp/VERIFICATION.md).

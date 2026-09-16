@@ -1,7 +1,5 @@
 pragma ComponentBehavior: Bound
 
-import "IconFallbacks.js" as IconFallbacks
-import "SizeFormat.js" as SizeFormat
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -163,7 +161,7 @@ Item {
 
                 readonly property int iconExtent: Math.min(128, Math.floor(width))
                 // Re-read whenever the selected chain changes; a chain the listing already failed is not
-                // requested again (IconFallbacks.js).
+                // requested again (IconFallbacks).
                 readonly property bool knownUnresolved: IconFallbacks.isUnresolved(root.preview.iconName)
                 // Pinned on failure so a resize (new sourceSize) does not re-request a known miss.
                 property string failedChain

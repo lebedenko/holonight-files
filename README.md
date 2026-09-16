@@ -33,6 +33,9 @@ for automated evidence and pending native acceptance.
 Quick Look's C++ presentation model owns classification, retained geometry and
 decode-size requests; QML supplies measurements and renders the card. See the
 [C++ presentation verification](docs/sdd/quick-look-cpp-presentation/VERIFICATION.md).
+Shared size formatting, per-engine failed-icon tracking and inspection key routing
+also use C++ QML singletons; embedded QML handlers retain presentation and event
+acceptance. See [helper migration verification](docs/sdd/javascript-to-cpp/VERIFICATION.md).
 See the [info sidebar redesign verification](docs/sdd/info-sidebar-redesign/VERIFICATION.md)
 for evidence and pending manual acceptance. Image thumbnails are cached per the
 freedesktop Thumbnail Managing Standard in on-demand 128/256/512/1024px tiers
