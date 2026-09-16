@@ -2,6 +2,7 @@
 #include "directory_fixtures.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
+#include "quick_look_presentation_model_test_access.h"
 
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -1735,17 +1736,19 @@ TEST(Files, QuickLookRequestedSizeStableAcrossNavigationButNotResize) {
   ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
   const auto& preview = *harness.controller.preview();
   const auto requested = PreviewServiceTestAccess::quickLookRequestedSize(preview);
-  const auto calls = harness.popup->property("requestedSizeCallCount").toInt();
+  const auto* presentation = harness.window->findChild<QuickLookPresentationModel*>("quickLookPresentation");
+  ASSERT_NE(presentation, nullptr);
+  const auto calls = QuickLookPresentationModelTestAccess::requestedSizeCallCount(*presentation);
   EXPECT_TRUE(requested.isValid() && !requested.isEmpty());
   for (const auto* name : {"02.jpg", "03.jpg"}) {
     ASSERT_TRUE(stepPreviewTo(harness.controller, name));
     QTest::qWait(50);
     EXPECT_EQ(PreviewServiceTestAccess::quickLookRequestedSize(preview), requested);
-    EXPECT_EQ(harness.popup->property("requestedSizeCallCount").toInt(), calls);
+    EXPECT_EQ(QuickLookPresentationModelTestAccess::requestedSizeCallCount(*presentation), calls);
   }
   harness.window->resize(1000, 700);
   ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->width() == 1000; }));
-  EXPECT_GT(harness.popup->property("requestedSizeCallCount").toInt(), calls);
+  EXPECT_GT(QuickLookPresentationModelTestAccess::requestedSizeCallCount(*presentation), calls);
   EXPECT_NE(PreviewServiceTestAccess::quickLookRequestedSize(preview), requested);
 }
 

@@ -132,3 +132,8 @@ Quick Look now uses a centered, captioned preview card and retains the previous
 layout while loading, refitting it when the window resizes. Review remediation
 and pending native 1.5× rendering/latency acceptance are tracked in
 [Quick Look verification](sdd/quick-look-redesign/VERIFICATION.md).
+
+Quick Look geometry, classification and decode-size coordination now belong to a
+C++ presentation model. QML retains measurement, styling, captions and input
+handling. Automated evidence and pending native 1.5× acceptance are tracked in
+[C++ presentation verification](sdd/quick-look-cpp-presentation/VERIFICATION.md).

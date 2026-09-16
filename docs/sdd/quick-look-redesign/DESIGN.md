@@ -1,5 +1,10 @@
 # SDD Design — quick-look-redesign
 
+Implementation note (2026-09-16): the JavaScript geometry helpers and QML settle/request
+functions described below are superseded by the approved
+[C++ presentation design](../quick-look-cpp-presentation/DESIGN.md). This document
+retains the original design history; visual behavior and acceptance requirements remain.
+
 Source of truth: `docs/sdd/quick-look-redesign/SPEC.md`. This document is grounded in the current
 contents of `apps/files/QuickLookOverlay.qml`, `apps/files/PreviewPane.qml`,
 `apps/files/preview_service.h/.cpp`, `apps/files/preview_image_item.h/.cpp`, `tests/smoke.cpp`,
