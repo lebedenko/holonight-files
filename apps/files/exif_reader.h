@@ -20,6 +20,8 @@ struct ExifSummary {
   QString exposureTime;
   QString iso;
   QString focalLength;
+  QString lensModel;
+  QString aperture;  // "f/X.X"
   bool operator==(const ExifSummary&) const = default;
 };
 

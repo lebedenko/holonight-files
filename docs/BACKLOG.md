@@ -65,6 +65,9 @@ consuming application (e.g. holonight-viewer, a future launcher) needs them.
   images only (already being decoded), reading/writing the freedesktop
   Thumbnail Managing Standard cache (`$XDG_CACHE_HOME/thumbnails/`,
   MD5-of-URI keyed, mtime/size-validated) instead of a Files-private cache.
+  The [info sidebar redesign verification](sdd/info-sidebar-redesign/VERIFICATION.md)
+  tracks the mockup-aligned metadata tables, short-window scrolling, and pending native-display
+  and real-camera acceptance.
 - **Stage 3 — Modal editing**: `VimModeController` implements NORMAL/VISUAL/SEARCH/INSERT,
   inline rename/create and synchronous mkdir/touch; `/` fuzzy jump with literal match
   highlighting and NORMAL `n`/`N` repetition; `v`/`V` range selection without filesystem

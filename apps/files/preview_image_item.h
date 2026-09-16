@@ -12,19 +12,25 @@ class PreviewImageItem : public QQuickPaintedItem {
   Q_OBJECT
   QML_ELEMENT
   Q_PROPERTY(QImage image READ image WRITE setImage NOTIFY imageChanged)
+  // Corner radius of the drawn image, in logical pixels; 0 draws square corners.
+  Q_PROPERTY(qreal radius READ radius WRITE setRadius NOTIFY radiusChanged)
  public:
   explicit PreviewImageItem(QQuickItem* parent = nullptr);
   QImage image() const { return image_; }
   void setImage(const QImage& image);
+  qreal radius() const { return radius_; }
+  void setRadius(qreal radius);
   void paint(QPainter* painter) override;
   static QRectF fitRect(QSize image, QSizeF canvas);
 
  signals:
   void imageChanged();
+  void radiusChanged();
 
  protected:
   void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
 
  private:
   QImage image_;
+  qreal radius_ = 0;
 };

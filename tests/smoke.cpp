@@ -1,5 +1,6 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
+#include "preview_fixtures.h"
 
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -8,14 +9,18 @@
 #include <QImage>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
+#include <QQmlContext>
 #include <QQmlEngine>
+#include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QScopeGuard>
 #include <QTest>
+#include <QWheelEvent>
 #include <QtQml/QQmlExtensionPlugin>
 
+#include <atomic>
 #include <gtest/gtest.h>
 #include <iostream>
 #include <memory>
@@ -645,11 +650,6 @@ TEST(Files, InspectionImageSplitterAndPixelSizing) {
   auto* listing = window->findChild<QQuickItem*>("directoryListing");
   ASSERT_NE(pane, nullptr);
   ASSERT_NE(listing, nullptr);
-  QString formattedSize;
-  ASSERT_TRUE(
-      QMetaObject::invokeMethod(pane, "formatSize", Q_RETURN_ARG(QString, formattedSize), Q_ARG(double, 1440054)));
-  EXPECT_TRUE(formattedSize.contains("1440054"));
-  EXPECT_TRUE(formattedSize.contains("MiB"));
   const auto originalWidth = pane->width();
   const auto left = listing->mapToScene(QPointF(listing->width(), listing->height() / 2));
   const auto right = pane->mapToScene(QPointF(0, pane->height() / 2));
@@ -978,4 +978,313 @@ TEST(Files, PromptsCaptureKeysAndCtrlCInEveryModeWithoutChangingEditorState) {
       EXPECT_EQ(editor->property("selectionEnd"), selectionEnd);
     }
   }
+}
+
+namespace {
+
+// Presses j until the preview shows `name` and has settled; fixture names sort in visiting order.
+bool stepPreviewTo(DirectoryController& controller, const QString& name) {
+  for (int step = 0; step < 32; ++step) {
+    if (controller.preview()->name() == name) {
+      return QTest::qWaitFor([&] { return !controller.preview()->busy(); });
+    }
+    controller.handleKey(QStringLiteral("j"));
+    QTest::qWait(1);
+  }
+  return false;
+}
+
+struct BindingLoopCounter {
+  std::atomic_int warnings{0};
+  QtMessageHandler previous = nullptr;
+};
+
+BindingLoopCounter& bindingLoopCounter() {
+  static BindingLoopCounter counter;
+  return counter;
+}
+
+void countBindingLoops(QtMsgType type, const QMessageLogContext& context, const QString& message) {
+  auto& counter = bindingLoopCounter();
+  if (message.contains(QStringLiteral("Binding loop detected"))) {
+    counter.warnings.fetch_add(1);
+  }
+  if (counter.previous != nullptr) {
+    counter.previous(type, context, message);
+  }
+}
+
+}  // namespace
+
+// info-sidebar-redesign REQ-F-005/REQ-F-030: one formatter, so the listing and the sidebar agree.
+TEST(Files, PreviewSidebarSizeMatchesListingAndDirectoriesShowDir) {
+  QTemporaryDir dir(files_test::fixturePattern("sidebar-size"));
+  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
+  ASSERT_FALSE(files_test::writeFile(dir, "large.bin", QByteArray(5 * 1024 * 1024, 'x')).isEmpty());
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  window->resize(1200, 600);
+  controller.open(dir.path());
+  auto* list = window->findChild<QQuickItem*>("directoryListView");
+  auto* sidebarSize = window->findChild<QQuickItem*>("previewSizeValue");
+  ASSERT_NE(list, nullptr);
+  ASSERT_NE(sidebarSize, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && controller.preview()->hasEntry(); }));
+
+  ASSERT_TRUE(stepPreviewTo(controller, "folder"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return sidebarSize->isVisible(); }));
+  EXPECT_EQ(sidebarSize->property("text").toString(), QStringLiteral("Dir"));
+
+  ASSERT_TRUE(stepPreviewTo(controller, "large.bin"));
+  ASSERT_TRUE(QTest::qWaitFor([&] {
+    auto* row = list->property("currentItem").value<QQuickItem*>();
+    return row != nullptr && row->findChild<QQuickItem*>("sizeColumnField") != nullptr &&
+           row->findChild<QQuickItem*>("sizeColumnField")->property("text").toString() != "";
+  }));
+  auto* listingSize = list->property("currentItem").value<QQuickItem*>()->findChild<QQuickItem*>("sizeColumnField");
+  const auto sidebarText = sidebarSize->property("text").toString();
+  EXPECT_EQ(sidebarText, listingSize->property("text").toString());
+  EXPECT_EQ(sidebarText, QStringLiteral("5.0 MB"));
+  EXPECT_FALSE(sidebarText.contains('('));
+}
+
+// info-sidebar-redesign REQ-F-001/002/008/012/019/022, REQ-NF-001/002/005.
+TEST(Files, PreviewSidebarRowsHideWrapAndStayFreeOfBindingLoops) {
+  QTemporaryDir dir(files_test::fixturePattern("sidebar-rows"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::writeJpegWithExifBlob(dir, "01-portrait.jpg", files_test::buildSampleExifBlob(), QSize(60, 120));
+  files_test::writeJpegWithExifBlob(dir, "02-landscape.jpg", files_test::buildSampleExifBlobWithoutLens(),
+                                    QSize(120, 60));
+  files_test::writeJpegWithExifBlob(dir, "03-long-lens.jpg",
+                                    files_test::buildExifBlob({.lensModel = files_test::kLongLensModel}));
+  files_test::writeJpegWithoutExif(dir, "04-no-exif.jpg");
+  files_test::writeSmallText(dir, "05-notes.txt");
+  files_test::writeCorruptJpeg(dir, "06-corrupt.jpg");
+  const auto longName = QStringLiteral("07-") + QString(120, 'a') + QStringLiteral(".txt");
+  ASSERT_FALSE(files_test::writeFile(dir, longName).isEmpty());
+
+  bindingLoopCounter().warnings.store(0);
+  bindingLoopCounter().previous = qInstallMessageHandler(countBindingLoops);
+  const auto restoreHandler = qScopeGuard([] { qInstallMessageHandler(bindingLoopCounter().previous); });
+
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  window->resize(1000, 700);
+  controller.open(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && controller.preview()->hasEntry(); }));
+
+  auto* pane = window->findChild<QQuickItem*>("previewPane");
+  auto* imageArea = window->findChild<QQuickItem*>("previewImageArea");
+  auto* metadataTable = window->findChild<QQuickItem*>("previewMetadataTable");
+  auto* exifTable = window->findChild<QQuickItem*>("previewExifTable");
+  auto* exifHeader = window->findChild<QQuickItem*>("previewExifHeader");
+  auto* lensValue = window->findChild<QQuickItem*>("previewLensValue");
+  auto* apertureValue = window->findChild<QQuickItem*>("previewApertureValue");
+  auto* cameraValue = window->findChild<QQuickItem*>("previewCameraValue");
+  auto* sizeValue = window->findChild<QQuickItem*>("previewSizeValue");
+  auto* dimensionsValue = window->findChild<QQuickItem*>("previewDimensionsValue");
+  auto* errorNotice = window->findChild<QQuickItem*>("previewErrorNotice");
+  auto* fileName = window->findChild<QQuickItem*>("previewFileName");
+  for (auto* item : {pane, imageArea, metadataTable, exifTable, exifHeader, lensValue, apertureValue, cameraValue,
+                     sizeValue, dimensionsValue, errorNotice, fileName}) {
+    ASSERT_NE(item, nullptr);
+  }
+  // Frame height follows the source aspect ratio, capped at 240 (REQ-F-001, REQ-NF-001).
+  const auto frameSettles = [&](double aspect) {
+    return QTest::qWaitFor([&] {
+      return controller.preview()->hasImage() &&
+             qAbs(imageArea->height() - qMin(240.0, qRound(imageArea->width() * aspect) * 1.0)) <= 1;
+    });
+  };
+
+  ASSERT_TRUE(stepPreviewTo(controller, "01-portrait.jpg"));
+  ASSERT_TRUE(frameSettles(2.0));
+  EXPECT_LE(imageArea->height(), 240);
+  EXPECT_TRUE(exifTable->isVisible());
+  EXPECT_TRUE(lensValue->isVisible());
+  EXPECT_EQ(dimensionsValue->property("text").toString(), QStringLiteral("60 \u00d7 120"));
+  EXPECT_EQ(cameraValue->property("text").toString(), QStringLiteral("Holonight TestCam 1000"));
+
+  ASSERT_TRUE(stepPreviewTo(controller, "02-landscape.jpg"));
+  ASSERT_TRUE(frameSettles(0.5));
+  EXPECT_TRUE(exifTable->isVisible());
+  EXPECT_TRUE(cameraValue->isVisible());
+  EXPECT_FALSE(lensValue->isVisible());
+  EXPECT_FALSE(apertureValue->isVisible());
+
+  // At the 220 px minimum a long lens model wraps instead of eliding or overflowing (REQ-NF-002).
+  auto* container = window->findChild<QQuickItem*>("previewContainer");
+  ASSERT_NE(container, nullptr);
+  QQmlProperty(container, QStringLiteral("SplitView.preferredWidth"), qmlContext(container)).write(220);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return pane->width() <= 221; }));
+  ASSERT_TRUE(stepPreviewTo(controller, "03-long-lens.jpg"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return lensValue->isVisible() && lensValue->property("lineCount").toInt() > 1; }));
+  EXPECT_FALSE(lensValue->property("truncated").toBool());
+  const auto paneRight = pane->mapToScene(QPointF(pane->width(), 0)).x();
+  ASSERT_TRUE(
+      QTest::qWaitFor([&] { return lensValue->mapToScene(QPointF(lensValue->width(), 0)).x() <= paneRight + 1; }));
+  EXPECT_LE(lensValue->property("contentWidth").toReal(), lensValue->width() + 1);
+
+  ASSERT_TRUE(stepPreviewTo(controller, "04-no-exif.jpg"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->hasImage(); }));
+  EXPECT_FALSE(exifTable->isVisible());
+  EXPECT_FALSE(exifHeader->isVisible());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return dimensionsValue->isVisible(); }));
+  QTest::qWait(20);  // let the GridLayout polish at this pane width
+  const auto imageMetadataHeight = metadataTable->implicitHeight();
+
+  // A hidden row reserves no space: same pane width, one row fewer (REQ-F-008).
+  ASSERT_TRUE(stepPreviewTo(controller, "05-notes.txt"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !dimensionsValue->isVisible(); }));
+  QTest::qWait(20);
+  EXPECT_TRUE(sizeValue->isVisible());
+  EXPECT_LT(metadataTable->implicitHeight(), imageMetadataHeight);
+
+  ASSERT_TRUE(stepPreviewTo(controller, "06-corrupt.jpg"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return errorNotice->isVisible(); }));
+  EXPECT_TRUE(sizeValue->isVisible());
+
+  ASSERT_TRUE(stepPreviewTo(controller, longName));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return fileName->property("truncated").toBool(); }));
+  EXPECT_EQ(fileName->property("elide").toInt(), int(Qt::ElideMiddle));
+
+  EXPECT_EQ(bindingLoopCounter().warnings.load(), 0);
+}
+
+// REQ-F-004/011/019: both tables keep the mockup's common left edges as rows hide.
+TEST(Files, PreviewSidebarTablesShareLeftAlignedColumns) {
+  QTemporaryDir dir(files_test::fixturePattern("sidebar-alignment"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::writeJpegWithExifBlob(dir, "01-full.jpg", files_test::buildSampleExifBlob());
+  files_test::writeJpegWithExifBlob(dir, "02-partial.jpg", files_test::buildSampleExifBlobWithoutLens());
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  window->resize(1000, 900);
+  controller.open(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && controller.preview()->exifPresent(); }));
+  auto* pane = window->findChild<QQuickItem*>("previewPane");
+  auto* container = window->findChild<QQuickItem*>("previewContainer");
+  auto* metadata = window->findChild<QQuickItem*>("previewMetadataTable");
+  auto* exif = window->findChild<QQuickItem*>("previewExifTable");
+  for (auto* item : {pane, container, metadata, exif}) {
+    ASSERT_NE(item, nullptr);
+  }
+  const auto defaultWidth = container->width();
+  const auto columnWidth = pane->property("labelColumnWidth").toReal();
+  ASSERT_GT(columnWidth, 0);
+  for (const auto width : {defaultWidth, 220.0}) {
+    controller.handleKey(QStringLiteral("g"));
+    controller.handleKey(QStringLiteral("g"));
+    ASSERT_TRUE(
+        QQmlProperty(container, QStringLiteral("SplitView.preferredWidth"), qmlContext(container)).write(width));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return qAbs(container->width() - width) <= 1; }));
+    for (const auto* filename : {"01-full.jpg", "02-partial.jpg"}) {
+      SCOPED_TRACE(QStringLiteral("%1 at %2 px").arg(filename).arg(width).toStdString());
+      ASSERT_TRUE(stepPreviewTo(controller, filename));
+      // Wait for both layouts to polish after selection and width changes.
+      ASSERT_TRUE(
+          QTest::qWaitFor([&] { return qAbs(metadata->width() - exif->width()) <= 1 && metadata->width() > 0; }));
+      QTest::qWait(50);
+      const auto labelLeft = metadata->mapToScene(QPointF()).x();
+      const auto spacing = metadata->property("columnSpacing").toReal();
+      const auto valueLeft = labelLeft + columnWidth + spacing;
+      EXPECT_DOUBLE_EQ(exif->property("columnSpacing").toReal(), spacing);
+      EXPECT_DOUBLE_EQ(pane->property("labelColumnWidth").toReal(), columnWidth);
+      int visibleRows = 0;
+      for (auto* table : {metadata, exif}) {
+        const auto cells = table->childItems();
+        ASSERT_EQ(cells.size() % 2, 0);
+        for (qsizetype row = 0; row < cells.size(); row += 2) {
+          auto* label = cells[row];
+          auto* value = cells[row + 1];
+          ASSERT_EQ(label->isVisible(), value->isVisible());
+          if (!label->isVisible()) {
+            continue;
+          }
+          ++visibleRows;
+          EXPECT_EQ(label->property("horizontalAlignment").toInt(), int(Qt::AlignLeft));
+          EXPECT_EQ(value->property("horizontalAlignment").toInt(), int(Qt::AlignLeft));
+          EXPECT_NEAR(label->mapToScene(QPointF()).x(), labelLeft, 1);
+          EXPECT_NEAR(value->mapToScene(QPointF()).x(), valueLeft, 1);
+          EXPECT_NEAR(label->width(), columnWidth, 1);
+          EXPECT_GE(label->width(), label->implicitWidth());
+          EXPECT_NEAR(label->mapToScene(QPointF()).y(), value->mapToScene(QPointF()).y(), 1);
+          EXPECT_LE(value->mapToItem(table, QPointF(value->width(), 0)).x(), table->width() + 1);
+          EXPECT_FALSE(value->property("truncated").toBool());
+        }
+      }
+      EXPECT_EQ(visibleRows, QString::fromLatin1(filename).contains("full") ? 9 : 7);
+      const auto capture = qEnvironmentVariable("FILES_CAPTURE_PREFIX");
+      if (!capture.isEmpty()) {
+        EXPECT_TRUE(window->grabWindow().save(capture +
+                                              QStringLiteral("-alignment-%1-%2.png").arg(filename).arg(qRound(width))));
+      }
+    }
+  }
+}
+
+TEST(Files, PreviewSidebarScrollsToWrappedExifInShortWindows) {
+  QTemporaryDir dir(files_test::fixturePattern("sidebar-scroll"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::writeJpegWithExifBlob(
+      dir, "01-photo.jpg", files_test::buildExifBlob({.lensModel = files_test::kLongLensModel}), QSize(600, 900));
+  files_test::writeSmallText(dir, "02-notes.txt");
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  window->resize(1000, 500);
+  controller.open(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && controller.preview()->exifPresent(); }));
+  auto* container = window->findChild<QQuickItem*>("previewContainer");
+  auto* scroll = window->findChild<QQuickItem*>("previewScrollArea");
+  auto* lastRow = window->findChild<QQuickItem*>("previewFocalLengthValue");
+  auto* fileName = window->findChild<QQuickItem*>("previewFileName");
+  for (auto* item : {container, scroll, lastRow, fileName}) {
+    ASSERT_NE(item, nullptr);
+  }
+  ASSERT_TRUE(QQmlProperty(container, QStringLiteral("SplitView.preferredWidth"), qmlContext(container)).write(220));
+  ASSERT_TRUE(QTest::qWaitFor(
+      [&] { return container->width() <= 221 && scroll->property("contentHeight").toReal() > scroll->height(); }));
+  EXPECT_TRUE(scroll->clip());
+  EXPECT_GT(lastRow->mapToItem(scroll, QPointF(0, lastRow->height())).y(), scroll->height());
+
+  // Exercise real wheel delivery, not just a programmatic contentY assignment.
+  const auto position = scroll->mapToScene(QPointF(scroll->width() / 2, scroll->height() / 2));
+  for (int step = 0; step < 30 && !scroll->property("atYEnd").toBool(); ++step) {
+    QWheelEvent event(position, window->mapToGlobal(position.toPoint()), QPoint(), QPoint(0, -120), Qt::NoButton,
+                      Qt::NoModifier, Qt::NoScrollPhase, false);
+    // Flickable uses event timestamps to distinguish successive wheel steps.
+    event.setTimestamp(static_cast<ulong>((step + 1) * 200));
+    QCoreApplication::sendEvent(window, &event);
+    QTest::qWait(150);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !scroll->property("moving").toBool(); }));
+  }
+  ASSERT_TRUE(QTest::qWaitFor([&] { return scroll->property("atYEnd").toBool(); }));
+  EXPECT_GE(lastRow->mapToItem(scroll, QPointF()).y(), 0);
+  EXPECT_LE(lastRow->mapToItem(scroll, QPointF(0, lastRow->height())).y(), scroll->height() + 1);
+  EXPECT_EQ(scroll->property("contentX").toReal(), 0);
+
+  ASSERT_TRUE(stepPreviewTo(controller, "02-notes.txt"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return scroll->property("contentY").toReal() == 0; }));
+  EXPECT_GE(fileName->mapToItem(scroll, QPointF()).y(), 0);
+  EXPECT_LE(fileName->mapToItem(scroll, QPointF(0, fileName->height())).y(), scroll->height());
 }

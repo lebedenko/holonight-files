@@ -21,6 +21,7 @@ struct PreviewResult {
   quint64 generation = 0;
   bool final = true;
   QString mime_type;
+  QString mime_type_description;
   QImage image;
   QSize source_pixel_size;
   ExifReader::ExifSummary exif;
@@ -210,6 +211,7 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
   QMimeDatabase mimeDatabase;
   const auto mime = mimeDatabase.mimeTypeForFileNameAndData(path, sniff);
   result.mime_type = mime.name();
+  result.mime_type_description = mime.comment();
   if (mime.name().startsWith(QStringLiteral("image/"))) {
     return decodeImage(file, path, identity, result, cancel, requestedSize, cache, publish, beforeFullDecode);
   }
@@ -437,6 +439,7 @@ void PreviewService::applyResult(const PreviewResult& result) {
   }
   busy_ = !result.final;
   mime_type_ = result.mime_type;
+  mime_type_description_ = result.mime_type_description;
   if (!result.image.isNull() && (display_image_.isNull() || (result.image.width() >= display_image_.width() &&
                                                              result.image.height() >= display_image_.height()))) {
     display_image_ = result.image;
@@ -468,6 +471,7 @@ void PreviewService::resetDisplayState() {
   display_image_ = QImage();
   source_pixel_size_ = QSize();
   exif_ = ExifReader::ExifSummary();
+  mime_type_description_.clear();
   has_text_ = false;
   text_ = TextPreviewService::TextPreviewResult();
   error_ = PreviewError();

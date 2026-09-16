@@ -8,8 +8,10 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QLocale>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -23,6 +25,7 @@
 using files_test::fixturePattern;
 using files_test::writeFile;
 using files_test::writeJpegWithExif;
+using files_test::writeJpegWithExifBlob;
 using files_test::writeLargeText;
 using files_test::writeSmallText;
 
@@ -120,7 +123,90 @@ TEST(PreviewService, DirectoryTargetSetsInodeDirectoryMimeTypeWithNoWorkerDispat
   PreviewService service;
   service.setTarget(dir.filePath("child"), true, -1, QFileInfo(dir.path()).lastModified(), 040755, false, {});
   EXPECT_EQ(service.mimeType(), QStringLiteral("inode/directory"));
+  // Directories never reach the worker, where the description is resolved (DESIGN.md §5.2).
+  EXPECT_TRUE(service.mimeTypeDescription().isEmpty());
   EXPECT_FALSE(service.busy());
+}
+
+TEST(PreviewService, MimeTypeDescriptionIsPopulatedAfterAnImageDecodeCompletes) {
+  QTemporaryDir dir(fixturePattern("preview-mime-description"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeJpegWithExif(dir);
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.mimeType(), QStringLiteral("image/jpeg"));
+  EXPECT_FALSE(service.mimeTypeDescription().isEmpty());
+  EXPECT_NE(service.mimeTypeDescription(), service.mimeType());
+}
+
+TEST(PreviewService, MimeTypeDescriptionIsTheEnglishCommentUnderAPinnedLocale) {
+  QTemporaryDir dir(fixturePattern("preview-mime-description-en"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeJpegWithExif(dir);
+  const auto previous = QLocale();
+  QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
+  const auto restore = qScopeGuard([&] { QLocale::setDefault(previous); });
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.mimeTypeDescription(), QStringLiteral("JPEG image"));
+}
+
+TEST(PreviewService, MimeTypeDescriptionIsNonEmptyUnderAFrenchLocale) {
+  QTemporaryDir dir(fixturePattern("preview-mime-description-fr"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeJpegWithExif(dir);
+  const auto previous = QLocale();
+  QLocale::setDefault(QLocale(QLocale::French, QLocale::France));
+  const auto restore = qScopeGuard([&] { QLocale::setDefault(previous); });
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  // Only non-emptiness: the translated string depends on the installed shared-mime-info.
+  EXPECT_FALSE(service.mimeTypeDescription().isEmpty());
+}
+
+TEST(PreviewService, ExifLensModelAndApertureSurfaceFromTheExtendedSummary) {
+  QTemporaryDir dir(fixturePattern("preview-exif-lens"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeJpegWithExif(dir);
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_TRUE(service.exifPresent());
+  EXPECT_EQ(service.exifLensModel(), QStringLiteral("HN 24-70mm F2.8"));
+  EXPECT_EQ(service.exifAperture(), QStringLiteral("f/8.0"));
+}
+
+TEST(PreviewService, ExifLensModelAndApertureStayEmptyWhenTheTagsAreAbsent) {
+  QTemporaryDir dir(fixturePattern("preview-exif-no-lens"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeJpegWithExifBlob(dir, "no-lens.jpg", files_test::buildSampleExifBlobWithoutLens());
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_TRUE(service.exifPresent());
+  EXPECT_TRUE(service.exifLensModel().isEmpty());
+  EXPECT_TRUE(service.exifAperture().isEmpty());
+}
+
+TEST(PreviewService, ExifLensModelAndApertureClearOnRetarget) {
+  QTemporaryDir dir(fixturePattern("preview-exif-lens-clear"));
+  ASSERT_TRUE(dir.isValid());
+  const auto image = writeJpegWithExif(dir);
+  const auto text = writeSmallText(dir);
+  PreviewService service;
+  setTargetFromFile(service, image);
+  ASSERT_TRUE(settled(service));
+  ASSERT_FALSE(service.exifLensModel().isEmpty());
+  setTargetFromFile(service, text);
+  EXPECT_TRUE(service.exifLensModel().isEmpty());
+  EXPECT_TRUE(service.exifAperture().isEmpty());
+  EXPECT_TRUE(service.mimeTypeDescription().isEmpty());
+  ASSERT_TRUE(settled(service));
+  EXPECT_TRUE(service.exifLensModel().isEmpty());
+  EXPECT_TRUE(service.exifAperture().isEmpty());
 }
 
 TEST(PreviewService, StatFailedTargetIsReportedAsAnErrorWithoutWorkerDispatch) {

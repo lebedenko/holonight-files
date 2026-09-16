@@ -9,7 +9,9 @@
 #include <libexif/exif-ifd.h>
 #include <libexif/exif-log.h>
 #include <libexif/exif-tag.h>
+#include <libexif/exif-utils.h>
 #include <memory>
+#include <optional>
 
 namespace ExifReader {
 namespace {
@@ -26,6 +28,8 @@ void silentLog(ExifLog* log, ExifLogCode code, const char* domain, const char* f
 QString entryValue(ExifContent* content, ExifTag tag);
 QString normalizeExposureTime(QString value);
 QString normalizeFocalLength(QString value);
+std::optional<ExifRational> rationalEntryValue(ExifContent* content, ExifTag tag);
+QString formatAperture(const std::optional<ExifRational>& value);
 
 const unsigned char* asUnsignedChar(const char* bytes) {
   return static_cast<const unsigned char*>(static_cast<const void*>(bytes));
@@ -110,7 +114,10 @@ ExifSummary parseExifBlob(const QByteArray& payload) {
   const auto exposureTime = entryValue(data->ifd[EXIF_IFD_EXIF], EXIF_TAG_EXPOSURE_TIME);
   const auto focalLength = entryValue(data->ifd[EXIF_IFD_EXIF], EXIF_TAG_FOCAL_LENGTH);
   const auto iso = entryValue(data->ifd[EXIF_IFD_EXIF], EXIF_TAG_ISO_SPEED_RATINGS);
-  if (make.isEmpty() && model.isEmpty() && exposureTime.isEmpty() && focalLength.isEmpty() && iso.isEmpty()) {
+  const auto lensModel = entryValue(data->ifd[EXIF_IFD_EXIF], EXIF_TAG_LENS_MODEL);
+  const auto aperture = formatAperture(rationalEntryValue(data->ifd[EXIF_IFD_EXIF], EXIF_TAG_FNUMBER));
+  if (make.isEmpty() && model.isEmpty() && exposureTime.isEmpty() && focalLength.isEmpty() && iso.isEmpty() &&
+      lensModel.isEmpty() && aperture.isEmpty()) {
     return summary;
   }
   summary.present = true;
@@ -119,6 +126,8 @@ ExifSummary parseExifBlob(const QByteArray& payload) {
   summary.exposureTime = normalizeExposureTime(exposureTime);
   summary.iso = iso;
   summary.focalLength = normalizeFocalLength(focalLength);
+  summary.lensModel = lensModel;
+  summary.aperture = aperture;
   return summary;
 }
 
@@ -252,6 +261,30 @@ QString normalizeFocalLength(QString value) {
     value.remove(value.size() - 4, 2);
   }
   return value;
+}
+
+// FNumber is a single RATIONAL. libexif's exif_entry_get_value() renders it through its own
+// aperture formatting, so the raw numerator/denominator are read and formatted here instead.
+std::optional<ExifRational> rationalEntryValue(ExifContent* content, ExifTag tag) {
+  if (content == nullptr) {
+    return std::nullopt;
+  }
+  auto* entry = exif_content_get_entry(content, tag);
+  if (entry == nullptr || entry->format != EXIF_FORMAT_RATIONAL || entry->components != 1 || entry->data == nullptr ||
+      entry->size < 8) {
+    return std::nullopt;
+  }
+  const auto byteOrder = content->parent != nullptr ? exif_data_get_byte_order(content->parent) : EXIF_BYTE_ORDER_INTEL;
+  return exif_get_rational(entry->data, byteOrder);
+}
+
+// "f/X.X", one decimal place. A zero denominator is treated as an absent tag, not an error.
+QString formatAperture(const std::optional<ExifRational>& value) {
+  if (!value || value->denominator == 0) {
+    return {};
+  }
+  const double fNumber = static_cast<double>(value->numerator) / static_cast<double>(value->denominator);
+  return QStringLiteral("f/%1").arg(fNumber, 0, 'f', 1);
 }
 
 }  // namespace

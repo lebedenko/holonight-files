@@ -14,6 +14,7 @@
 #include <libexif/exif-ifd.h>
 #include <libexif/exif-tag.h>
 #include <libexif/exif-utils.h>
+#include <optional>
 
 // Fixture builders for PreviewService/ThumbnailService/ExifReader/TextPreviewService tests,
 // mirroring directory_fixtures.h's philosophy: real files on a real QTemporaryDir filesystem,
@@ -99,21 +100,44 @@ inline quint32 readBigEndianU32(const QByteArray& bytes, qsizetype at) {
 
 }  // namespace detail
 
-// Builds a small, realistic EXIF/TIFF byte blob (Make/Model in IFD0, ExposureTime/FocalLength/ISO
-// in the Exif sub-IFD) using libexif's own writer — the same tags ExifReader::read() extracts.
+// Which tags buildExifBlob() writes. The defaults are the full sample set: Make/Model in IFD0,
+// and ExposureTime/FocalLength/ISO/LensModel/FNumber in the Exif sub-IFD — the same tags
+// ExifReader::read() extracts. Tests switch groups off to build partial-EXIF variants.
+struct SampleExifTags {
+  bool camera = true;                                        // Make + Model
+  bool exposure = true;                                      // ExposureTime + FocalLength + ISO
+  QByteArray lensModel = "HN 24-70mm F2.8";                  // empty omits the tag
+  std::optional<ExifRational> fNumber = ExifRational{8, 1};  // nullopt omits the tag
+};
+
+// A lens model long enough to overflow the value column at the 220 px minimum pane width.
+inline const QByteArray kLongLensModel =
+    "HN Ultra Wide Telephoto Zoom 12-400mm F2.8-5.6 Optical Stabilization Weather Sealed Edition";
+
+// Builds a small, realistic EXIF/TIFF byte blob using libexif's own writer.
 // Note: exif_data_save_data() already prepends the 6-byte "Exif\0\0" marker (i.e. it returns
 // JPEG-APP1-payload-ready bytes, not a bare TIFF blob) — callers that need the bare TIFF blob
 // (e.g. a PNG eXIf chunk) must strip the first 6 bytes themselves.
-inline QByteArray buildSampleExifBlob() {
+inline QByteArray buildExifBlob(const SampleExifTags& tags) {
   ExifData* data = exif_data_new();
   exif_data_set_option(data, EXIF_DATA_OPTION_FOLLOW_SPECIFICATION);
   const auto order = EXIF_BYTE_ORDER_INTEL;
   exif_data_set_byte_order(data, order);
-  detail::setAsciiEntry(data, EXIF_IFD_0, EXIF_TAG_MAKE, "Holonight");
-  detail::setAsciiEntry(data, EXIF_IFD_0, EXIF_TAG_MODEL, "TestCam 1000");
-  detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_EXPOSURE_TIME, ExifRational{1, 250}, order);
-  detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_FOCAL_LENGTH, ExifRational{50, 1}, order);
-  detail::setShortEntry(data, EXIF_IFD_EXIF, EXIF_TAG_ISO_SPEED_RATINGS, 100, order);
+  if (tags.camera) {
+    detail::setAsciiEntry(data, EXIF_IFD_0, EXIF_TAG_MAKE, "Holonight");
+    detail::setAsciiEntry(data, EXIF_IFD_0, EXIF_TAG_MODEL, "TestCam 1000");
+  }
+  if (tags.exposure) {
+    detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_EXPOSURE_TIME, ExifRational{1, 250}, order);
+    detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_FOCAL_LENGTH, ExifRational{50, 1}, order);
+    detail::setShortEntry(data, EXIF_IFD_EXIF, EXIF_TAG_ISO_SPEED_RATINGS, 100, order);
+  }
+  if (!tags.lensModel.isEmpty()) {
+    detail::setAsciiEntry(data, EXIF_IFD_EXIF, EXIF_TAG_LENS_MODEL, tags.lensModel);
+  }
+  if (tags.fNumber) {
+    detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_FNUMBER, *tags.fNumber, order);
+  }
   unsigned char* rawData = nullptr;
   unsigned int rawSize = 0;
   exif_data_save_data(data, &rawData, &rawSize);
@@ -122,6 +146,14 @@ inline QByteArray buildSampleExifBlob() {
   exif_data_unref(data);
   return blob;
 }
+
+inline QByteArray buildSampleExifBlob() { return buildExifBlob({}); }
+
+// Every sample tag except LensModel and FNumber.
+inline QByteArray buildSampleExifBlobWithoutLens() { return buildExifBlob({.lensModel = {}, .fNumber = std::nullopt}); }
+
+// Only LensModel and FNumber — no camera or exposure tags.
+inline QByteArray buildLensAndApertureOnlyExifBlob() { return buildExifBlob({.camera = false, .exposure = false}); }
 
 // Inserts a JPEG APP1 segment (exifBlob is already "Exif\0\0"-prefixed by buildSampleExifBlob())
 // immediately after the SOI marker, exactly the shape ExifReader::read()'s libexif call expects
@@ -168,6 +200,17 @@ inline QString writeJpegWithExif(const QTemporaryDir& dir, const QString& name =
     return path;
   }
   file.write(spliceJpegExif(renderJpegBytes(), buildSampleExifBlob()));
+  return path;
+}
+
+inline QString writeJpegWithExifBlob(const QTemporaryDir& dir, const QString& name, const QByteArray& exifBlob,
+                                     QSize size = QSize(64, 48)) {
+  const auto path = dir.filePath(name);
+  QFile file(path);
+  if (!file.open(QIODevice::WriteOnly)) {
+    return path;
+  }
+  file.write(spliceJpegExif(renderJpegBytes(size), exifBlob));
   return path;
 }
 

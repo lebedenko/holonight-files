@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import "IconFallbacks.js" as IconFallbacks
 import "InspectionKeys.js" as InspectionKeys
+import "SizeFormat.js" as SizeFormat
 import QtQuick
 import QtQuick.Layouts
 import Holonight.Core
@@ -33,21 +34,6 @@ Item {
         visible: false
         role: HnTypographyRole.Caption
         rawText: "9999-99-99 99:99"
-    }
-
-    function formatSize(bytes: real): string {
-        if (bytes < 0)
-            return "";
-        if (bytes < 1024)
-            return qsTr("%1 B").arg(bytes);
-        const units = ["KB", "MB", "GB", "TB"];
-        let value = bytes / 1024;
-        let unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.length - 1) {
-            value /= 1024;
-            unitIndex += 1;
-        }
-        return qsTr("%1 %2").arg(value.toFixed(1)).arg(units[unitIndex]);
     }
 
     Rectangle {
@@ -192,7 +178,7 @@ Item {
             highlighted: ListView.isCurrentItem || (root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(delegate.index))
             title: name
             subtitle: statFailed ? statError : (isDir ? qsTr("Folder") : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm"))
-            metadata: isDir ? "" : root.formatSize(size)
+            metadata: isDir ? "" : SizeFormat.formatSize(size)
             trailingContent: statFailed ? errorIndicator : null
 
             contentItem: RowLayout {
@@ -306,7 +292,7 @@ Item {
                 HnLabel {
                     objectName: "sizeColumnField"
                     role: HnTypographyRole.Caption
-                    rawText: delegate.isDir ? "" : root.formatSize(delegate.size)
+                    rawText: delegate.isDir ? "" : SizeFormat.formatSize(delegate.size)
                     color: HoloniightPalette.textSecondary
                     horizontalAlignment: Text.AlignRight
                     visible: root.showSize

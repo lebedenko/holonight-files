@@ -50,6 +50,9 @@ class PreviewService : public QObject {
   Q_PROPERTY(QDateTime modified READ modified NOTIFY changed)
   Q_PROPERTY(QString permissions READ permissions NOTIFY changed)
   Q_PROPERTY(QString mimeType READ mimeType NOTIFY changed)
+  // QMimeType::comment() for the sniffed type ("JPEG image"), locale-dependent. Resolved on the
+  // worker only, so it stays empty for directories, FIFOs and stat-failed entries.
+  Q_PROPERTY(QString mimeTypeDescription READ mimeTypeDescription NOTIFY changed)
   Q_PROPERTY(bool busy READ busy NOTIFY changed)
   Q_PROPERTY(bool hasImage READ hasImage NOTIFY changed)
   Q_PROPERTY(QImage image READ image NOTIFY changed)
@@ -60,6 +63,8 @@ class PreviewService : public QObject {
   Q_PROPERTY(QString exifExposureTime READ exifExposureTime NOTIFY changed)
   Q_PROPERTY(QString exifIso READ exifIso NOTIFY changed)
   Q_PROPERTY(QString exifFocalLength READ exifFocalLength NOTIFY changed)
+  Q_PROPERTY(QString exifLensModel READ exifLensModel NOTIFY changed)
+  Q_PROPERTY(QString exifAperture READ exifAperture NOTIFY changed)
   Q_PROPERTY(bool hasText READ hasText NOTIFY changed)
   Q_PROPERTY(QString textContent READ textContent NOTIFY changed)
   Q_PROPERTY(bool textTruncated READ textTruncated NOTIFY changed)
@@ -79,6 +84,7 @@ class PreviewService : public QObject {
   QDateTime modified() const { return modified_; }
   QString permissions() const { return permissions_; }
   QString mimeType() const { return mime_type_; }
+  QString mimeTypeDescription() const { return mime_type_description_; }
   bool busy() const { return busy_; }
   bool hasImage() const { return !display_image_.isNull(); }
   QImage image() const { return display_image_; }
@@ -89,6 +95,8 @@ class PreviewService : public QObject {
   QString exifExposureTime() const { return exif_.exposureTime; }
   QString exifIso() const { return exif_.iso; }
   QString exifFocalLength() const { return exif_.focalLength; }
+  QString exifLensModel() const { return exif_.lensModel; }
+  QString exifAperture() const { return exif_.aperture; }
   bool hasText() const { return has_text_; }
   QString textContent() const { return text_.content; }
   bool textTruncated() const { return text_.wasTruncated; }
@@ -137,6 +145,7 @@ class PreviewService : public QObject {
   QDateTime modified_;
   QString permissions_;
   QString mime_type_;
+  QString mime_type_description_;
   bool is_dir_ = false;
   quint32 mode_ = 0;
   bool stat_failed_ = false;

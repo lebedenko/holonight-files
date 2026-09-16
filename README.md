@@ -14,11 +14,18 @@ activation requires NORMAL mode without a prompt or Quick Look. Navigation
 returns focus to the listing and participates in history. See the
 [Places verification](docs/sdd/places/VERIFICATION.md).
 Stage 2 ("Inspect a selection") is also implemented: a docked preview pane
-(resizable via a divider next to the listing) shows name/size/date/
-permissions/MIME type, an EXIF summary for images, and a text preview with a
-truncation notice for large files; press `Space` to open the same preview in
-a full-window Quick Look overlay, which live-updates as you move with `j`/`k`
-and closes on `Space`/`Escape`. Image thumbnails are cached per the
+(resizable via a divider next to the listing, down to 220px) shows a rounded
+thumbnail sized to the image's aspect ratio (up to 240px tall), the name, a
+human-readable type ("JPEG image"), and a Size/Dimensions/Modified table.
+Images with EXIF data add a Camera/Lens/Aperture/Exposure/ISO/Focal length
+table. Both tables share left-aligned label and value columns. Rows without a value are hidden, and long values wrap instead of being
+cut off. The sidebar scrolls vertically when its content exceeds the window height.
+Size text matches the listing exactly, and folders show `Dir`. The
+sidebar no longer shows text content or permissions; press `Space` to open
+Quick Look, a full-window preview that includes the text of text files. It
+live-updates as you move with `j`/`k` and closes on `Space`/`Escape`.
+See the [info sidebar redesign verification](docs/sdd/info-sidebar-redesign/VERIFICATION.md)
+for evidence and pending manual acceptance. Image thumbnails are cached per the
 freedesktop Thumbnail Managing Standard in on-demand 128/256/512/1024px tiers
 under `$XDG_CACHE_HOME/thumbnails/`. Only the needed tier is generated; adequate
 larger entries are reused. Views above 1024px decode directly into memory.

@@ -13,9 +13,13 @@
 #include <gtest/gtest.h>
 #include <thread>
 
+using files_test::buildExifBlob;
+using files_test::buildLensAndApertureOnlyExifBlob;
+using files_test::buildSampleExifBlobWithoutLens;
 using files_test::fixturePattern;
 using files_test::writeCorruptJpeg;
 using files_test::writeJpegWithExif;
+using files_test::writeJpegWithExifBlob;
 using files_test::writeJpegWithoutExif;
 using files_test::writePngWithExif;
 
@@ -193,6 +197,57 @@ TEST(ExifReader, ExtractsAllFieldsFromAJpegWithExif) {
   EXPECT_EQ(summary.exposureTime, "1/250s");
   EXPECT_EQ(summary.focalLength, "50mm");
   EXPECT_EQ(summary.iso, "100");
+  EXPECT_EQ(summary.lensModel, "HN 24-70mm F2.8");
+  EXPECT_EQ(summary.aperture, "f/8.0");
+}
+
+TEST(ExifReader, PartialExifWithOnlyLensAndApertureIsStillPresent) {
+  QTemporaryDir dir(fixturePattern("exif-lens-only"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeJpegWithExifBlob(dir, "lens-only.jpg", buildLensAndApertureOnlyExifBlob());
+  const auto summary = ExifReader::read(path, "image/jpeg");
+  EXPECT_TRUE(summary.present);
+  EXPECT_TRUE(summary.make.isEmpty());
+  EXPECT_TRUE(summary.exposureTime.isEmpty());
+  EXPECT_EQ(summary.lensModel, "HN 24-70mm F2.8");
+  EXPECT_EQ(summary.aperture, "f/8.0");
+}
+
+TEST(ExifReader, MissingLensAndApertureLeaveThoseFieldsEmptyWithoutFailingTheRead) {
+  QTemporaryDir dir(fixturePattern("exif-no-lens"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeJpegWithExifBlob(dir, "no-lens.jpg", buildSampleExifBlobWithoutLens());
+  const auto summary = ExifReader::read(path, "image/jpeg");
+  EXPECT_TRUE(summary.present);
+  EXPECT_EQ(summary.make, "Holonight");
+  EXPECT_EQ(summary.iso, "100");
+  EXPECT_TRUE(summary.lensModel.isEmpty());
+  EXPECT_TRUE(summary.aperture.isEmpty());
+}
+
+TEST(ExifReader, ApertureFormatsNonIntegerFStopsToOneDecimalPlace) {
+  QTemporaryDir dir(fixturePattern("exif-aperture"));
+  ASSERT_TRUE(dir.isValid());
+  const auto wide = writeJpegWithExifBlob(dir, "f28.jpg",
+                                          buildExifBlob({.fNumber = ExifRational{.numerator = 28, .denominator = 10}}));
+  const auto mid = writeJpegWithExifBlob(dir, "f63.jpg",
+                                         buildExifBlob({.fNumber = ExifRational{.numerator = 63, .denominator = 10}}));
+  const auto fast = writeJpegWithExifBlob(dir, "f14.jpg",
+                                          buildExifBlob({.fNumber = ExifRational{.numerator = 14, .denominator = 10}}));
+  EXPECT_EQ(ExifReader::read(wide, "image/jpeg").aperture, "f/2.8");
+  EXPECT_EQ(ExifReader::read(mid, "image/jpeg").aperture, "f/6.3");
+  EXPECT_EQ(ExifReader::read(fast, "image/jpeg").aperture, "f/1.4");
+}
+
+TEST(ExifReader, ZeroDenominatorApertureIsTreatedAsAbsent) {
+  QTemporaryDir dir(fixturePattern("exif-aperture-zero"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeJpegWithExifBlob(dir, "f-zero.jpg",
+                                          buildExifBlob({.fNumber = ExifRational{.numerator = 8, .denominator = 0}}));
+  const auto summary = ExifReader::read(path, "image/jpeg");
+  EXPECT_TRUE(summary.present);
+  EXPECT_TRUE(summary.aperture.isEmpty());
+  EXPECT_EQ(summary.lensModel, "HN 24-70mm F2.8");
 }
 
 TEST(ExifReader, JpegWithoutExifReportsNotPresent) {
