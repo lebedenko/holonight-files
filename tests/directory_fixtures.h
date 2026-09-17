@@ -1,5 +1,7 @@
 #pragma once
 
+#include "places_model.h"
+
 #include <QDir>
 #include <QFile>
 #include <QString>
@@ -120,7 +122,7 @@ class ScopedEnvironmentVariable {
 // fixture requirement).
 class ScopedXdgDataHome : public ScopedEnvironmentVariable {
  public:
-  explicit ScopedXdgDataHome(const QString& path) : ScopedEnvironmentVariable("XDG_DATA_HOME", path) {}
+  explicit ScopedXdgDataHome(const std::optional<QString>& path) : ScopedEnvironmentVariable("XDG_DATA_HOME", path) {}
 };
 
 // app-configuration: isolate config.toml/state.toml from the real ~/.config and ~/.local/state.
@@ -133,5 +135,16 @@ class ScopedXdgStateHome : public ScopedEnvironmentVariable {
  public:
   explicit ScopedXdgStateHome(const std::optional<QString>& path) : ScopedEnvironmentVariable("XDG_STATE_HOME", path) {}
 };
+
+// Row index whose PathRole equals path, or -1. Places rows aren't at fixed indices once bookmarks
+// or a variable number of XDG entries are involved, so tests locate a row by path instead.
+inline int findPlaceRow(const PlacesModel& model, const QString& path) {
+  for (int i = 0; i < model.rowCount(); ++i) {
+    if (model.data(model.index(i), PlacesModel::PathRole).toString() == path) {
+      return i;
+    }
+  }
+  return -1;
+}
 
 }  // namespace files_test

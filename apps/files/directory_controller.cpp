@@ -35,6 +35,7 @@ DirectoryController::DirectoryController(QObject* parent)
   connect(&model_, &DirectoryModel::changed, this, &DirectoryController::changed);
   connect(&model_, &DirectoryModel::shutdownFinished, this, &DirectoryController::handleWorkerShutdown);
   connect(&model_, &DirectoryModel::restoreValidated, this, &DirectoryController::handleRestoreValidated);
+  connect(&places_, &PlacesModel::bookmarkRecheckResolved, this, &DirectoryController::handleBookmarkRecheckResolved);
   connect(&model_, &DirectoryModel::loadSucceeded, this,
           [this](const QString& path, LocationClassifier::Classification classification) {
             last_location_tracker_.recordLoad(path, classification);
@@ -798,6 +799,27 @@ void DirectoryController::handleWorkerShutdown() {
     // Classification deliveries precede the directory worker's shutdown notification.
     saveState();
     emit shutdownFinished();
+  }
+}
+void DirectoryController::activateBookmark(int placesRow) {
+  if (vim_.currentMode() != VimModeController::Mode::Normal || tasks_.hasPrompt() || quick_look_open_) {
+    return;
+  }
+  if (const auto placeId = places_.recheckBookmark(placesRow); placeId != 0) {
+    bookmark_dispatch_navigation_serial_[placeId] = navigation_serial_;
+  }
+}
+void DirectoryController::handleBookmarkRecheckResolved(quint64 placeId, const QString& path, bool available) {
+  const auto dispatchSerial = bookmark_dispatch_navigation_serial_.take(placeId);
+  if (dispatchSerial != navigation_serial_ || vim_.currentMode() != VimModeController::Mode::Normal ||
+      tasks_.hasPrompt() || quick_look_open_) {
+    return;  // Navigation or an interaction guard intervened while the check was pending.
+  }
+  if (available) {
+    open(path);
+  } else {
+    status_message_ = tr("Location is currently unavailable");
+    emit changed();
   }
 }
 void DirectoryController::openRestoreCandidate(const QString& path) {

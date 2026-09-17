@@ -6,13 +6,46 @@ acceptance status is tracked in [browse-folder verification](docs/sdd/browse-fol
 sorted directory listing with a fixed places sidebar, live filesystem
 watching, and NORMAL-mode keyboard navigation (`j`/`k`, count-prefixed
 motions, `gg`/`G`, `h`/`l`/Enter, `.` for hidden files, `s` to reverse filename sorting).
-The compact Places sidebar includes Home, Documents, Downloads, Pictures, Music
-and Videos, plus `~/Projects` when that directory exists at startup. Missing
-configured folders stay visible and use the normal directory error display.
-Tab into Places, move with Up/Down, and activate with Enter/Space or a click;
-activation requires NORMAL mode without a prompt or Quick Look. Navigation
-returns focus to the listing and participates in history. See the
-[Places verification](docs/sdd/places/VERIFICATION.md).
+The compact Places sidebar has three sources, in this order: Home; the XDG user
+directories declared in `${XDG_CONFIG_HOME:-~/.config}/user-dirs.dirs`
+(Desktop, Documents, Downloads, Pictures, Music, Videos, Projects, Templates,
+Public — shown only for the ones actually configured, with no fallback if
+that file is missing, so `~/Projects` appears only via its own
+`XDG_PROJECTS_DIR` entry or a bookmark); and user-managed bookmarks read from
+`$XDG_DATA_HOME/holonight/holonight-files/places.toml` (`~/.local/share/...` when
+`XDG_DATA_HOME` is unset, empty, or not absolute). Files never creates,
+writes, or watches either file — edit them yourself (or with
+`xdg-user-dirs-update` for the first) and restart to apply changes.
+
+`places.toml` looks like:
+
+```toml
+version = 1
+
+[[bookmarks]]
+path = "/mnt/data"
+name = "Data Drive"   # optional; defaults to the path's directory name
+
+[[bookmarks]]
+path = "~/Projects/side-project"
+```
+
+Each bookmark's `path` must be absolute or `~/`-relative; other forms (a bare
+relative path, `$VAR` references) are rejected. A missing `places.toml` is
+silent. An unparseable file, a missing or wrong `version`, an invalid entry,
+or an unknown key each produce one warning on stderr; other valid bookmarks
+still load. A directory configured via `user-dirs.dirs` that turns out not to
+exist is simply hidden, exactly like a bookmark whose target does not exist
+except that a missing bookmark stays listed, shown muted with a warning badge
+("unavailable"); activating it re-checks the path and either navigates or
+shows a status message, without disturbing the current folder. Two entries
+resolving to the same cleaned path are deduplicated (Home, then XDG, then
+bookmarks in file order — the first wins); symlinks are never canonicalised
+for this comparison. Tab into Places, move with Up/Down, and activate with
+Enter/Space or a click; activation requires NORMAL mode without a prompt or
+Quick Look. Navigation returns focus to the listing and participates in
+history. See the [places sources specification](docs/sdd/places-sources/SPEC.md)
+and the prior [Places verification](docs/sdd/places/VERIFICATION.md).
 Stage 2 ("Inspect a selection") is also implemented: a docked preview pane
 (resizable via a divider next to the listing, down to 220px) shows a rounded
 thumbnail sized to the image's aspect ratio (up to 240px tall), the name, a

@@ -45,6 +45,15 @@ class TomlDocument {
   std::vector<QString> rootKeys() const;
   int sectionLine(const QString& section) const;
 
+  // Size of the top-level [[key]] array of tables; 0 if key is absent or not an array of tables.
+  int arrayOfTablesSize(const QString& key) const;
+  // field's value inside the array-of-tables key's index'th entry (0-based); Missing if absent.
+  TomlValue arrayOfTablesValue(const QString& key, int index, const QString& field) const;
+  // That entry's own keys, in document order (for unknown-key detection).
+  std::vector<QString> arrayOfTablesKeys(const QString& key, int index) const;
+  // 1-based line where that entry's table begins; 0 if absent.
+  int arrayOfTablesLine(const QString& key, int index) const;
+
   // A TOML basic string literal, quoted and escaped, for writers that emit TOML text themselves.
   static QString quoteString(const QString& text);
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "location_classifier.h"
+#include "places/place_availability_checker.h"
 #include "warning_sink.h"
 
 #include <QHash>
@@ -10,6 +11,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -68,6 +70,40 @@ class FakeLocationClassifier : public LocationClassifier {
  private:
   Classification result_;
   std::chrono::milliseconds delay_;
+  mutable std::mutex mutex_;
+  mutable std::vector<QThread*> threads_;
+  mutable QStringList paths_;
+};
+
+// Records the calling thread and queried path per call (REQ-NF-001's "ran off the GUI thread"
+// assertion); supports per-path result overrides and, optionally, a per-path QSemaphore that
+// blocks the call until the test releases it (REQ-F-021/REQ-NF-002's hung-check scenarios).
+class FakePlaceAvailabilityChecker : public PlaceAvailabilityChecker {
+ public:
+  [[nodiscard]] bool isAvailable(const QString& path) const override {
+    {
+      const std::scoped_lock lock(mutex_);
+      threads_.push_back(QThread::currentThread());
+      paths_.append(path);
+    }
+    if (const auto gate = gates.value(path)) {
+      gate->acquire();
+    }
+    return overrides.value(path, default_result);
+  }
+  bool default_result = true;
+  QHash<QString, bool> overrides;
+  QHash<QString, std::shared_ptr<QSemaphore>> gates;
+  std::vector<QThread*> threads() const {
+    const std::scoped_lock lock(mutex_);
+    return threads_;
+  }
+  QStringList paths() const {
+    const std::scoped_lock lock(mutex_);
+    return paths_;
+  }
+
+ private:
   mutable std::mutex mutex_;
   mutable std::vector<QThread*> threads_;
   mutable QStringList paths_;

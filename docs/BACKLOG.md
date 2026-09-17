@@ -117,6 +117,12 @@ The compact Places sidebar adds themed icons, keyboard activation and optional
 `~/Projects`; acceptance evidence is in [Places verification](sdd/places/VERIFICATION.md).
 Bookmark management, Trash, Devices and Network sidebar sections remain deferred.
 
+Places sources now read XDG user directories and manually maintained bookmarks.
+Async delivery review fixes and pending native acceptance are tracked in the
+[Places sources verification](sdd/places-sources/VERIFICATION.md). The fixed
+`~/Projects` fallback is replaced by `XDG_PROJECTS_DIR` or an explicit bookmark;
+in-app bookmark management remains deferred.
+
 Build parallelism uses CMake/Ninja automatic defaults with explicit compiler-job
 overrides; provider and quality-check stages remain sequential. See the
 [build parallelism verification](sdd/automatic-parallelism/VERIFICATION.md).

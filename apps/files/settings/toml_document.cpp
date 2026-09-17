@@ -85,6 +85,14 @@ TomlDocument::ParseResult TomlDocument::parseFile(const QString& path) {
   return parse(file.readAll());
 }
 
+namespace {
+// nullptr if key is absent from root or is not an array of tables.
+const toml::array* arrayOfTables(const toml::table& root, const QString& key) {
+  const auto* array = root[utf8View(key.toUtf8())].as_array();
+  return (array != nullptr && array->is_array_of_tables()) ? array : nullptr;
+}
+}  // namespace
+
 TomlValue TomlDocument::value(const QString& section, const QString& key) const {
   if (!impl_) {
     return {};
@@ -131,6 +139,56 @@ int TomlDocument::sectionLine(const QString& section) const {
   }
   const auto* node = impl_->root.get(utf8View(section.toUtf8()));
   return node == nullptr ? 0 : static_cast<int>(node->source().begin.line);
+}
+
+int TomlDocument::arrayOfTablesSize(const QString& key) const {
+  if (!impl_) {
+    return 0;
+  }
+  const auto* array = arrayOfTables(impl_->root, key);
+  return array == nullptr ? 0 : static_cast<int>(array->size());
+}
+
+TomlValue TomlDocument::arrayOfTablesValue(const QString& key, int index, const QString& field) const {
+  if (!impl_ || index < 0) {
+    return {};
+  }
+  const auto* array = arrayOfTables(impl_->root, key);
+  if (array == nullptr || static_cast<std::size_t>(index) >= array->size()) {
+    return {};
+  }
+  const auto* entry = array->get(static_cast<std::size_t>(index))->as_table();
+  if (entry == nullptr) {
+    return {};
+  }
+  const auto* node = entry->get(utf8View(field.toUtf8()));
+  return node == nullptr ? TomlValue{} : toValue(*node);
+}
+
+std::vector<QString> TomlDocument::arrayOfTablesKeys(const QString& key, int index) const {
+  if (!impl_ || index < 0) {
+    return {};
+  }
+  const auto* array = arrayOfTables(impl_->root, key);
+  if (array == nullptr || static_cast<std::size_t>(index) >= array->size()) {
+    return {};
+  }
+  const auto* entry = array->get(static_cast<std::size_t>(index))->as_table();
+  if (entry == nullptr) {
+    return {};
+  }
+  return keysInSourceOrder(*entry, [](const toml::node&) { return true; });
+}
+
+int TomlDocument::arrayOfTablesLine(const QString& key, int index) const {
+  if (!impl_ || index < 0) {
+    return 0;
+  }
+  const auto* array = arrayOfTables(impl_->root, key);
+  if (array == nullptr || static_cast<std::size_t>(index) >= array->size()) {
+    return 0;
+  }
+  return static_cast<int>(array->get(static_cast<std::size_t>(index))->source().begin.line);
 }
 
 QString TomlDocument::quoteString(const QString& text) {

@@ -62,6 +62,34 @@ TEST(TomlDocument, QuotedStringsRoundTrip) {
   EXPECT_EQ(result.document.value({}, "value").string_value, awkward);
 }
 
+TEST(TomlDocument, ArrayOfTablesAccessorsCoverPresentAbsentAndOutOfRange) {
+  const auto result = TomlDocument::parse(
+      "version = 1\n\n"
+      "[[bookmarks]]\n"
+      "path = \"/mnt/data\"\n"
+      "name = \"Data\"\n\n"
+      "[[bookmarks]]\n"
+      "path = \"~/Media\"\n"
+      "custom_icon = \"star\"\n");
+  ASSERT_TRUE(result.diagnostics.empty());
+  const auto& doc = result.document;
+  ASSERT_EQ(doc.arrayOfTablesSize("bookmarks"), 2);
+  EXPECT_EQ(doc.arrayOfTablesSize("version"), 0);  // not an array key
+  EXPECT_EQ(doc.arrayOfTablesSize("absent"), 0);   // absent key
+  EXPECT_EQ(doc.arrayOfTablesValue("bookmarks", 0, "path").string_value, "/mnt/data");
+  EXPECT_EQ(doc.arrayOfTablesValue("bookmarks", 0, "name").string_value, "Data");
+  EXPECT_EQ(doc.arrayOfTablesValue("bookmarks", 0, "absent").type, TomlValue::Type::Missing);
+  EXPECT_EQ(doc.arrayOfTablesValue("bookmarks", 2, "path").type, TomlValue::Type::Missing);  // out of range
+  EXPECT_EQ(doc.arrayOfTablesValue("absent", 0, "path").type, TomlValue::Type::Missing);
+  EXPECT_EQ(doc.arrayOfTablesKeys("bookmarks", 0), (std::vector<QString>{"path", "name"}));
+  EXPECT_EQ(doc.arrayOfTablesKeys("bookmarks", 1), (std::vector<QString>{"path", "custom_icon"}));
+  EXPECT_TRUE(doc.arrayOfTablesKeys("bookmarks", 2).empty());
+  EXPECT_GT(doc.arrayOfTablesLine("bookmarks", 0), 0);
+  EXPECT_GT(doc.arrayOfTablesLine("bookmarks", 1), doc.arrayOfTablesLine("bookmarks", 0));
+  EXPECT_EQ(doc.arrayOfTablesLine("bookmarks", 2), 0);
+  EXPECT_EQ(doc.arrayOfTablesLine("absent", 0), 0);
+}
+
 // SPEC.md REQ-F-028: toml++ is included by exactly one translation unit and no header.
 TEST(TomlDocument, TomlLibraryIsIncludedOnlyByTheAdapter) {
   const QDir apps(QStringLiteral(FILES_SOURCE_DIR "/apps"));

@@ -61,24 +61,39 @@ Item {
         required property string name
         required property string path
         required property string iconName
+        required property int origin
+        required property int status
+        required property bool startsBookmarks
         width: list.width
-        height: button.implicitHeight
+        // One extra compact-spacing token before the first bookmark row (REQ-F-028), on top of
+        // ListView's own inter-row spacing; the visible delegate stays anchored to the bottom so
+        // the gap appears above it, not inside it.
+        readonly property real extraGap: row.startsBookmarks ? HnMetrics.internalSpacing(HnControlSize.Compact) : 0
+        height: button.implicitHeight + row.extraGap
 
         function activate(): void {
-            if (root.activationEnabled)
+            if (!root.activationEnabled)
+                return;
+            if (row.origin === PlacesModel.Bookmark)
+                root.controller.activateBookmark(row.index);
+            else
                 root.controller.open(row.path);
         }
 
         HnListDelegate {
             id: button
             objectName: "placeDelegate"
-            anchors.fill: parent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            opacity: row.status === PlacesModel.Unavailable ? 0.5 : 1.0
             title: row.name
             sizeRole: HnControlSize.Compact
             focusPolicy: Qt.NoFocus
             highlighted: root.controller.currentPath === row.path
             leadingContentAlignment: Qt.AlignVCenter
             onClicked: row.activate()
+            Accessible.description: row.status === PlacesModel.Unavailable ? qsTr("unavailable") : ""
             leadingContent: Item {
                 implicitWidth: HnMetrics.iconSize(HnControlSize.Compact)
                 implicitHeight: implicitWidth
@@ -98,9 +113,35 @@ Item {
                     visible: themeIcon.hasError
                 }
             }
+            trailingContent: row.status === PlacesModel.Unavailable ? warningBadge : null
+        }
+        Component {
+            id: warningBadge
+            Item {
+                implicitWidth: HnMetrics.iconSize(HnControlSize.Compact)
+                implicitHeight: implicitWidth
+                HnIcon {
+                    id: warningThemeIcon
+                    objectName: "placeWarningThemeIcon"
+                    anchors.centerIn: parent
+                    size: parent.implicitWidth
+                    source: "image://icon/dialog-warning"
+                    visible: !hasError
+                }
+                HnIcon {
+                    objectName: "placeWarningFallbackIcon"
+                    anchors.centerIn: parent
+                    size: parent.implicitWidth
+                    source: warningThemeIcon.hasError ? "qrc:/qt/qml/HolonightFiles/icons/warning-fallback.svg" : ""
+                    visible: warningThemeIcon.hasError
+                }
+            }
         }
         Rectangle {
-            anchors.fill: parent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: button.height
             color: "transparent"
             border.width: HnMetrics.focusBorderWidth
             border.color: HoloniightPalette.borderFocus

@@ -10,7 +10,9 @@ qt_add_qml_module(files-ui
     settings/settings_registry.h settings/settings_registry.cpp settings/general_settings.h settings/general_settings.cpp
     settings/app_settings.h settings/app_settings.cpp state/state_store.h state/state_store.cpp
     state/last_location_tracker.h state/last_location_tracker.cpp
-  RESOURCES size_format.h size_format.cpp icon_fallbacks.h icon_fallbacks.cpp inspection_keys.h inspection_keys.cpp icons/folder-fallback.svg icons/generic-file-fallback.svg icons/go-back.svg icons/go-forward.svg
+    places/user_dirs_parser.h places/user_dirs_parser.cpp places/bookmark_store.h places/bookmark_store.cpp
+    places/place_availability_checker.h places/place_availability_checker.cpp
+  RESOURCES size_format.h size_format.cpp icon_fallbacks.h icon_fallbacks.cpp inspection_keys.h inspection_keys.cpp icons/folder-fallback.svg icons/generic-file-fallback.svg icons/go-back.svg icons/go-forward.svg icons/warning-fallback.svg
   NO_IMPORT_SCAN
   NO_GENERATE_PLUGIN_SOURCE
   NO_PLUGIN_OPTIONAL

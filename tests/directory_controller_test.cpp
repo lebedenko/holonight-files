@@ -23,6 +23,8 @@ using files_test::fixturePattern;
 using files_test::runningAsRoot;
 using files_test::writeFile;
 
+using files_test::findPlaceRow;
+
 namespace {
 bool settled(const DirectoryController& controller) {
   return QTest::qWaitFor([&] { return !controller.scanning(); });
@@ -1752,5 +1754,152 @@ TEST(DirectoryController, ShutdownSavesAcceptedLoadWithPendingClassification) {
     EXPECT_EQ(succeeded.count(), 1);
     EXPECT_EQ(savedAtShutdown, local.path());
     EXPECT_TRUE(warnings.messages.isEmpty());
+  }
+}
+
+TEST(DirectoryController, ActivateBookmarkNavigatesOnceTheDirectoryExists) {
+  QTemporaryDir home(fixturePattern("bookmark-available"));
+  ASSERT_TRUE(home.isValid());
+  const files_test::ScopedXdgDataHome guard(home.path());
+  QDir(home.path()).mkpath("holonight/holonight-files");
+  writeFile(home, "holonight/holonight-files/places.toml",
+            "version = 1\n[[bookmarks]]\npath = \"" + home.filePath("target").toUtf8() + "\"\n");
+  DirectoryController controller;
+  const auto row = findPlaceRow(*controller.places(), home.filePath("target"));
+  ASSERT_GE(row, 0);
+  ASSERT_TRUE(QTest::qWaitFor([&] {
+    return controller.places()
+               ->data(controller.places()->index(row), PlacesModel::StatusRole)
+               .value<PlacesModel::Status>() == PlacesModel::Status::Unavailable;
+  }));
+  ASSERT_TRUE(QDir(home.path()).mkdir("target"));
+  controller.activateBookmark(row);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.currentPath() == home.filePath("target"); }));
+  EXPECT_EQ(
+      controller.places()->data(controller.places()->index(row), PlacesModel::StatusRole).value<PlacesModel::Status>(),
+      PlacesModel::Status::Available);
+  EXPECT_EQ(DirectoryControllerTestAccess::jumpList(controller).size(), 1);  // history gained an entry
+}
+
+TEST(DirectoryController, ActivateBookmarkShowsUnavailableMessageWithoutNavigatingWhenDirectoryMissing) {
+  QTemporaryDir home(fixturePattern("bookmark-unavailable"));
+  ASSERT_TRUE(home.isValid());
+  const files_test::ScopedXdgDataHome guard(home.path());
+  QDir(home.path()).mkpath("holonight/holonight-files");
+  ASSERT_TRUE(QDir(home.path()).mkdir("target"));
+  writeFile(home, "holonight/holonight-files/places.toml",
+            "version = 1\n[[bookmarks]]\npath = \"" + home.filePath("target").toUtf8() + "\"\n");
+  DirectoryController controller;
+  const auto row = findPlaceRow(*controller.places(), home.filePath("target"));
+  ASSERT_GE(row, 0);
+  ASSERT_TRUE(QTest::qWaitFor([&] {
+    return controller.places()
+               ->data(controller.places()->index(row), PlacesModel::StatusRole)
+               .value<PlacesModel::Status>() == PlacesModel::Status::Available;
+  }));
+  const auto before = controller.currentPath();
+  ASSERT_TRUE(QDir().rmdir(home.filePath("target")));
+  controller.activateBookmark(row);
+  ASSERT_TRUE(QTest::qWaitFor(
+      [&] { return controller.statusMessage() == QStringLiteral("Location is currently unavailable"); }));
+  EXPECT_EQ(controller.currentPath(), before);
+  EXPECT_EQ(
+      controller.places()->data(controller.places()->index(row), PlacesModel::StatusRole).value<PlacesModel::Status>(),
+      PlacesModel::Status::Unavailable);
+}
+
+TEST(DirectoryController, NavigationBetweenActivationAndResolutionSuppressesBookmarkSideEffect) {
+  QTemporaryDir home(fixturePattern("bookmark-stale"));
+  ASSERT_TRUE(home.isValid());
+  const files_test::ScopedXdgDataHome guard(home.path());
+  QDir(home.path()).mkpath("holonight/holonight-files");
+  ASSERT_TRUE(QDir(home.path()).mkdir("target"));
+  ASSERT_TRUE(QDir(home.path()).mkdir("elsewhere"));
+  writeFile(home, "holonight/holonight-files/places.toml",
+            "version = 1\n[[bookmarks]]\npath = \"" + home.filePath("target").toUtf8() + "\"\n");
+  DirectoryController controller;
+  ASSERT_TRUE(openSettled(controller, home.filePath("elsewhere")));
+  const auto row = findPlaceRow(*controller.places(), home.filePath("target"));
+  ASSERT_GE(row, 0);
+  controller.activateBookmark(row);  // dispatches an async recheck, snapshotting navigation_serial_
+  controller.open(home.path());      // a real navigation intervenes before that recheck can resolve
+  ASSERT_TRUE(settled(controller));
+  const auto pathAfterInterveningNavigation = controller.currentPath();
+  QTest::qWait(200);  // give the async recheck time to actually resolve and (attempt to) deliver
+  EXPECT_EQ(controller.currentPath(), pathAfterInterveningNavigation);
+}
+
+TEST(DirectoryController, TwoBookmarkActivationsAddNoWarnings) {
+  QTemporaryDir home(fixturePattern("bookmark-warnings"));
+  ASSERT_TRUE(home.isValid());
+  const files_test::ScopedXdgDataHome guard(home.path());
+  QDir(home.path()).mkpath("holonight/holonight-files");
+  ASSERT_TRUE(QDir(home.path()).mkdir("target"));
+  writeFile(home, "holonight/holonight-files/places.toml",
+            "version = 1\n[[bookmarks]]\npath = \"" + home.filePath("target").toUtf8() + "\"\n");
+  DirectoryController controller;
+  files_test::RecordingWarningSink warnings;
+  DirectoryControllerTestAccess::setWarningSink(controller,
+                                                std::shared_ptr<WarningSink>(&warnings, [](WarningSink*) {}));
+  const auto row = findPlaceRow(*controller.places(), home.filePath("target"));
+  ASSERT_GE(row, 0);
+  ASSERT_TRUE(QTest::qWaitFor([&] {
+    return controller.places()
+               ->data(controller.places()->index(row), PlacesModel::StatusRole)
+               .value<PlacesModel::Status>() != PlacesModel::Status::Checking;
+  }));
+  controller.activateBookmark(row);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.currentPath() == home.filePath("target"); }));
+  controller.activateBookmark(row);
+  QTest::qWait(50);
+  EXPECT_TRUE(warnings.messages.isEmpty());
+}
+
+TEST(DirectoryController, BookmarkCompletionPreservesInterveningInteractionGuards) {
+  for (const bool available : {false, true}) {
+    for (const auto* key : {"v", "/", "i", " ", "D"}) {
+      SCOPED_TRACE(key);
+      SCOPED_TRACE(available);
+      QTemporaryDir home(fixturePattern("bookmark-interaction"));
+      ASSERT_TRUE(home.isValid());
+      const files_test::ScopedXdgDataHome guard(home.path());
+      ASSERT_TRUE(QDir(home.path()).mkpath("holonight/holonight-files"));
+      ASSERT_TRUE(QDir(home.path()).mkdir("current"));
+      ASSERT_FALSE(writeFile(home, "current/file.txt", "preview").isEmpty());
+      if (available) {
+        ASSERT_TRUE(QDir(home.path()).mkdir("target"));
+      }
+      writeFile(home, "holonight/holonight-files/places.toml",
+                "version = 1\n[[bookmarks]]\npath = \"" + home.filePath("target").toUtf8() + "\"\n");
+      DirectoryController controller;
+      ASSERT_TRUE(openSettled(controller, home.filePath("current")));
+      const auto row = findPlaceRow(*controller.places(), home.filePath("target"));
+      ASSERT_GE(row, 0);
+      QSignalSpy resolved(controller.places(), &PlacesModel::bookmarkRecheckResolved);
+      controller.activateBookmark(row);
+      // Both operations precede queued result delivery, regardless of worker timing.
+      ASSERT_TRUE(controller.handleKey(key));
+      const auto mode = controller.vim()->currentMode();
+      const auto quickLook = controller.quickLookOpen();
+      const auto prompt = controller.tasks()->hasPrompt();
+      ASSERT_TRUE(mode != VimModeController::Mode::Normal || quickLook || prompt);
+      if (mode == VimModeController::Mode::Insert) {
+        controller.vim()->setInsertText("unfinished-name.txt");
+      }
+      const auto status = controller.statusMessage();
+      ASSERT_TRUE(QTest::qWaitFor([&] { return resolved.count() == 1; }));
+      EXPECT_EQ(controller.currentPath(), home.filePath("current"));
+      EXPECT_EQ(controller.statusMessage(), status);
+      EXPECT_EQ(controller.vim()->currentMode(), mode);
+      EXPECT_EQ(controller.quickLookOpen(), quickLook);
+      EXPECT_EQ(controller.tasks()->hasPrompt(), prompt);
+      if (mode == VimModeController::Mode::Insert) {
+        EXPECT_EQ(controller.vim()->insertText(), "unfinished-name.txt");
+      }
+      EXPECT_EQ(controller.places()
+                    ->data(controller.places()->index(row), PlacesModel::StatusRole)
+                    .value<PlacesModel::Status>(),
+                available ? PlacesModel::Status::Available : PlacesModel::Status::Unavailable);
+    }
   }
 }

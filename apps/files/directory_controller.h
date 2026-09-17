@@ -14,6 +14,7 @@
 
 #include <QElapsedTimer>
 #include <QFileSystemWatcher>
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QtQml/qqmlregistration.h>
@@ -54,6 +55,10 @@ class DirectoryController : public QObject {
   bool canGoBack() const { return jump_list_.canGoBack(); }
   bool canGoForward() const { return jump_list_.canGoForward(); }
   Q_INVOKABLE void open(const QString& path, const QString& fallbackReason = {});
+  // Bookmark activation entry point (SPEC.md REQ-F-022): PlaceRow calls this instead of open()
+  // for origin === Bookmark rows. Home/XDG rows keep calling open(path) directly (unchanged --
+  // both are guaranteed available whenever shown, REQ-C-005/REQ-C-006).
+  Q_INVOKABLE void activateBookmark(int placesRow);
   Q_INVOKABLE void navigateInto(int proxyRow);
   Q_INVOKABLE void navigateParent();
   Q_INVOKABLE void openEntry(int proxyRow);
@@ -116,6 +121,7 @@ class DirectoryController : public QObject {
   bool canPreviewSelection() const;
   void handleWorkerShutdown();
   void handleRestoreValidated(const QString& path, RestoreOutcome outcome);
+  void handleBookmarkRecheckResolved(quint64 placeId, const QString& path, bool available);
   void saveState();
   QString entryNameAt(int proxyRow) const;
   void beginRename(VimModeController::InsertKind kind);
@@ -162,6 +168,11 @@ class DirectoryController : public QObject {
   quint64 restore_serial_ = 0;
   QString restore_candidate_;
   QString pending_restore_name_;
+  // navigation_serial_ snapshot at the moment each place's currently-outstanding recheck was
+  // dispatched; consulted on resolution to drop a stale navigate/message side effect if a real
+  // navigation happened in between. Keyed by place id, not row: a bookmark's row index shifts
+  // when an earlier XDG row is removed by a late startup check.
+  QHash<quint64, quint64> bookmark_dispatch_navigation_serial_;
   // True from a navigation until its first settled load; cleared by any explicit cursor move.
   bool awaiting_initial_load_ = false;
   QString status_message_;

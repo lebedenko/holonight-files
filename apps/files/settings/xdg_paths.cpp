@@ -23,4 +23,15 @@ QString stateDirPath() {
   return baseDirectory("XDG_STATE_HOME", QStringLiteral(".local/state")) + u'/' + QLatin1String(kApplicationDirectory);
 }
 QString stateFilePath() { return stateDirPath() + QStringLiteral("/state.toml"); }
+QString userDirsFilePath() {
+  // Not under kApplicationDirectory: user-dirs.dirs is a shared file other apps also read/write.
+  return baseDirectory("XDG_CONFIG_HOME", QStringLiteral(".config")) + QStringLiteral("/user-dirs.dirs");
+}
+QString dataDirPath() {
+  // Under an extra holonight/ segment (unlike config/state): shared data-home namespace for
+  // holonight-* applications, reserved for future cross-app data sharing.
+  return baseDirectory("XDG_DATA_HOME", QStringLiteral(".local/share")) + QStringLiteral("/holonight/") +
+         QLatin1String(kApplicationDirectory);
+}
+QString placesFilePath() { return dataDirPath() + QStringLiteral("/places.toml"); }
 }  // namespace XdgPaths
