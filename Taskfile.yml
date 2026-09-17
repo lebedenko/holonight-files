@@ -53,12 +53,12 @@ tasks:
   format:
     desc: Format C++ and QML sources
     cmds:
-      - clang-format -i apps/files/*.cpp apps/files/*.h tests/*.cpp tests/*.h
+      - clang-format -i apps/files/*.cpp apps/files/*.h apps/files/settings/* apps/files/state/* tests/*.cpp tests/*.h
       - /usr/lib/qt6/bin/qmlformat -i apps/files/Main.qml apps/files/AppHeaderBar.qml apps/files/DirectoryListing.qml apps/files/PlacesPanel.qml apps/files/PreviewPane.qml apps/files/QuickLookOverlay.qml apps/files/ModeStatusBar.qml
   format-check:
     desc: Check C++ and QML formatting
     cmds:
-      - clang-format --dry-run --Werror apps/files/*.cpp apps/files/*.h tests/*.cpp tests/*.h
+      - clang-format --dry-run --Werror apps/files/*.cpp apps/files/*.h apps/files/settings/* apps/files/state/* tests/*.cpp tests/*.h
       - bash scripts/check-qml-format.sh
   tidy:
     desc: Run C++ clang-tidy checks

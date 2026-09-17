@@ -6,8 +6,11 @@
 #include "jump_list.h"
 #include "places_model.h"
 #include "preview_service.h"
+#include "state/last_location_tracker.h"
+#include "state/state_store.h"
 #include "task_manager.h"
 #include "vim_mode_controller.h"
+#include "warning_sink.h"
 
 #include <QElapsedTimer>
 #include <QFileSystemWatcher>
@@ -77,6 +80,12 @@ class DirectoryController : public QObject {
   Q_INVOKABLE void commitSearchEditing();
   Q_INVOKABLE void cancelSearchEditing();
   Q_INVOKABLE void shutdown();
+  // C++-only startup wiring from main() (SPEC.md REQ-C-006). While enabled, shutdown() saves the
+  // session's last Local folder to state.toml (REQ-F-017/018).
+  void configureRestore(bool enabled) { restore_enabled_ = enabled; }
+  // Validates path on the worker thread, then opens it, or home with the matching fallback reason
+  // (REQ-F-012/013). Discarded if any other navigation happens first.
+  void openRestoreCandidate(const QString& path);
 
  signals:
   void changed();
@@ -106,6 +115,8 @@ class DirectoryController : public QObject {
   void syncPreviewTarget();
   bool canPreviewSelection() const;
   void handleWorkerShutdown();
+  void handleRestoreValidated(const QString& path, RestoreOutcome outcome);
+  void saveState();
   QString entryNameAt(int proxyRow) const;
   void beginRename(VimModeController::InsertKind kind);
   void beginCreate(VimModeController::InsertKind kind);
@@ -141,6 +152,15 @@ class DirectoryController : public QObject {
   QFileSystemWatcher watcher_;
   QString current_path_;
   JumpList jump_list_;
+  LastLocationTracker last_location_tracker_;
+  StateStore state_store_;
+  std::shared_ptr<WarningSink> warnings_ = std::make_shared<StderrWarningSink>();
+  bool restore_enabled_ = false;
+  bool state_saved_ = false;
+  // Counts openInternal() calls; a restore result arriving after any other navigation is stale.
+  quint64 navigation_serial_ = 0;
+  quint64 restore_serial_ = 0;
+  QString restore_candidate_;
   QString pending_restore_name_;
   // True from a navigation until its first settled load; cleared by any explicit cursor move.
   bool awaiting_initial_load_ = false;

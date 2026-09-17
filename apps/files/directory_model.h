@@ -1,5 +1,8 @@
 #pragma once
 
+#include "location_classifier.h"
+#include "restore_outcome.h"
+
 #include <QAbstractListModel>
 #include <QDateTime>
 #include <QHash>
@@ -73,15 +76,24 @@ class DirectoryModel : public QAbstractListModel {
   // No-op if row is out of range or isn't a placeholder row.
   void removePlaceholderRow(int row);
   void shutdown();
+  // Stats and classifies a stored last location on the worker thread (SPEC.md REQ-F-016) and
+  // reports the result through restoreValidated().
+  void validateForRestore(const QString& path);
  signals:
   void changed();
   void shutdownFinished();
+  void restoreValidated(const QString& path, RestoreOutcome outcome);
+  // A load() (never a refresh()) whose successful final batch was accepted by the UI;
+  // classification may arrive after refresh, navigation or shutdown begins (REQ-F-019).
+  void loadSucceeded(const QString& path, LocationClassifier::Classification classification);
 
  private:
   friend struct DirectoryModelTestAccess;
   // Snapshotted on the UI thread before dispatch; no public filesystem abstraction.
   std::function<void()> before_open_for_test_;
   int read_error_after_for_test_ = -1;
+  // Shared with in-flight worker tasks, so replacing it never invalidates a running call.
+  std::shared_ptr<const LocationClassifier> classifier_;
   struct Batch {
     quint64 generation = 0;
     bool diff = false;

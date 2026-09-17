@@ -5,6 +5,11 @@ qt_add_qml_module(files-ui
   IMPORT_PATH "${HOLONIGHT_QML_IMPORT_PATH}"
   QML_FILES Main.qml AppHeaderBar.qml PlacesPanel.qml DirectoryListing.qml PreviewPane.qml QuickLookOverlay.qml ModeStatusBar.qml
   SOURCES size_format.h size_format.cpp icon_fallbacks.h icon_fallbacks.cpp inspection_keys.h inspection_keys.cpp quick_look_presentation_model.h quick_look_presentation_model.cpp initial_directory.h initial_directory.cpp directory_model.h directory_model.cpp directory_proxy_model.h directory_proxy_model.cpp places_model.h places_model.cpp directory_controller.h directory_controller.cpp window_state.h preview_service.h preview_service.cpp thumbnail_service.h thumbnail_service.cpp exif_reader.h exif_reader.cpp text_preview_service.h text_preview_service.cpp preview_image_item.h preview_image_item.cpp vim_mode_controller.h vim_mode_controller.cpp name_validator.h name_validator.cpp fuzzy_matcher.h fuzzy_matcher.cpp clipboard_register.h file_operation_service.h file_operation_service.cpp trash_service.h trash_service.cpp task_manager.h task_manager.cpp icon_name_resolver.h icon_name_resolver.cpp jump_list.h jump_list.cpp icon_image_provider.h icon_image_provider.cpp
+    warning_sink.h warning_sink.cpp location_classifier.h location_classifier.cpp restore_outcome.h restore_outcome.cpp
+    settings/xdg_paths.h settings/xdg_paths.cpp settings/toml_document.h settings/toml_document.cpp settings/setting.h
+    settings/settings_registry.h settings/settings_registry.cpp settings/general_settings.h settings/general_settings.cpp
+    settings/app_settings.h settings/app_settings.cpp state/state_store.h state/state_store.cpp
+    state/last_location_tracker.h state/last_location_tracker.cpp
   RESOURCES size_format.h size_format.cpp icon_fallbacks.h icon_fallbacks.cpp inspection_keys.h inspection_keys.cpp icons/folder-fallback.svg icons/generic-file-fallback.svg icons/go-back.svg icons/go-forward.svg
   NO_IMPORT_SCAN
   NO_GENERATE_PLUGIN_SOURCE
@@ -14,6 +19,8 @@ qt_add_qml_module(files-ui
 # plugin must not be optional: Qt skips optional plugins of modules whose types are already registered.
 target_sources(files-uiplugin PRIVATE holonight_files_plugin.cpp)
 target_link_libraries(files-ui PUBLIC Qt6::Quick Qt6::QuickControls2 Qt6::Svg HolonightQt::Core HolonightQt::Controls PkgConfig::EXIF)
+# Only settings/toml_document.cpp includes the TOML headers (REQ-F-028); linked, not header-only (REQ-C-009).
+target_link_libraries(files-ui PRIVATE tomlplusplus::tomlplusplus)
 target_include_directories(files-ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 qt_add_executable(hn-files main.cpp)
 qt_add_resources(hn-files files-config PREFIX "/" FILES qtquickcontrols2.conf)

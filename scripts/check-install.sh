@@ -10,6 +10,8 @@ for file in bin/hn-files share/applications/org.holonight.Files.desktop \
 done
 test ! -e "$stage/usr/bin/holonight-files"
 test ! -L "$stage/usr/bin/holonight-files"
+# config.toml/state.toml parsing links the system tomlplusplus shared library.
+readelf -d "$stage/usr/bin/hn-files" | rg 'libtomlplusplus\.so\.3'
 desktop="$stage/usr/share/applications/org.holonight.Files.desktop"
 desktop-file-validate "$desktop"
 rg -Fx 'Exec=hn-files -- %f' "$desktop"
@@ -30,7 +32,10 @@ unset QML2_IMPORT_PATH QT_QUICK_CONTROLS_STYLE QT_QUICK_CONTROLS_CONF QT_QUICK_C
 cd "$stage"
 QT_QPA_PLATFORM=offscreen "$stage/usr/bin/hn-files" --version
 set +e
-QT_QPA_PLATFORM=offscreen QSG_RHI_BACKEND=software timeout 3 "$stage/usr/bin/hn-files" > runtime.log 2>&1
+# Isolated config/state, so a user's own config.toml can't add warnings to the log.
+mkdir -p "$stage/xdg/state"
+XDG_CONFIG_HOME="$stage/xdg/config" XDG_STATE_HOME="$stage/xdg/state" \
+  QT_QPA_PLATFORM=offscreen QSG_RHI_BACKEND=software timeout 3 "$stage/usr/bin/hn-files" > runtime.log 2>&1
 status=$?
 set -e
 cat runtime.log

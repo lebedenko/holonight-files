@@ -6,10 +6,13 @@ qt_add_executable(files-smoke smoke.cpp size_format_test.cpp inspection_helpers_
   name_validator_test.cpp fuzzy_matcher_test.cpp vim_mode_controller_test.cpp
   clipboard_register_test.cpp file_operation_service_test.cpp trash_service_test.cpp
   task_manager_test.cpp directory_controller_file_ops_test.cpp icon_name_resolver_test.cpp icon_image_provider_test.cpp
-  jump_list_test.cpp history_navigation_window_test.cpp places_model_test.cpp places_window_test.cpp)
+  jump_list_test.cpp history_navigation_window_test.cpp places_model_test.cpp places_window_test.cpp
+  warning_sink_test.cpp xdg_paths_test.cpp toml_document_test.cpp settings_registry_test.cpp app_settings_test.cpp
+  location_classifier_test.cpp state_store_test.cpp last_location_tracker_test.cpp)
 qt_add_resources(files-smoke test-config PREFIX "/" BASE ../apps/files FILES ../apps/files/qtquickcontrols2.conf)
 target_link_libraries(files-smoke PRIVATE files-ui files-uiplugin Qt6::Test GTest::gtest)
-target_compile_definitions(files-smoke PRIVATE FILES_FIXTURE_DIR="${CMAKE_CURRENT_BINARY_DIR}/fixtures/files")
+target_compile_definitions(files-smoke PRIVATE FILES_FIXTURE_DIR="${CMAKE_CURRENT_BINARY_DIR}/fixtures/files"
+  FILES_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME files-smoke COMMAND files-smoke)
 set_tests_properties(files-smoke PROPERTIES ENVIRONMENT
   "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QML_IMPORT_PATH=${HOLONIGHT_QML_IMPORT_PATH};LD_LIBRARY_PATH=${HOLONIGHT_DEPENDENCY_PREFIX}/${CMAKE_INSTALL_LIBDIR}")

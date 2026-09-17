@@ -2,6 +2,7 @@
 
 #include "directory_fixtures.h"
 #include "directory_model_test_access.h"
+#include "settings_fixtures.h"
 
 #include <QAbstractItemModelTester>
 #include <QElapsedTimer>
@@ -9,6 +10,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 #include <gtest/gtest.h>
 
@@ -409,4 +411,151 @@ TEST(DirectoryModel, RefreshEmitsDataChangedWhenAnEntrysIconChanges) {
   ASSERT_TRUE(settled(model));
   EXPECT_EQ(changedRows.count(), 1);
   EXPECT_EQ(model.data(model.index(0), DirectoryModel::IconNameRole).toString(), "folder/inode-directory");
+}
+
+namespace {
+using Classification = LocationClassifier::Classification;
+
+std::optional<RestoreOutcome> validate(DirectoryModel& model, const QString& path) {
+  QSignalSpy validated(&model, &DirectoryModel::restoreValidated);
+  model.validateForRestore(path);
+  if (!validated.wait(5000)) {
+    return std::nullopt;
+  }
+  EXPECT_EQ(validated.first().at(0).toString(), path);
+  return validated.first().at(1).value<RestoreOutcome>();
+}
+}  // namespace
+
+// SPEC.md REQ-F-013/016
+TEST(DirectoryModel, ValidateForRestoreReportsEachOutcomeFromTheWorkerThread) {
+  QTemporaryDir dir(fixturePattern("restore-validate"));
+  ASSERT_TRUE(dir.isValid());
+  DirectoryModel model;
+  const auto local = std::make_shared<files_test::FakeLocationClassifier>(Classification::Local);
+  DirectoryModelTestAccess::setLocationClassifier(model, local);
+  EXPECT_EQ(validate(model, dir.path()), RestoreOutcome::Ok);
+  EXPECT_EQ(validate(model, dir.filePath("missing")), RestoreOutcome::DoesNotExist);
+  EXPECT_EQ(validate(model, writeFile(dir, "file.txt")), RestoreOutcome::NotDirectory);
+  ASSERT_EQ(local->threads().size(), 1U);
+  EXPECT_NE(local->threads().front(), QThread::currentThread());
+  for (const auto classification : {Classification::Network, Classification::Removable}) {
+    DirectoryModelTestAccess::setLocationClassifier(
+        model, std::make_shared<files_test::FakeLocationClassifier>(classification));
+    EXPECT_EQ(validate(model, dir.path()), RestoreOutcome::NotLocal);
+  }
+  if (!runningAsRoot()) {
+    ASSERT_TRUE(QDir(dir.path()).mkdir("blocked"));
+    const auto blocked = dir.filePath("blocked");
+    const auto restore = qScopeGuard([&] { ::chmod(QFile::encodeName(blocked).constData(), 0700); });
+    ASSERT_EQ(::chmod(QFile::encodeName(blocked).constData(), 0), 0);
+    EXPECT_EQ(validate(model, blocked), RestoreOutcome::NotReadable);
+  }
+}
+
+// SPEC.md REQ-F-016/REQ-NF-002: a hung classification never stalls the GUI event loop.
+TEST(DirectoryModel, SlowClassificationKeepsTheEventLoopResponsive) {
+  QTemporaryDir dir(fixturePattern("restore-slow"));
+  ASSERT_TRUE(dir.isValid());
+  DirectoryModel model;
+  DirectoryModelTestAccess::setLocationClassifier(
+      model, std::make_shared<files_test::FakeLocationClassifier>(Classification::Local, std::chrono::seconds(2)));
+  int ticks = 0;
+  QTimer timer;
+  timer.setInterval(50);
+  QObject::connect(&timer, &QTimer::timeout, [&] { ++ticks; });
+  timer.start();
+  QElapsedTimer elapsed;
+  elapsed.start();
+  EXPECT_EQ(validate(model, dir.path()), RestoreOutcome::Ok);
+  EXPECT_GE(elapsed.elapsed(), 2000);
+  // ~40 ticks expected; a blocked GUI thread would deliver at most one.
+  EXPECT_GE(ticks, 20);
+}
+
+// SPEC.md REQ-F-019: only a successful, current load() reports its classification.
+TEST(DirectoryModel, LoadSucceededFiresOnlyForSuccessfulCurrentLoads) {
+  QTemporaryDir dir(fixturePattern("load-succeeded"));
+  ASSERT_TRUE(dir.isValid());
+  populateEntries(dir, 5);
+  QDir(dir.path()).mkdir("second");
+  DirectoryModel model;
+  const auto classifier = std::make_shared<files_test::FakeLocationClassifier>(Classification::Network);
+  DirectoryModelTestAccess::setLocationClassifier(model, classifier);
+  QSignalSpy succeeded(&model, &DirectoryModel::loadSucceeded);
+
+  model.load(dir.path());
+  ASSERT_TRUE(succeeded.wait(5000));
+  ASSERT_EQ(succeeded.count(), 1);
+  EXPECT_EQ(succeeded.first().at(0).toString(), dir.path());
+  EXPECT_EQ(succeeded.first().at(1).value<Classification>(), Classification::Network);
+  ASSERT_EQ(classifier->threads().size(), 1U);
+  EXPECT_NE(classifier->threads().front(), QThread::currentThread());
+
+  model.refresh();
+  ASSERT_TRUE(settled(model));
+  QTest::qWait(100);
+  EXPECT_EQ(succeeded.count(), 1);
+
+  model.load(dir.filePath("missing"));
+  ASSERT_TRUE(settled(model));
+  EXPECT_FALSE(model.directoryError().isEmpty());
+  DirectoryModelTestAccess::failReadAfter(model, 2);
+  model.load(dir.path());
+  ASSERT_TRUE(settled(model));
+  EXPECT_FALSE(model.directoryError().isEmpty());
+  DirectoryModelTestAccess::failReadAfter(model, -1);
+  QTest::qWait(100);
+  EXPECT_EQ(succeeded.count(), 1);
+
+  std::atomic_bool entered = false;
+  std::atomic_bool release = false;
+  DirectoryModelTestAccess::beforeOpen(model, [&] {
+    entered = true;
+    while (!release.load()) {
+      QThread::msleep(1);
+    }
+  });
+  model.load(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return entered.load(); }));
+  DirectoryModelTestAccess::beforeOpen(model, nullptr);
+  model.load(dir.filePath("second"));
+  release = true;
+  ASSERT_TRUE(settled(model));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return succeeded.count() == 2; }));
+  QTest::qWait(100);
+  ASSERT_EQ(succeeded.count(), 2);
+  EXPECT_EQ(succeeded.at(1).at(0).toString(), dir.filePath("second"));
+}
+
+// REQ-F-019: accepting the final batch makes this load eligible even when its classification
+// finishes after a refresh or another navigation. Superseded, unaccepted loads remain excluded.
+TEST(DirectoryModel, AcceptedLoadClassificationSurvivesRefreshAndNavigation) {
+  for (bool navigate : {false, true}) {
+    SCOPED_TRACE(navigate);
+    QTemporaryDir first(fixturePattern("tracking-first"));
+    QTemporaryDir second(fixturePattern("tracking-second"));
+    ASSERT_TRUE(first.isValid() && second.isValid());
+    DirectoryModel model;
+    const auto classifier = std::make_shared<files_test::GatedLocationClassifier>();
+    DirectoryModelTestAccess::setLocationClassifier(model, classifier);
+    const auto release = qScopeGuard([&] { classifier->release.release(); });
+    QSignalSpy succeeded(&model, &DirectoryModel::loadSucceeded);
+    model.load(first.path());
+    ASSERT_TRUE(QTest::qWaitFor([&] { return classifier->entered.load() && !model.scanning(); }));
+    ASSERT_TRUE(model.directoryError().isEmpty());
+    ASSERT_EQ(succeeded.count(), 0);
+    if (navigate) {
+      model.load(second.path());
+    } else {
+      model.refresh();
+    }
+    classifier->release.release();
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !model.scanning() && succeeded.count() == (navigate ? 2 : 1); }));
+    EXPECT_EQ(succeeded.first().at(0).toString(), first.path());
+    if (navigate) {
+      EXPECT_EQ(succeeded.last().at(0).toString(), second.path());
+    }
+    EXPECT_EQ(classifier->calls.load(), navigate ? 2 : 1);
+  }
 }

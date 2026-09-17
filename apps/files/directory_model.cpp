@@ -11,6 +11,7 @@
 #include <cstring>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <utility>
 
 namespace {
@@ -113,7 +114,8 @@ void walkDirectory(const QString& path, const std::shared_ptr<std::atomic_bool>&
 }
 }  // namespace
 
-DirectoryModel::DirectoryModel(QObject* parent) : QAbstractListModel(parent), worker_(new QObject) {
+DirectoryModel::DirectoryModel(QObject* parent)
+    : QAbstractListModel(parent), classifier_(std::make_shared<RealLocationClassifier>()), worker_(new QObject) {
   worker_->moveToThread(&thread_);
   connect(&thread_, &QThread::finished, worker_, &QObject::deleteLater);
   connect(&thread_, &QThread::finished, this, &DirectoryModel::shutdownFinished);
@@ -249,6 +251,38 @@ void DirectoryModel::shutdown() {
     thread_.quit();
   }
 }
+void DirectoryModel::validateForRestore(const QString& path) {
+  if (stopping_) {
+    return;
+  }
+  const auto classifier = classifier_;
+  QMetaObject::invokeMethod(
+      worker_,
+      [this, path, classifier] {
+        const auto encoded = QFile::encodeName(path);
+        struct stat info{};
+        auto outcome = RestoreOutcome::Ok;
+        if (::stat(encoded.constData(), &info) != 0) {
+          // A dangling or permission-blocked path is indistinguishable here; neither can be opened.
+          outcome = errno == EACCES ? RestoreOutcome::NotReadable : RestoreOutcome::DoesNotExist;
+        } else if (!S_ISDIR(info.st_mode)) {
+          outcome = RestoreOutcome::NotDirectory;
+        } else if (::access(encoded.constData(), R_OK | X_OK) != 0) {
+          outcome = RestoreOutcome::NotReadable;
+        } else if (classifier->classify(path) != LocationClassifier::Classification::Local) {
+          outcome = RestoreOutcome::NotLocal;
+        }
+        QMetaObject::invokeMethod(
+            this,
+            [this, path, outcome] {
+              if (!stopping_) {
+                emit restoreValidated(path, outcome);
+              }
+            },
+            Qt::QueuedConnection);
+      },
+      Qt::QueuedConnection);
+}
 void DirectoryModel::startWalk(const QString& path, bool diff) {
   const auto generation = generation_;
   cancellation_ = std::make_shared<std::atomic_bool>(false);
@@ -257,28 +291,50 @@ void DirectoryModel::startWalk(const QString& path, bool diff) {
   const auto beforeOpen = before_open_for_test_;
   const int readErrorAfter = read_error_after_for_test_;
   const auto deliverySlots = std::make_shared<QSemaphore>(2);
+  // Refreshes of the same folder are never reclassified (DESIGN.md §12).
+  const auto classifier = diff ? nullptr : classifier_;
+  // Accessed only by GUI-thread deliveries. Once accepted, a successful load remains a
+  // tracking candidate even if a refresh, navigation or shutdown happens during classification.
+  const auto acceptedLoad = std::make_shared<bool>(false);
   QMetaObject::invokeMethod(
       worker_,
-      [this, path, generation, diff, cancel, beforeOpen, readErrorAfter, deliverySlots] {
-        walkDirectory(
-            path, cancel, beforeOpen, readErrorAfter,
-            [this, generation, diff, cancel, deliverySlots](QList<DirectoryEntry> entries, bool finished,
-                                                            QString error) {
-              const auto slot = acquireBatchSlot(deliverySlots, cancel);
-              if (!slot && !finished) {
-                return;
-              }
-              QMetaObject::invokeMethod(
-                  this,
-                  [this, generation, diff, entries = std::move(entries), finished, error = std::move(error), slot] {
-                    applyBatch(Batch{.generation = generation,
-                                     .diff = diff,
-                                     .entries = entries,
-                                     .finished = finished,
-                                     .directory_error = error});
-                  },
-                  Qt::QueuedConnection);
-            });
+      [this, path, generation, diff, cancel, beforeOpen, readErrorAfter, deliverySlots, classifier, acceptedLoad] {
+        walkDirectory(path, cancel, beforeOpen, readErrorAfter,
+                      [this, path, generation, diff, cancel, deliverySlots, classifier, acceptedLoad](
+                          QList<DirectoryEntry> entries, bool finished, QString error) {
+                        const auto slot = acquireBatchSlot(deliverySlots, cancel);
+                        if (!slot && !finished) {
+                          return;
+                        }
+                        const bool succeeded = finished && classifier && error.isEmpty() && !cancel->load();
+                        QMetaObject::invokeMethod(
+                            this,
+                            [this, generation, diff, entries = std::move(entries), finished, error = std::move(error),
+                             slot, acceptedLoad] {
+                              if (finished && !diff && error.isEmpty() && generation == generation_ && !stopping_ &&
+                                  !updates_suspended_) {
+                                *acceptedLoad = true;
+                              }
+                              applyBatch(Batch{.generation = generation,
+                                               .diff = diff,
+                                               .entries = entries,
+                                               .finished = finished,
+                                               .directory_error = error});
+                            },
+                            Qt::QueuedConnection);
+                        if (succeeded) {
+                          // Posted after the final batch, so the listing is never held back by a slow mount.
+                          const auto classification = classifier->classify(path);
+                          QMetaObject::invokeMethod(
+                              this,
+                              [this, path, classification, acceptedLoad] {
+                                if (*acceptedLoad) {
+                                  emit loadSucceeded(path, classification);
+                                }
+                              },
+                              Qt::QueuedConnection);
+                        }
+                      });
       },
       Qt::QueuedConnection);
 }

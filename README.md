@@ -119,8 +119,36 @@ Folders that no longer exist are skipped and dropped, with a "Skipped missing" s
 See the [navigation history specification](docs/sdd/navigation-history/SPEC.md) and
 [verification record](docs/sdd/navigation-history/VERIFICATION.md).
 
+### Configuration and remembered location
+
+Files reads an optional `config.toml` once at startup from
+`$XDG_CONFIG_HOME/holonight-files/config.toml`, or `~/.config/holonight-files/config.toml`
+when `XDG_CONFIG_HOME` is unset, empty or not an absolute path. Files never creates or
+changes this file; edit it yourself and restart to apply changes. One setting exists:
+
+```toml
+[general]
+restore_last_location = true   # default: false
+```
+
+With it enabled and no folder argument, Files reopens the last folder you had open when it
+last closed normally. Only local folders are remembered: network (NFS, SMB, SSHFS, GVFS, ...)
+and removable (USB, `/media`, `/run/media`) folders are skipped, and the most recent local
+folder is kept instead. A folder argument always wins. If the remembered folder is gone,
+not a directory, unreadable or no longer local, Files opens your home folder and the status
+bar says why (for example "last location does not exist"). The location is saved to
+`$XDG_STATE_HOME/holonight-files/state.toml` (default `~/.local/state/holonight-files/`)
+only on a normal close and only while the setting is enabled. When several windows close,
+the last one wins. A crash or kill leaves the previous state unchanged.
+
+A missing config file means defaults with no messages. An unparseable file is ignored as a
+whole with a single warning on stderr giving the path and line. A value of the wrong type
+falls back to its default, and unknown keys or sections are ignored. Each of these gets its
+own stderr warning. An unusable `state.toml` is also reported on stderr and treated as no
+remembered location. See the [app configuration specification](docs/sdd/app-configuration/SPEC.md).
+
 Requires C++23, Qt 6.11+ (including the Svg component), CMake 3.25+, Ninja,
-Task, libexif (via pkg-config), and installed HolonightQt::Core /
+Task, libexif (via pkg-config), tomlplusplus 3.4+ (shared library, CMake config), and installed HolonightQt::Core /
 HolonightQt::Controls. Tests use Qt Test and GTest. Checks need clang-format,
 clang-tidy (run-clang-tidy), REUSE, desktop-file-utils and Python 3.
 `task isolated-runtime-check` additionally needs Docker and a locally built

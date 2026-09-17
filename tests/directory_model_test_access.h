@@ -8,4 +8,7 @@ struct DirectoryModelTestAccess {
     model.before_open_for_test_ = std::move(callback);
   }
   static void failReadAfter(DirectoryModel& model, int entries) { model.read_error_after_for_test_ = entries; }
+  static void setLocationClassifier(DirectoryModel& model, std::shared_ptr<const LocationClassifier> classifier) {
+    model.classifier_ = std::move(classifier);
+  }
 };

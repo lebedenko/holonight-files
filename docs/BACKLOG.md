@@ -141,3 +141,7 @@ handling. Automated evidence and pending native 1.5× acceptance are tracked in
 Standalone JavaScript helpers have moved to C++ singletons without changing browsing
 behavior. Automated checks and pending native visual acceptance are tracked in
 [helper migration verification](sdd/javascript-to-cpp/VERIFICATION.md).
+
+Application configuration review fixes preserve pending location tracking across refresh and
+navigation, and save after shutdown workers finish. Checks are recorded in the
+[configuration verification record](sdd/app-configuration/VERIFICATION.md).

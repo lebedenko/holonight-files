@@ -5,6 +5,7 @@
 #include <QString>
 #include <QTemporaryDir>
 
+#include <optional>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -81,30 +82,56 @@ inline void restorePermissionFixture(const PermissionFixture& fixture) {
   ::chmod(fixture.blocked_dir.toLocal8Bit().constData(), 0700);
 }
 
-// Redirects $XDG_DATA_HOME to an isolated fixture directory for the lifetime of the guard,
-// restoring whatever was there before — used by TrashService/TaskManager tests so they never
-// touch the real ~/.local/share/Trash (SPEC.md's redirected-XDG_DATA_HOME fixture requirement).
-class ScopedXdgDataHome {
+// Sets (or, for a null value, unsets) an environment variable for the guard's lifetime, restoring
+// whatever was there before.
+class ScopedEnvironmentVariable {
  public:
-  explicit ScopedXdgDataHome(const QString& path) : had_previous_(qEnvironmentVariableIsSet("XDG_DATA_HOME")) {
+  ScopedEnvironmentVariable(const char* name, const std::optional<QString>& value)
+      : name_(name), had_previous_(qEnvironmentVariableIsSet(name)) {
     if (had_previous_) {
-      previous_ = qEnvironmentVariable("XDG_DATA_HOME");
+      previous_ = qgetenv(name);
     }
-    qputenv("XDG_DATA_HOME", path.toLocal8Bit());
-  }
-  ~ScopedXdgDataHome() {
-    if (had_previous_) {
-      qputenv("XDG_DATA_HOME", previous_.toLocal8Bit());
+    if (value.has_value()) {
+      qputenv(name, value->toLocal8Bit());
     } else {
-      qunsetenv("XDG_DATA_HOME");
+      qunsetenv(name);
     }
   }
-  ScopedXdgDataHome(const ScopedXdgDataHome&) = delete;
-  ScopedXdgDataHome& operator=(const ScopedXdgDataHome&) = delete;
+  ~ScopedEnvironmentVariable() {
+    if (had_previous_) {
+      qputenv(name_, previous_);
+    } else {
+      qunsetenv(name_);
+    }
+  }
+  ScopedEnvironmentVariable(const ScopedEnvironmentVariable&) = delete;
+  ScopedEnvironmentVariable& operator=(const ScopedEnvironmentVariable&) = delete;
+  ScopedEnvironmentVariable(ScopedEnvironmentVariable&&) = delete;
+  ScopedEnvironmentVariable& operator=(ScopedEnvironmentVariable&&) = delete;
 
  private:
+  const char* name_;
   bool had_previous_;
-  QString previous_;
+  QByteArray previous_;
+};
+
+// Redirects $XDG_DATA_HOME to an isolated fixture directory — used by TrashService/TaskManager
+// tests so they never touch the real ~/.local/share/Trash (SPEC.md's redirected-XDG_DATA_HOME
+// fixture requirement).
+class ScopedXdgDataHome : public ScopedEnvironmentVariable {
+ public:
+  explicit ScopedXdgDataHome(const QString& path) : ScopedEnvironmentVariable("XDG_DATA_HOME", path) {}
+};
+
+// app-configuration: isolate config.toml/state.toml from the real ~/.config and ~/.local/state.
+class ScopedXdgConfigHome : public ScopedEnvironmentVariable {
+ public:
+  explicit ScopedXdgConfigHome(const std::optional<QString>& path)
+      : ScopedEnvironmentVariable("XDG_CONFIG_HOME", path) {}
+};
+class ScopedXdgStateHome : public ScopedEnvironmentVariable {
+ public:
+  explicit ScopedXdgStateHome(const std::optional<QString>& path) : ScopedEnvironmentVariable("XDG_STATE_HOME", path) {}
 };
 
 }  // namespace files_test

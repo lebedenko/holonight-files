@@ -1,7 +1,12 @@
 #include "directory_controller.h"
 
+#include "directory_controller_test_access.h"
 #include "directory_fixtures.h"
 #include "directory_model_test_access.h"
+#include "initial_directory.h"
+#include "settings/xdg_paths.h"
+#include "settings_fixtures.h"
+#include "state/state_store.h"
 
 #include <QDir>
 #include <QScopeGuard>
@@ -15,6 +20,7 @@
 #include <gtest/gtest.h>
 
 using files_test::fixturePattern;
+using files_test::runningAsRoot;
 using files_test::writeFile;
 
 namespace {
@@ -568,15 +574,6 @@ TEST(DirectoryController, ColonIsANoOpInNormalMode) {
   EXPECT_TRUE(controller.handleKey(":"));  // REQ-C-006: consumed, no mode change
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
 }
-
-struct DirectoryControllerTestAccess {
-  static DirectoryModel& model(DirectoryController& controller) { return controller.model_; }
-  static const JumpList& jumpList(const DirectoryController& controller) { return controller.jump_list_; }
-  static void beforeCommit(DirectoryController& controller,
-                           std::function<void(const VimModeController::InsertCommitResult&)> callback) {
-    controller.before_commit_for_test_ = std::move(callback);
-  }
-};
 
 TEST(DirectoryController, ExclusiveCreationPreservesRacingCollisionAndRetainsEditor) {
   QTemporaryDir dir(fixturePattern("exclusive-create"));
@@ -1502,4 +1499,258 @@ TEST(DirectoryController, HistoryPathIsCleanedAbsoluteNotSymlinkResolved) {
   ASSERT_TRUE(settled(controller));
   EXPECT_EQ(controller.currentPath(), link);
   EXPECT_EQ(historyPaths(controller), (QStringList{fixture.b, link, fixture.c}));
+}
+
+namespace {
+using Classification = LocationClassifier::Classification;
+using files_test::FakeLocationClassifier;
+using files_test::RecordingWarningSink;
+using files_test::ScopedXdgStateHome;
+
+QString homePath() { return QStandardPaths::writableLocation(QStandardPaths::HomeLocation); }
+
+QByteArray fileBytes(const QString& path) {
+  QFile file(path);
+  return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+}
+
+// Opens path and waits until its load-time classification has reached the controller.
+bool openAndTrack(DirectoryController& controller, const QString& path) {
+  QSignalSpy succeeded(&DirectoryControllerTestAccess::model(controller), &DirectoryModel::loadSucceeded);
+  controller.open(path);
+  return succeeded.wait(5000) && settled(controller);
+}
+
+bool shutDown(DirectoryController& controller) {
+  QSignalSpy finished(&controller, &DirectoryController::shutdownFinished);
+  controller.shutdown();
+  return finished.count() > 0 || finished.wait(5000);
+}
+
+// Waits for a restore candidate's worker-thread validation to be applied.
+bool restore(DirectoryController& controller, const QString& path) {
+  QSignalSpy navigated(&controller, &DirectoryController::navigated);
+  controller.openRestoreCandidate(path);
+  return navigated.wait(5000);
+}
+}  // namespace
+
+// SPEC.md REQ-F-012
+TEST(DirectoryController, RestoreCandidateThatIsLocalOpensWithoutReason) {
+  QTemporaryDir dir(fixturePattern("restore-ok"));
+  ASSERT_TRUE(dir.isValid());
+  DirectoryController controller;
+  DirectoryControllerTestAccess::setLocationClassifier(controller,
+                                                       std::make_shared<FakeLocationClassifier>(Classification::Local));
+  ASSERT_TRUE(restore(controller, dir.path()));
+  EXPECT_EQ(controller.currentPath(), dir.path());
+  EXPECT_TRUE(controller.statusMessage().isEmpty());
+}
+
+// SPEC.md REQ-F-013/014/027
+TEST(DirectoryController, FailedRestoreOpensHomeWithMatchingReason) {
+  QTemporaryDir dir(fixturePattern("restore-fallback"));
+  ASSERT_TRUE(dir.isValid());
+  const auto file = writeFile(dir, "file.txt");
+  struct Case {
+    QString path;
+    Classification classification;
+    const char* reason;
+  };
+  const std::vector<Case> cases = {
+      {.path = dir.filePath("deleted"),
+       .classification = Classification::Local,
+       .reason = "last location does not exist"},
+      {.path = file, .classification = Classification::Local, .reason = "last location is not a directory"},
+      {.path = dir.path(), .classification = Classification::Network, .reason = "last location is not local"},
+      {.path = dir.path(), .classification = Classification::Removable, .reason = "last location is not local"},
+  };
+  for (const auto& testCase : cases) {
+    DirectoryController controller;
+    DirectoryControllerTestAccess::setLocationClassifier(
+        controller, std::make_shared<FakeLocationClassifier>(testCase.classification));
+    ASSERT_TRUE(restore(controller, testCase.path));
+    EXPECT_EQ(controller.currentPath(), QDir::cleanPath(homePath()));
+    EXPECT_EQ(controller.statusMessage(), testCase.reason);
+  }
+  if (!runningAsRoot()) {
+    ASSERT_TRUE(QDir(dir.path()).mkdir("blocked"));
+    const auto blocked = dir.filePath("blocked");
+    const auto restorePermissions = qScopeGuard([&] { ::chmod(QFile::encodeName(blocked).constData(), 0700); });
+    ASSERT_EQ(::chmod(QFile::encodeName(blocked).constData(), 0), 0);
+    DirectoryController controller;
+    ASSERT_TRUE(restore(controller, blocked));
+    EXPECT_EQ(controller.statusMessage(), "last location is not readable");
+  }
+}
+
+TEST(DirectoryController, NavigationDuringRestoreValidationWins) {
+  QTemporaryDir stored(fixturePattern("restore-stored"));
+  QTemporaryDir chosen(fixturePattern("restore-chosen"));
+  ASSERT_TRUE(stored.isValid() && chosen.isValid());
+  DirectoryController controller;
+  DirectoryControllerTestAccess::setLocationClassifier(
+      controller, std::make_shared<FakeLocationClassifier>(Classification::Local, std::chrono::milliseconds(300)));
+  QSignalSpy validated(&DirectoryControllerTestAccess::model(controller), &DirectoryModel::restoreValidated);
+  controller.openRestoreCandidate(stored.path());
+  controller.open(chosen.path());
+  ASSERT_TRUE(validated.wait(5000));
+  QTest::qWait(50);
+  EXPECT_EQ(controller.currentPath(), chosen.path());
+}
+
+// SPEC.md REQ-F-017/019: Local A -> Network B -> close stores A.
+TEST(DirectoryController, ShutdownSavesTheLastLocalFolder) {
+  QTemporaryDir state(fixturePattern("save-state"));
+  QTemporaryDir local(fixturePattern("save-local"));
+  QTemporaryDir network(fixturePattern("save-network"));
+  ASSERT_TRUE(state.isValid() && local.isValid() && network.isValid());
+  const ScopedXdgStateHome stateHome(state.path());
+  DirectoryController controller;
+  controller.configureRestore(true);
+  const auto classifier = std::make_shared<FakeLocationClassifier>(Classification::Local);
+  classifier->overrides.insert(network.path(), Classification::Network);
+  DirectoryControllerTestAccess::setLocationClassifier(controller, classifier);
+  ASSERT_TRUE(openAndTrack(controller, local.path()));
+  ASSERT_TRUE(openAndTrack(controller, network.path()));
+  ASSERT_TRUE(shutDown(controller));
+  RecordingWarningSink warnings;
+  EXPECT_EQ(StateStore(XdgPaths::stateFilePath(), XdgPaths::stateDirPath()).load(warnings).last_location, local.path());
+  EXPECT_TRUE(warnings.messages.isEmpty());
+}
+
+// SPEC.md REQ-F-020
+TEST(DirectoryController, ShutdownWithoutAnyLocalLoadLeavesStateUntouched) {
+  QTemporaryDir state(fixturePattern("save-none"));
+  QTemporaryDir network(fixturePattern("save-none-network"));
+  ASSERT_TRUE(state.isValid() && network.isValid());
+  const ScopedXdgStateHome stateHome(state.path());
+  RecordingWarningSink warnings;
+  ASSERT_TRUE(StateStore(XdgPaths::stateFilePath(), XdgPaths::stateDirPath()).save("/previous", warnings));
+  const auto before = fileBytes(XdgPaths::stateFilePath());
+  DirectoryController controller;
+  controller.configureRestore(true);
+  DirectoryControllerTestAccess::setLocationClassifier(
+      controller, std::make_shared<FakeLocationClassifier>(Classification::Network));
+  ASSERT_TRUE(openAndTrack(controller, network.path()));
+  ASSERT_TRUE(shutDown(controller));
+  EXPECT_EQ(fileBytes(XdgPaths::stateFilePath()), before);
+}
+
+// SPEC.md REQ-F-018
+TEST(DirectoryController, DisabledRestoreNeverWritesState) {
+  QTemporaryDir state(fixturePattern("save-disabled"));
+  QTemporaryDir local(fixturePattern("save-disabled-local"));
+  ASSERT_TRUE(state.isValid() && local.isValid());
+  const ScopedXdgStateHome stateHome(state.path());
+  {
+    DirectoryController controller;
+    DirectoryControllerTestAccess::setLocationClassifier(
+        controller, std::make_shared<FakeLocationClassifier>(Classification::Local));
+    ASSERT_TRUE(openAndTrack(controller, local.path()));
+    ASSERT_TRUE(shutDown(controller));
+  }
+  EXPECT_FALSE(QFileInfo::exists(XdgPaths::stateDirPath()));
+  RecordingWarningSink warnings;
+  ASSERT_TRUE(StateStore(XdgPaths::stateFilePath(), XdgPaths::stateDirPath()).save("/previous", warnings));
+  const auto before = fileBytes(XdgPaths::stateFilePath());
+  DirectoryController controller;
+  controller.configureRestore(false);
+  DirectoryControllerTestAccess::setLocationClassifier(controller,
+                                                       std::make_shared<FakeLocationClassifier>(Classification::Local));
+  ASSERT_TRUE(openAndTrack(controller, local.path()));
+  ASSERT_TRUE(shutDown(controller));
+  EXPECT_EQ(fileBytes(XdgPaths::stateFilePath()), before);
+}
+
+// SPEC.md REQ-F-010
+TEST(DirectoryController, StateWriteFailureWarnsOnceAndStillFinishesShutdown) {
+  if (runningAsRoot()) {
+    GTEST_SKIP() << "root bypasses chmod 0555 permission checks";
+  }
+  QTemporaryDir state(fixturePattern("save-readonly"));
+  QTemporaryDir local(fixturePattern("save-readonly-local"));
+  ASSERT_TRUE(state.isValid() && local.isValid());
+  const ScopedXdgStateHome stateHome(state.path());
+  const auto restorePermissions = qScopeGuard([&] { ::chmod(QFile::encodeName(state.path()).constData(), 0700); });
+  ASSERT_EQ(::chmod(QFile::encodeName(state.path()).constData(), 0555), 0);
+  DirectoryController controller;
+  controller.configureRestore(true);
+  const auto warnings = std::make_shared<RecordingWarningSink>();
+  DirectoryControllerTestAccess::setWarningSink(controller, warnings);
+  DirectoryControllerTestAccess::setLocationClassifier(controller,
+                                                       std::make_shared<FakeLocationClassifier>(Classification::Local));
+  ASSERT_TRUE(openAndTrack(controller, local.path()));
+  ASSERT_TRUE(shutDown(controller));
+  EXPECT_EQ(warnings->messages.size(), 1);
+}
+
+// SPEC.md REQ-F-012 end to end: one session saves, the next plans startup and restores.
+TEST(DirectoryController, SavedLocationIsRestoredByTheNextSession) {
+  QTemporaryDir state(fixturePattern("roundtrip-state"));
+  QTemporaryDir local(fixturePattern("roundtrip-local"));
+  ASSERT_TRUE(state.isValid() && local.isValid());
+  QDir(local.path()).mkdir("inner");
+  const auto inner = local.filePath("inner");
+  const ScopedXdgStateHome stateHome(state.path());
+  {
+    DirectoryController first;
+    first.configureRestore(true);
+    DirectoryControllerTestAccess::setLocationClassifier(
+        first, std::make_shared<FakeLocationClassifier>(Classification::Local));
+    ASSERT_TRUE(openAndTrack(first, local.path()));
+    ASSERT_TRUE(openAndTrack(first, inner));
+    ASSERT_TRUE(shutDown(first));
+  }
+  RecordingWarningSink warnings;
+  const auto stored = StateStore(XdgPaths::stateFilePath(), XdgPaths::stateDirPath()).load(warnings);
+  const auto plan = planStartup({}, true, stored.last_location);
+  ASSERT_FALSE(plan.resolved.has_value());
+  DirectoryController second;
+  second.configureRestore(true);
+  ASSERT_TRUE(restore(second, plan.pending_candidate_path));
+  EXPECT_EQ(second.currentPath(), inner);
+  EXPECT_TRUE(second.statusMessage().isEmpty());
+  EXPECT_TRUE(warnings.messages.isEmpty());
+}
+
+// REQ-F-017/019: close must drain classification of a displayed load before saving, including
+// when a watcher refresh was queued while classification was still running.
+TEST(DirectoryController, ShutdownSavesAcceptedLoadWithPendingClassification) {
+  for (bool refresh : {false, true}) {
+    SCOPED_TRACE(refresh);
+    QTemporaryDir state(fixturePattern("shutdown-classifying-state"));
+    QTemporaryDir local(fixturePattern("shutdown-classifying-local"));
+    ASSERT_TRUE(state.isValid() && local.isValid());
+    const ScopedXdgStateHome stateHome(state.path());
+    RecordingWarningSink warnings;
+    const StateStore store(XdgPaths::stateFilePath(), XdgPaths::stateDirPath());
+    ASSERT_TRUE(store.save("/previous", warnings));
+    DirectoryController controller;
+    controller.configureRestore(true);
+    const auto classifier = std::make_shared<files_test::GatedLocationClassifier>();
+    DirectoryControllerTestAccess::setLocationClassifier(controller, classifier);
+    const auto release = qScopeGuard([&] { classifier->release.release(); });
+    auto& model = DirectoryControllerTestAccess::model(controller);
+    QSignalSpy succeeded(&model, &DirectoryModel::loadSucceeded);
+    controller.open(local.path());
+    ASSERT_TRUE(QTest::qWaitFor([&] { return classifier->entered.load() && !model.scanning(); }));
+    ASSERT_TRUE(model.directoryError().isEmpty());
+    ASSERT_EQ(succeeded.count(), 0);
+    if (refresh) {
+      model.refresh();
+    }
+    QSignalSpy finished(&controller, &DirectoryController::shutdownFinished);
+    std::optional<QString> savedAtShutdown;
+    QObject::connect(&controller, &DirectoryController::shutdownFinished,
+                     [&] { savedAtShutdown = store.load(warnings).last_location; });
+    controller.shutdown();
+    EXPECT_EQ(finished.count(), 0);
+    EXPECT_EQ(store.load(warnings).last_location, QStringLiteral("/previous"));
+    classifier->release.release();
+    ASSERT_TRUE(finished.wait(5000));
+    EXPECT_EQ(succeeded.count(), 1);
+    EXPECT_EQ(savedAtShutdown, local.path());
+    EXPECT_TRUE(warnings.messages.isEmpty());
+  }
 }

@@ -11,6 +11,7 @@ set(HOLONIGHT_QML_IMPORT_PATH "${HOLONIGHT_DEPENDENCY_PREFIX}/${CMAKE_INSTALL_LI
 set(QML_IMPORT_PATH "${HOLONIGHT_QML_IMPORT_PATH}" CACHE STRING "Development QML imports" FORCE)
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Quick Qml QuickControls2 Svg)
 find_package(HolonightQt CONFIG REQUIRED)
+find_package(tomlplusplus 3.4 CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(EXIF REQUIRED IMPORTED_TARGET libexif)
 qt_standard_project_setup(REQUIRES 6.11)
@@ -30,6 +31,10 @@ find_program(RUN_CLANG_TIDY run-clang-tidy)
 file(GLOB FILES_CXX CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/apps/files/*.cpp"
   "${CMAKE_SOURCE_DIR}/apps/files/*.h"
+  "${CMAKE_SOURCE_DIR}/apps/files/settings/*.cpp"
+  "${CMAKE_SOURCE_DIR}/apps/files/settings/*.h"
+  "${CMAKE_SOURCE_DIR}/apps/files/state/*.cpp"
+  "${CMAKE_SOURCE_DIR}/apps/files/state/*.h"
   "${CMAKE_SOURCE_DIR}/tests/*.cpp"
   "${CMAKE_SOURCE_DIR}/tests/*.h"
 )

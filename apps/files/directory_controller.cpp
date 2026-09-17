@@ -1,5 +1,7 @@
 #include "directory_controller.h"
 
+#include "settings/xdg_paths.h"
+
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDir>
@@ -8,6 +10,7 @@
 #include <QKeyEvent>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QStandardPaths>
 #include <QUrl>
 
 #include <array>
@@ -22,7 +25,8 @@ namespace {
 constexpr qint64 kPendingGTimeoutMs = 600;
 }
 
-DirectoryController::DirectoryController(QObject* parent) : QObject(parent) {
+DirectoryController::DirectoryController(QObject* parent)
+    : QObject(parent), state_store_(XdgPaths::stateFilePath(), XdgPaths::stateDirPath()) {
   QCoreApplication::instance()->installEventFilter(this);
   proxy_.setSourceModel(&model_);
   // Ahead of the forwarding connection, so observers never see a settled listing whose cursor has
@@ -30,6 +34,11 @@ DirectoryController::DirectoryController(QObject* parent) : QObject(parent) {
   connect(&model_, &DirectoryModel::changed, this, &DirectoryController::maybeApplyPendingRestore);
   connect(&model_, &DirectoryModel::changed, this, &DirectoryController::changed);
   connect(&model_, &DirectoryModel::shutdownFinished, this, &DirectoryController::handleWorkerShutdown);
+  connect(&model_, &DirectoryModel::restoreValidated, this, &DirectoryController::handleRestoreValidated);
+  connect(&model_, &DirectoryModel::loadSucceeded, this,
+          [this](const QString& path, LocationClassifier::Classification classification) {
+            last_location_tracker_.recordLoad(path, classification);
+          });
   connect(&preview_, &PreviewService::shutdownFinished, this, &DirectoryController::handleWorkerShutdown);
   connect(&vim_, &VimModeController::changed, this, &DirectoryController::changed);
   connect(&tasks_, &TaskManager::changed, this, [this] {
@@ -85,6 +94,7 @@ void DirectoryController::openInternal(const QString& requestedPath, const QStri
   if (!watched.isEmpty()) {
     watcher_.removePaths(watched);
   }
+  ++navigation_serial_;
   resetForNavigation();
   current_path_ = path;
   status_message_ = fallbackReason;
@@ -785,10 +795,37 @@ void DirectoryController::syncPreviewTarget() {
 }
 void DirectoryController::handleWorkerShutdown() {
   if (++workers_finished_ == 3) {
+    // Classification deliveries precede the directory worker's shutdown notification.
+    saveState();
     emit shutdownFinished();
   }
 }
+void DirectoryController::openRestoreCandidate(const QString& path) {
+  restore_candidate_ = path;
+  restore_serial_ = navigation_serial_;
+  model_.validateForRestore(path);
+}
+void DirectoryController::handleRestoreValidated(const QString& path, RestoreOutcome outcome) {
+  if (path != restore_candidate_ || restore_serial_ != navigation_serial_) {
+    return;
+  }
+  restore_candidate_.clear();
+  if (outcome == RestoreOutcome::Ok) {
+    open(path);
+  } else {
+    open(QStandardPaths::writableLocation(QStandardPaths::HomeLocation), restoreOutcomeReason(outcome));
+  }
+}
+void DirectoryController::saveState() {
+  if (state_saved_ || !restore_enabled_ || !last_location_tracker_.hasCandidate()) {
+    return;
+  }
+  state_saved_ = true;
+  // Synchronous: a tiny local write, and the candidate is known Local (DESIGN.md §10 item 3).
+  state_store_.save(last_location_tracker_.candidate(), *warnings_);
+}
 void DirectoryController::shutdown() {
+  restore_candidate_.clear();
   model_.shutdown();
   preview_.shutdown();
   tasks_.shutdown();
