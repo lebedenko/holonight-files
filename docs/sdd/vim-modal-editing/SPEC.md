@@ -539,3 +539,10 @@ This specification formalizes the Vim modal editing state machine for Stage 3 of
 Verification includes at least 20 timed validation edits against 200 ms and modal
 captures in dark/light themes at normal/fractional scales. Native checks are recorded
 separately and remain pending when unavailable.
+
+## Inline editor binding remediation
+
+- REQ-R-007: When INSERT begins or the controller updates insertText, the inline
+  editor shall display that value without QML binding-loop warnings. User edits
+  shall still update controller text and validation immediately; commit/cancel
+  behavior and cursor placement shall remain unchanged.

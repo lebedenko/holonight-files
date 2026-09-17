@@ -151,3 +151,11 @@ behavior. Automated checks and pending native visual acceptance are tracked in
 Application configuration review fixes preserve pending location tracking across refresh and
 navigation, and save after shutdown workers finish. Checks are recorded in the
 [configuration verification record](sdd/app-configuration/VERIFICATION.md).
+
+The footer mode badge identifies NORMAL/VISUAL/SEARCH/INSERT without taking focus.
+Native visual and accessibility acceptance remain pending in the
+[mode badge verification record](sdd/mode-status-badge/VERIFICATION.md).
+
+Inline editing now avoids echoing controller text updates back into its binding.
+The reproduced warning and regression evidence are recorded in
+[modal editing verification](sdd/vim-modal-editing/VERIFICATION.md).

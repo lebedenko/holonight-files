@@ -152,6 +152,17 @@ Folders that no longer exist are skipped and dropped, with a "Skipped missing" s
 See the [navigation history specification](docs/sdd/navigation-history/SPEC.md) and
 [verification record](docs/sdd/navigation-history/VERIFICATION.md).
 
+The footer status line starts with a pill badge naming the current mode — NORMAL, VISUAL,
+SEARCH or INSERT — filled blue, violet, yellow or green respectively. It is display-only:
+it takes no clicks and no keyboard focus, and it keeps a fixed width so the rest of the
+status line never shifts as you change modes. Because the badge names the mode, the labels
+beside it no longer repeat it: VISUAL shows just the selection count and INSERT just the
+commit hint or the validation error. The badge stays visible, showing NORMAL, while a task
+runs or a confirmation prompt is open. Its text contrast is verified against the default
+dark scheme only. See the [mode status badge specification](docs/sdd/mode-status-badge/SPEC.md)
+and [verification record](docs/sdd/mode-status-badge/VERIFICATION.md) for automated evidence
+and pending native visual and accessibility acceptance.
+
 ### Configuration and remembered location
 
 Files reads an optional `config.toml` once at startup from

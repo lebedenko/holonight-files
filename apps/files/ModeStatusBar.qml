@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls.Basic as C
 import QtQuick.Layouts
 import Holonight
 import Holonight.Core
@@ -9,12 +10,71 @@ import Holonight.Controls
 // Replaces the plain path/status label with mode-contextual content (SPEC.md REQ-F-022,
 // REQ-F-024, REQ-F-042, REQ-NF-001): the ordinary path/status text in NORMAL, a live selection
 // counter in VISUAL, the search query field in SEARCH, and live validation feedback in INSERT.
+// A leading pill badge names the active mode (mode-status-badge SPEC.md), so the labels below no
+// longer repeat it.
 RowLayout {
     id: root
 
     required property DirectoryController controller
 
     spacing: HnMetrics.internalSpacing(HnControlSize.Normal)
+
+    // Indexed by VimModeController.Mode (Normal, Visual, Search, Insert); one lookup keeps label,
+    // fill and accessible name updating together. Labels are deliberately untranslated.
+    readonly property var modeMeta: [
+        {
+            label: "NORMAL",
+            fill: HoloniightPalette.accentBlue
+        },
+        {
+            label: "VISUAL",
+            fill: HoloniightPalette.accentViolet
+        },
+        {
+            label: "SEARCH",
+            fill: HoloniightPalette.accentYellow
+        },
+        {
+            label: "INSERT",
+            fill: HoloniightPalette.success
+        }
+    ]
+    readonly property var currentModeMeta: modeMeta[controller.vim.currentMode]
+
+    C.Control {
+        objectName: "modeBadge"
+        Layout.alignment: Qt.AlignVCenter
+        // Sized off the hidden metric so switching modes never moves the labels that follow.
+        implicitWidth: Math.ceil(badgeMetric.implicitWidth) + leftPadding + rightPadding
+        topPadding: 2
+        bottomPadding: 2
+        leftPadding: 8
+        rightPadding: 8
+        focusPolicy: Qt.NoFocus
+        activeFocusOnTab: false
+        Accessible.role: Accessible.StaticText
+        Accessible.name: qsTr("%1 mode").arg(root.currentModeMeta.label)
+
+        contentItem: HnLabel {
+            objectName: "modeBadgeLabel"
+            role: HnTypographyRole.Code
+            color: HoloniightPalette.background
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            rawText: root.currentModeMeta.label
+        }
+        background: Rectangle {
+            color: root.currentModeMeta.fill
+            radius: HnAppearance.roundedRadius(HnSurfaceRole.Pill, width, height, HnAppearance.revision)
+        }
+    }
+
+    HnLabel {
+        id: badgeMetric
+        visible: false
+        role: HnTypographyRole.Code
+        rawText: "NORMAL"
+    }
 
     HnLabel {
         objectName: "normalStatusLabel"
@@ -72,7 +132,7 @@ RowLayout {
         color: HoloniightPalette.textMuted
         visible: root.controller.vim.currentMode === VimModeController.Visual
         Layout.fillWidth: visible
-        rawText: qsTr("VISUAL  ·  %1 selected").arg(root.controller.vim.selectedCount)
+        rawText: qsTr("%1 selected").arg(root.controller.vim.selectedCount)
     }
 
     TextField {
@@ -118,6 +178,6 @@ RowLayout {
         elide: Text.ElideMiddle
         visible: root.controller.vim.currentMode === VimModeController.Insert
         Layout.fillWidth: visible
-        rawText: root.controller.vim.insertValid ? qsTr("INSERT  ·  Enter to confirm, Esc to cancel") : qsTr("INSERT  ·  %1").arg(root.controller.vim.insertErrorMessage)
+        rawText: root.controller.vim.insertValid ? qsTr("Enter to confirm, Esc to cancel") : root.controller.vim.insertErrorMessage
     }
 }

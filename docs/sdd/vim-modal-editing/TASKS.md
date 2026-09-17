@@ -103,3 +103,7 @@
 Completed tasks are backed by the regression and capture evidence in VERIFICATION.md.
 T-021 retains its explicit manual acceptance gate; native IME/accessibility and the full
 native theme/scale matrix remain pending separately from passing automated checks.
+
+- [x] R-007: Guard inline editor text feedback and verify rename/create entry,
+  controller-driven updates, typing and cancellation without binding-loop warnings
+  (REQ-R-007). Record focused regression and project-gate results in VERIFICATION.md.

@@ -98,3 +98,31 @@ Spark was assigned exclusive comparator/proxy regression work but failed before
 execution because its model quota was exhausted (reset reported September 16).
 The main agent completed that isolated work locally under the plan's fallback.
 Previous unsupported completion claims are superseded by this evidence record.
+
+
+## Inline editor binding loop (2026-09-17)
+
+REQ-R-007 remediation guards the editor's onTextChanged feedback when the text
+already equals controller insertText. This prevents controller-driven binding
+updates from reentering the binding through the controller's changed signal.
+Spark was assigned the QML fix but its configured model was unavailable; the main
+agent completed the QML change and regression locally.
+
+- `task deps` and `task build`: passed.
+- New `Files.InlineEditorSynchronizesTextWithoutBindingLoops` regression failed
+  before the fix with five binding-loop warnings and passed after the fix with
+  zero. It covers i/a/o entry, controller-driven text updates, keyboard edits,
+  invalid-name feedback and cancellation without creating a file.
+- Focused CTest run passed: the new regression, ModalEditingWindowKeyboardAndHighlighting,
+  LineNumberGutterNumbersPlaceholderRowsAndClearsForInlineEditor, and all eight
+  ModeBadge tests (11 cases). Existing modal tests retain commit, cursor-placement
+  and validation-latency coverage.
+- Full `task check`: passed with expanded permissions (required for the existing
+  socket-binding test): debug/release builds, all eight CTest targets, formatting,
+  clang-tidy, QML lint, REUSE, staged installation and uninstall checks.
+- `git diff --check`: passed.
+
+Logs: `build/inline-binding-{deps,build,test-build,before,focused,check}.log`.
+The focused command used `GTEST_FILTER=Files.InlineEditorSynchronizesTextWithoutBindingLoops:Files.ModalEditingWindowKeyboardAndHighlighting:Files.LineNumberGutterNumbersPlaceholderRowsAndClearsForInlineEditor:Files.ModeBadge*`
+with `ctest --preset test -R '^files-smoke$'`. The before-fix run selected only the
+new regression. This offscreen regression does not close native acceptance gates.

@@ -6,6 +6,7 @@
 #include "quick_look_presentation_model_test_access.h"
 #include "size_format.h"
 
+#include <QAccessible>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QGuiApplication>
@@ -2185,4 +2186,233 @@ TEST(Files, QuickLookPendingResizeKeepsCaptionInsideCard) {
   EXPECT_LE(hint->mapToItem(card, QPointF(0, hint->height())).y(), card->height());
   EXPECT_TRUE(harness.controller.preview()->busy());
   EXPECT_FALSE(harness.controller.preview()->hasImage());
+}
+
+namespace {
+struct ModeBadge {
+  QQuickItem* item = nullptr;
+  QQuickItem* label = nullptr;
+  QQuickItem* background = nullptr;
+};
+
+ModeBadge findModeBadge(QQuickWindow* window) {
+  ModeBadge badge;
+  badge.item = window->findChild<QQuickItem*>("modeBadge");
+  if (badge.item != nullptr) {
+    badge.label = badge.item->findChild<QQuickItem*>("modeBadgeLabel");
+    badge.background = badge.item->property("background").value<QQuickItem*>();
+  }
+  return badge;
+}
+
+// mode-status-badge REQ-F-002/F-003/F-009: label, live palette fill and accessible name agree.
+::testing::AssertionResult badgeShows(const ModeBadge& badge, const QString& label, const QString& fillToken) {
+  const auto text = badge.label->property("text").toString();
+  const auto fill = badge.background->property("color");
+  const auto expectedFill = evaluateInContext(badge.background, "HoloniightPalette." + fillToken);
+  const auto name = QQmlProperty(badge.item, QStringLiteral("Accessible.name"), qmlContext(badge.item)).read();
+  if (!badge.item->isVisible() || text != label || !expectedFill.isValid() || fill != expectedFill ||
+      name.toString() != label + " mode") {
+    return ::testing::AssertionFailure() << "badge shows " << text.toStdString() << " / "
+                                         << fill.value<QColor>().name().toStdString() << " / "
+                                         << name.toString().toStdString() << ", expected " << label.toStdString()
+                                         << " / " << fillToken.toStdString();
+  }
+  return ::testing::AssertionSuccess();
+}
+
+struct BadgeHarness {
+  QTemporaryDir dir{files_test::fixturePattern("mode-badge")};
+  DirectoryController controller;
+  LoadedWindow loaded;
+  ModeBadge badge;
+
+  BadgeHarness() {
+    files_test::populateEntries(dir, 3);
+    loaded = loadActiveWindow(controller, dir.path());
+    if (loaded.window != nullptr) {
+      badge = findModeBadge(loaded.window);
+    }
+  }
+  [[nodiscard]] bool ready() const {
+    return loaded.list != nullptr && badge.item != nullptr && badge.label != nullptr && badge.background != nullptr;
+  }
+};
+}  // namespace
+
+TEST(Files, ModeBadgeNormalMode) {
+  BadgeHarness harness;
+  ASSERT_TRUE(harness.ready());
+  // REQ-F-001: first row child of the status bar, ahead of every mode-contextual label.
+  auto* statusBar = harness.loaded.window->findChild<QQuickItem*>("modeStatusBar");
+  ASSERT_NE(statusBar, nullptr);
+  ASSERT_FALSE(statusBar->childItems().isEmpty());
+  EXPECT_EQ(statusBar->childItems().first(), harness.badge.item);
+  EXPECT_EQ(harness.badge.label->property("font").value<QFont>().family(),
+            evaluateInContext(harness.badge.label, "HolonightTheme.monospaceFont").toString());
+  EXPECT_TRUE(badgeShows(harness.badge, "NORMAL", "accentBlue"));
+  EXPECT_EQ(harness.badge.label->property("color"),
+            evaluateInContext(harness.badge.label, "HoloniightPalette.background"));
+  EXPECT_EQ(QQmlProperty(harness.badge.item, QStringLiteral("Accessible.role"), qmlContext(harness.badge.item))
+                .read()
+                .toInt(),
+            QAccessible::StaticText);
+}
+
+TEST(Files, ModeBadgeVisualMode) {
+  BadgeHarness harness;
+  ASSERT_TRUE(harness.ready());
+  QTest::keyClick(harness.loaded.window, Qt::Key_V);
+  ASSERT_EQ(harness.controller.vim()->currentMode(), VimModeController::Mode::Visual);
+  EXPECT_TRUE(badgeShows(harness.badge, "VISUAL", "accentViolet"));
+}
+
+TEST(Files, ModeBadgeSearchMode) {
+  BadgeHarness harness;
+  ASSERT_TRUE(harness.ready());
+  QTest::keyClick(harness.loaded.window, Qt::Key_Slash);
+  ASSERT_EQ(harness.controller.vim()->currentMode(), VimModeController::Mode::Search);
+  EXPECT_TRUE(badgeShows(harness.badge, "SEARCH", "accentYellow"));
+}
+
+TEST(Files, ModeBadgeInsertMode) {
+  BadgeHarness harness;
+  ASSERT_TRUE(harness.ready());
+  QTest::keyClick(harness.loaded.window, Qt::Key_I);
+  ASSERT_EQ(harness.controller.vim()->currentMode(), VimModeController::Mode::Insert);
+  EXPECT_TRUE(badgeShows(harness.badge, "INSERT", "success"));
+}
+
+// REQ-F-005 / REQ-NF-001: every transition lands in one event-loop spin without moving the badge.
+TEST(Files, ModeBadgeWidthConstant) {
+  BadgeHarness harness;
+  ASSERT_TRUE(harness.ready());
+  auto* window = harness.loaded.window;
+  const auto width = harness.badge.item->width();
+  const auto sceneX = harness.badge.item->mapToScene(QPointF()).x();
+  EXPECT_GT(width, 0);
+  // REQ-F-007: vertically centred in the status bar, rounded with the Pill role.
+  auto* statusBar = window->findChild<QQuickItem*>("modeStatusBar");
+  ASSERT_NE(statusBar, nullptr);
+  EXPECT_NEAR(harness.badge.item->mapToItem(statusBar, QPointF(0, harness.badge.item->height() / 2)).y(),
+              statusBar->height() / 2, 1);
+  EXPECT_EQ(harness.badge.background->property("radius"),
+            evaluateInContext(harness.badge.background,
+                              "HnAppearance.roundedRadius(HnSurfaceRole.Pill, width, height, HnAppearance.revision)"));
+
+  const QList<std::tuple<Qt::Key, VimModeController::Mode, QString, QString>> steps{
+      {Qt::Key_V, VimModeController::Mode::Visual, "VISUAL", "accentViolet"},
+      {Qt::Key_Escape, VimModeController::Mode::Normal, "NORMAL", "accentBlue"},
+      {Qt::Key_Slash, VimModeController::Mode::Search, "SEARCH", "accentYellow"},
+      {Qt::Key_Escape, VimModeController::Mode::Normal, "NORMAL", "accentBlue"},
+      {Qt::Key_I, VimModeController::Mode::Insert, "INSERT", "success"},
+      {Qt::Key_Escape, VimModeController::Mode::Normal, "NORMAL", "accentBlue"},
+  };
+  for (const auto& [key, mode, label, fill] : steps) {
+    SCOPED_TRACE(label.toStdString());
+    QTest::keyClick(window, key);
+    ASSERT_EQ(harness.controller.vim()->currentMode(), mode);
+    QTest::qWait(0);
+    EXPECT_TRUE(badgeShows(harness.badge, label, fill));
+    EXPECT_EQ(harness.badge.item->width(), width);
+    EXPECT_EQ(harness.badge.item->mapToScene(QPointF()).x(), sceneX);
+  }
+}
+
+TEST(Files, ModeBadgeVisibleDuringPrompt) {
+  QTemporaryDir home(files_test::fixturePattern("mode-badge-trash-home"));
+  ASSERT_TRUE(home.isValid());
+  const files_test::ScopedXdgDataHome guard(home.path());
+  BadgeHarness harness;
+  ASSERT_TRUE(harness.ready());
+  QTest::keyClick(harness.loaded.window, 'D', Qt::ShiftModifier);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.controller.tasks()->hasPrompt(); }));
+  EXPECT_TRUE(badgeShows(harness.badge, "NORMAL", "accentBlue"));
+  QTest::keyClick(harness.loaded.window, Qt::Key_N);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.tasks()->hasPrompt(); }));
+  EXPECT_TRUE(badgeShows(harness.badge, "NORMAL", "accentBlue"));
+}
+
+// REQ-F-008: the badge names the mode, so the contextual labels no longer repeat it.
+TEST(Files, ModeBadgeRemovesPrefixes) {
+  BadgeHarness harness;
+  ASSERT_TRUE(harness.ready());
+  auto* window = harness.loaded.window;
+  auto* visualLabel = window->findChild<QQuickItem*>("visualStatusLabel");
+  auto* insertLabel = window->findChild<QQuickItem*>("insertStatusLabel");
+  ASSERT_NE(visualLabel, nullptr);
+  ASSERT_NE(insertLabel, nullptr);
+
+  QTest::keyClick(window, Qt::Key_V);
+  QTest::keyClick(window, Qt::Key_J);
+  ASSERT_EQ(harness.controller.vim()->selectedCount(), 2);
+  EXPECT_EQ(visualLabel->property("rawText").toString(), "2 selected");
+  QTest::keyClick(window, Qt::Key_Escape);
+
+  QTest::keyClick(window, Qt::Key_I);
+  ASSERT_TRUE(harness.controller.vim()->insertValid());
+  EXPECT_EQ(insertLabel->property("rawText").toString(), "Enter to confirm, Esc to cancel");
+  QTest::keyClick(window, Qt::Key_Slash);
+  QTest::keyClick(window, Qt::Key_X);
+  ASSERT_FALSE(harness.controller.vim()->insertValid());
+  EXPECT_FALSE(harness.controller.vim()->insertErrorMessage().isEmpty());
+  EXPECT_EQ(insertLabel->property("rawText").toString(), harness.controller.vim()->insertErrorMessage());
+  QTest::keyClick(window, Qt::Key_Escape);
+}
+
+// REQ-F-010: display-only — clicking the badge changes neither focus nor mode.
+TEST(Files, ModeBadgeNoMouseOrFocus) {
+  BadgeHarness harness;
+  ASSERT_TRUE(harness.ready());
+  auto* window = harness.loaded.window;
+  auto* focused = window->activeFocusItem();
+  ASSERT_NE(focused, nullptr);
+  EXPECT_FALSE(harness.badge.item->property("activeFocusOnTab").toBool());
+  EXPECT_EQ(harness.badge.item->property("focusPolicy").toInt(), Qt::NoFocus);
+  const auto center =
+      harness.badge.item->mapToScene(QPointF(harness.badge.item->width() / 2, harness.badge.item->height() / 2));
+  QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+  QTest::qWait(0);
+  EXPECT_EQ(window->activeFocusItem(), focused);
+  EXPECT_FALSE(harness.badge.item->hasActiveFocus());
+  EXPECT_EQ(harness.controller.vim()->currentMode(), VimModeController::Mode::Normal);
+  QTest::keyClick(window, Qt::Key_J);
+  EXPECT_EQ(harness.controller.cursorRow(), 1);
+}
+
+TEST(Files, InlineEditorSynchronizesTextWithoutBindingLoops) {
+  bindingLoopCounter().warnings.store(0);
+  bindingLoopCounter().previous = qInstallMessageHandler(countBindingLoops);
+  const auto restoreHandler = qScopeGuard([] { qInstallMessageHandler(bindingLoopCounter().previous); });
+  QTemporaryDir dir(files_test::fixturePattern("inline-binding"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::populateEntries(dir, 3);
+  DirectoryController controller;
+  auto loaded = loadActiveWindow(controller, dir.path());
+  ASSERT_NE(loaded.list, nullptr);
+  for (const auto key : {Qt::Key_I, Qt::Key_A, Qt::Key_O}) {
+    SCOPED_TRACE(static_cast<int>(key));
+    QTest::keyClick(loaded.window, key);
+    ASSERT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Insert);
+    auto* editor = loaded.window->activeFocusItem();
+    ASSERT_NE(editor, nullptr);
+    ASSERT_EQ(editor->objectName(), "inlineNameEditor");
+    EXPECT_EQ(editor->property("text").toString(), controller.vim()->insertText());
+    controller.updateInsertText("draft.txt");
+    EXPECT_EQ(editor->property("text").toString(), "draft.txt");
+    QTest::keyClick(loaded.window, Qt::Key_End);
+    QTest::keyClick(loaded.window, Qt::Key_X);
+    EXPECT_EQ(controller.vim()->insertText(), "draft.txtx");
+    EXPECT_EQ(editor->property("text").toString(), "draft.txtx");
+    EXPECT_TRUE(controller.vim()->insertValid());
+    QTest::keyClick(loaded.window, Qt::Key_Home);
+    QTest::keyClick(loaded.window, Qt::Key_Slash);
+    EXPECT_FALSE(controller.vim()->insertValid());
+    EXPECT_TRUE(editor->property("hasError").toBool());
+    QTest::keyClick(loaded.window, Qt::Key_Escape);
+    EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+    EXPECT_FALSE(QFile::exists(dir.filePath("draft.txtx")));
+  }
+  EXPECT_EQ(bindingLoopCounter().warnings.load(), 0);
 }

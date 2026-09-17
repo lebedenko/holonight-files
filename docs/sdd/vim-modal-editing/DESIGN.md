@@ -34,3 +34,8 @@ Navigation centrally clears editing, visual/search state, remembered query and k
 chords before load; a navigation signal restores listing focus. NORMAL Escape closes
 Quick Look first and otherwise retains fullscreen exit. n/N are literal in SEARCH
 and repeat the committed search only in NORMAL.
+
+The inline editor retains its insertText binding. Its onTextChanged handler calls
+updateInsertText only when its text differs from the controller value, avoiding
+reentrant changed emission while evaluating that binding (REQ-R-007). Direct
+editor edits still update validation; controller-driven updates do not echo back.

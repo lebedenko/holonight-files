@@ -420,7 +420,8 @@ Item {
                 Keys.onEnterPressed: root.controller.commitInsertEditing()
                 Keys.onEscapePressed: root.controller.cancelInsertEditing()
 
-                onTextChanged: if (delegate.editingThis)
+                // Controller-driven binding updates must not echo back and emit changed again.
+                onTextChanged: if (delegate.editingThis && text !== root.controller.vim.insertText)
                     root.controller.updateInsertText(text)
                 onVisibleChanged: if (visible) {
                     forceActiveFocus();
