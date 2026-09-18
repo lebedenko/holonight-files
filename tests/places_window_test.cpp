@@ -10,11 +10,38 @@
 #include <QScopeGuard>
 #include <QTest>
 
+#include <array>
 #include <gtest/gtest.h>
 
 using files_test::findPlaceRow;
 
 namespace {
+// Without a seeded XDG_CONFIG_HOME the sidebar is built from whatever ~/.config/user-dirs.dirs the
+// machine happens to have -- a desktop has a full set, a freshly created CI account has no file at
+// all and so gets Home alone. Tests that move between rows or need the list to overflow must seed
+// their own; declare one before the PlacesWindow it applies to, so the guards outlive the model.
+struct SeededUserDirs {
+  QTemporaryDir config_home{files_test::fixturePattern("places-window-config")};
+  QTemporaryDir data_home{files_test::fixturePattern("places-window-data")};
+  files_test::ScopedXdgConfigHome config_guard;
+  files_test::ScopedXdgDataHome data_guard;
+  explicit SeededUserDirs(int count) : config_guard(seed(count)), data_guard(data_home.path()) {}
+  // All nine keys PlacesModel recognizes, in its display order.
+  static constexpr std::array<const char*, 9> kKeys{"DESKTOP", "DOCUMENTS", "DOWNLOAD",  "PICTURES",   "MUSIC",
+                                                    "VIDEOS",  "PROJECTS",  "TEMPLATES", "PUBLICSHARE"};
+  // Writes the seeded user-dirs.dirs and returns the config home it lives in.
+  [[nodiscard]] QString seed(int count) const {
+    QByteArray contents;
+    for (int i = 0; i < count; ++i) {
+      const auto path = data_home.filePath(QString::fromLatin1(kKeys.at(i)).toLower());
+      QDir().mkpath(path);  // real directories, so the availability check reports them available
+      contents += "XDG_" + QByteArray(kKeys.at(i)) + "_DIR=\"" + path.toUtf8() + "\"\n";
+    }
+    files_test::writeFile(config_home, "user-dirs.dirs", contents);
+    return config_home.path();
+  }
+};
+
 struct PlacesWindow {
   QTemporaryDir dir{files_test::fixturePattern("places-window")};
   DirectoryController controller;
@@ -55,8 +82,10 @@ struct PlacesWindow {
 }  // namespace
 
 TEST(PlacesWindow, KeyboardMouseHistorySelectionAndFocus) {
+  const SeededUserDirs seeded(1);  // Home plus one row, so Down/Up have somewhere to go.
   PlacesWindow view;
   ASSERT_TRUE(view.start());
+  ASSERT_EQ(view.controller.places()->rowCount(), 2);
   view.target();
   EXPECT_FALSE(view.button()->property("highlighted").toBool());
   EXPECT_FALSE(view.button()->property("selected").toBool());
@@ -126,8 +155,11 @@ TEST(PlacesWindow, FallbackIconsAndShortWindow) {
   QIcon::setThemeSearchPaths({});
   QIcon::setFallbackThemeName("");
   QIcon::setFallbackSearchPaths({});
+  const auto kSeeded = static_cast<int>(SeededUserDirs::kKeys.size());
+  const SeededUserDirs seeded(kSeeded);  // 10 rows: enough to overflow 220px.
   PlacesWindow view;
   ASSERT_TRUE(view.start());
+  ASSERT_EQ(view.controller.places()->rowCount(), kSeeded + 1);
   view.row()->setProperty("iconName", "places-deliberately-unavailable-icon");
   auto* icon = view.button()->findChild<QQuickItem*>("placeFallbackIcon");
   ASSERT_NE(icon, nullptr);
