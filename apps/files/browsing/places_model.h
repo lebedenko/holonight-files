@@ -13,8 +13,6 @@
 // (SPEC.md places-sources). Constructed once by DirectoryController, exactly like today.
 class PlacesModel : public QAbstractListModel {
   Q_OBJECT
-  QML_ELEMENT
-  QML_UNCREATABLE("Created by the application")
  public:
   enum class Origin { Home, XdgUserDirectory, Bookmark };
   Q_ENUM(Origin)

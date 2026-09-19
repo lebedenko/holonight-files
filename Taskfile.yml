@@ -14,7 +14,7 @@ tasks:
     cmds: ['bash scripts/prepare-deps.sh']
   configure:
     desc: Configure the selected build preset
-    cmds: ['cmake --preset {{.PRESET}} -DHOLONIGHT_DEPENDENCY_PREFIX="{{.HOLONIGHT_DEPENDENCY_PREFIX}}" -DHOLONIGHT_QML_IMPORT_PATH="{{.HOLONIGHT_QML_IMPORT_PATH}}"']
+    cmds: ['cmake --preset {{.PRESET}} -DCMAKE_PREFIX_PATH="{{.HOLONIGHT_DEPENDENCY_PREFIX}}" -DQML_IMPORT_PATH="{{.HOLONIGHT_QML_IMPORT_PATH}}"']
   build:
     desc: Configure and build the selected preset
     cmds:
@@ -28,22 +28,6 @@ tasks:
         vars: {PRESET: '{{.PRESET}}'}
       - build/{{.PRESET}}/apps/files/hn-files {{.CLI_ARGS}}
 
-  install:
-    desc: Build Release against installed system providers, install to /usr and refresh desktop metadata
-    cmds:
-      - cmake --preset system-install
-      - cmake --build --preset system-install
-      - sudo cmake --install build/system-install
-      - sudo update-desktop-database /usr/share/applications
-
-  uninstall:
-    desc: Remove the installed Files payload from /usr and refresh desktop metadata
-    cmds: ['sudo env -u DESTDIR bash scripts/uninstall.sh']
-
-  uninstall-check:
-    desc: Verify uninstall in disposable staged filesystems with mocked privileged commands
-    cmds: ['python3 scripts/check-uninstall.py']
-
   test:
     desc: Build and run tests
     cmds:
@@ -51,15 +35,17 @@ tasks:
         vars: {PRESET: test}
       - ctest --preset test
   format:
-    desc: Format C++ and QML sources
-    cmds:
-      - clang-format -i apps/files/*.cpp apps/files/*.h apps/files/settings/* apps/files/state/* apps/files/places/* tests/*.cpp tests/*.h
-      - /usr/lib/qt6/bin/qmlformat -i apps/files/Main.qml apps/files/AppHeaderBar.qml apps/files/DirectoryListing.qml apps/files/PlacesPanel.qml apps/files/PreviewPane.qml apps/files/QuickLookOverlay.qml apps/files/ModeStatusBar.qml
+    desc: Format recursive C++ and QML sources
+    cmds: ['python3 scripts/format-sources.py']
   format-check:
-    desc: Check C++ and QML formatting
-    cmds:
-      - clang-format --dry-run --Werror apps/files/*.cpp apps/files/*.h apps/files/settings/* apps/files/state/* apps/files/places/* tests/*.cpp tests/*.h
-      - bash scripts/check-qml-format.sh
+    desc: Check recursive C++ and QML formatting
+    cmds: ['python3 scripts/format-sources.py --check']
+  qml-import-check:
+    desc: Check runtime-control import policy
+    cmds: ['python3 scripts/check-qml-import-policy.py']
+  qmltypes-check:
+    desc: Check generated application QML metadata
+    cmds: ['cmake --build build/{{.PRESET}} --target qmltypes-check']
   tidy:
     desc: Run C++ clang-tidy checks
     cmds:
@@ -85,7 +71,7 @@ tasks:
         vars: {PRESET: release}
       - bash scripts/check-install.sh
   check:
-    desc: Sequentially build, test, check formatting, lint, licenses, staged installation and uninstall
+    desc: Sequentially build, test, check formatting, lint, licenses, staged installation
     aliases: [verify]
     cmds:
       - task: build
@@ -97,11 +83,12 @@ tasks:
       - task: lint
       - task: license-check
       - task: install-check
-      - task: uninstall-check
+      - task: qml-import-check
+      - task: qmltypes-check
   clean:
-    desc: Remove Files debug/release/test/system-install build directories, preserving provider installs
+    desc: Remove Files debug/release/test build directories, preserving provider installs
     cmds:
-      - rm -rf -- build/debug build/release build/test build/system-install
+      - rm -rf -- build/debug build/release build/test
   isolated-runtime-check:
     desc: Build and verify the installed payload in a disposable, network-isolated container
     cmds:

@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls as Controls
 import Holonight.Core
 import Holonight.Controls
 
@@ -39,7 +39,7 @@ Item {
         keyNavigationEnabled: true
         model: root.controller.places
         spacing: HnMetrics.internalSpacing(HnControlSize.Compact)
-        ScrollBar.vertical: ScrollBar {}
+        Controls.ScrollBar.vertical: Controls.ScrollBar {}
 
         function activate(): void {
             const place = currentItem as PlaceRow;

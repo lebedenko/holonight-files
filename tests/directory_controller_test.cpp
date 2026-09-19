@@ -635,6 +635,7 @@ TEST(DirectoryController, UnchangedTouchPreservesAtimeForFilesDirectoriesAndLink
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   for (const auto& name : {"file", "folder", "link", "dangling"}) {
+    SCOPED_TRACE(name);
     const auto path = QFile::encodeName(dir.filePath(name));
     ASSERT_EQ(::utimensat(AT_FDCWD, path.constData(), oldTimes.data(), AT_SYMLINK_NOFOLLOW), 0);
     controller.handleKey("g");
@@ -647,7 +648,14 @@ TEST(DirectoryController, UnchangedTouchPreservesAtimeForFilesDirectoriesAndLink
       controller.handleKey("j");
     }
     controller.handleKey("i");
+    // Navigation and validation may dereference a symlink, updating its atime even with
+    // a future timestamp. Establish the timestamp at the commit boundary so this test
+    // measures touch's UTIME_OMIT behavior rather than those unrelated reads.
+    DirectoryControllerTestAccess::beforeCommit(controller, [&](const auto&) {
+      ASSERT_EQ(::utimensat(AT_FDCWD, path.constData(), oldTimes.data(), AT_SYMLINK_NOFOLLOW), 0);
+    });
     controller.commitInsertEditing();
+    DirectoryControllerTestAccess::beforeCommit(controller, {});
     EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
     struct stat info{};
     ASSERT_EQ(::lstat(path.constData(), &info), 0);
@@ -1902,4 +1910,20 @@ TEST(DirectoryController, BookmarkCompletionPreservesInterveningInteractionGuard
                 available ? PlacesModel::Status::Available : PlacesModel::Status::Unavailable);
     }
   }
+}
+
+TEST(DirectoryController, ShutdownIgnoresDuplicateWorkerCompletionsAndRepeatedRequests) {
+  DirectoryController controller;
+  QSignalSpy finished(&controller, &DirectoryController::shutdownFinished);
+  controller.shutdown();
+  auto& model = DirectoryControllerTestAccess::model(controller);
+  emit model.shutdownFinished();
+  emit model.shutdownFinished();
+  emit model.shutdownFinished();
+  EXPECT_EQ(finished.count(), 0);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return finished.count() == 1; }));
+  controller.shutdown();
+  emit model.shutdownFinished();
+  QCoreApplication::processEvents();
+  EXPECT_EQ(finished.count(), 1);
 }

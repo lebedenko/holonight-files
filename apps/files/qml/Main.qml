@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 // Initialize the configured style before shared controls import Basic.
 // qmllint disable unused-imports
-import QtQuick.Controls
+import QtQuick.Controls as Controls
 // qmllint enable unused-imports
 import Holonight.Core
 import Holonight.Controls
@@ -109,7 +109,7 @@ HnApplicationWindow {
                 }
             }
 
-            SplitView {
+            Controls.SplitView {
                 objectName: "listingPreviewSplit"
                 orientation: Qt.Horizontal
                 Layout.fillWidth: true
@@ -129,14 +129,14 @@ HnApplicationWindow {
                 DirectoryListing {
                     objectName: "directoryListing"
                     controller: window.controller
-                    SplitView.fillWidth: true
+                    Controls.SplitView.fillWidth: true
                 }
 
                 Item {
                     id: previewContainer
                     objectName: "previewContainer"
-                    SplitView.preferredWidth: 320
-                    SplitView.minimumWidth: 220
+                    Controls.SplitView.preferredWidth: 320
+                    Controls.SplitView.minimumWidth: 220
 
                     Rectangle {
                         anchors.fill: parent

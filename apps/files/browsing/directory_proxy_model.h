@@ -9,8 +9,6 @@
 // so nothing here hand-rolls incremental re-sort logic (see SPEC.md REQ-F-003, REQ-F-014, REQ-F-015).
 class DirectoryProxyModel : public QSortFilterProxyModel {
   Q_OBJECT
-  QML_ELEMENT
-  QML_UNCREATABLE("Created by the application")
   Q_PROPERTY(bool hiddenVisible READ hiddenVisible WRITE setHiddenVisible NOTIFY hiddenVisibleChanged)
   Q_PROPERTY(bool sortDescending READ sortDescending WRITE setSortDescending NOTIFY sortDescendingChanged)
  public:

@@ -1,9 +1,8 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls.Basic as C
+import QtQuick.Controls as Controls
 import QtQuick.Layouts
-import Holonight
 import Holonight.Core
 import Holonight.Controls
 
@@ -41,7 +40,7 @@ RowLayout {
     ]
     readonly property var currentModeMeta: modeMeta[controller.vim.currentMode]
 
-    C.Control {
+    Controls.Control {
         objectName: "modeBadge"
         Layout.alignment: Qt.AlignVCenter
         // Sized off the hidden metric so switching modes never moves the labels that follow.
@@ -135,7 +134,7 @@ RowLayout {
         rawText: qsTr("%1 selected").arg(root.controller.vim.selectedCount)
     }
 
-    TextField {
+    Controls.TextField {
         id: searchField
         objectName: "searchField"
 

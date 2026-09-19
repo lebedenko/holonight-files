@@ -5,10 +5,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(GNUInstallDirs)
-set(HOLONIGHT_DEPENDENCY_PREFIX "${CMAKE_SOURCE_DIR}/build/deps/prefix" CACHE PATH "Installed provider prefix")
-list(PREPEND CMAKE_PREFIX_PATH "${HOLONIGHT_DEPENDENCY_PREFIX}")
-set(HOLONIGHT_QML_IMPORT_PATH "${HOLONIGHT_DEPENDENCY_PREFIX}/${CMAKE_INSTALL_LIBDIR}/qt6/qml" CACHE PATH "Installed provider QML modules")
-set(QML_IMPORT_PATH "${HOLONIGHT_QML_IMPORT_PATH}" CACHE STRING "Development QML imports" FORCE)
+# Presets/tasks supply development defaults; explicit caller paths are authoritative.
+set(FILES_RUNTIME_QML_PATH "${QML_IMPORT_PATH}")
+string(REPLACE ";" ":" FILES_RUNTIME_QML_PATH "${FILES_RUNTIME_QML_PATH}")
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Quick Qml QuickControls2 Svg)
 find_package(HolonightQt CONFIG REQUIRED)
 find_package(tomlplusplus 3.4 CONFIG REQUIRED)
@@ -26,23 +25,14 @@ endif()
 install(FILES LICENSE LICENSES/GPL-3.0-or-later.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/${PROJECT_NAME})
 install(FILES packaging/org.holonight.Files.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES packaging/org.holonight.Files.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
-find_program(CLANG_FORMAT clang-format)
 find_program(RUN_CLANG_TIDY run-clang-tidy)
-file(GLOB FILES_CXX CONFIGURE_DEPENDS
-  "${CMAKE_SOURCE_DIR}/apps/files/*.cpp"
-  "${CMAKE_SOURCE_DIR}/apps/files/*.h"
-  "${CMAKE_SOURCE_DIR}/apps/files/settings/*.cpp"
-  "${CMAKE_SOURCE_DIR}/apps/files/settings/*.h"
-  "${CMAKE_SOURCE_DIR}/apps/files/state/*.cpp"
-  "${CMAKE_SOURCE_DIR}/apps/files/state/*.h"
-  "${CMAKE_SOURCE_DIR}/tests/*.cpp"
-  "${CMAKE_SOURCE_DIR}/tests/*.h"
-)
-if(CLANG_FORMAT)
-  add_custom_target(format COMMAND ${CLANG_FORMAT} -i ${FILES_CXX})
-  add_custom_target(format-check COMMAND ${CLANG_FORMAT} --dry-run --Werror ${FILES_CXX})
-endif()
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+file(GLOB_RECURSE FILES_CXX CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/apps/*.cpp" "${CMAKE_SOURCE_DIR}/tests/*.cpp")
+add_custom_target(format COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/format-sources.py" VERBATIM)
+add_custom_target(format-check COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/format-sources.py" --check VERBATIM)
+add_custom_target(qml-import-check COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check-qml-import-policy.py" VERBATIM)
+add_custom_target(qmltypes-check COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/check-qmltypes.sh" "${CMAKE_BINARY_DIR}" DEPENDS hn-files VERBATIM)
 if(RUN_CLANG_TIDY)
-  add_custom_target(tidy COMMAND ${RUN_CLANG_TIDY} -p ${CMAKE_BINARY_DIR} -removed-arg=-mno-direct-extern-access ${FILES_CXX})
+  add_custom_target(tidy COMMAND ${RUN_CLANG_TIDY} -p ${CMAKE_BINARY_DIR} -removed-arg=-mno-direct-extern-access -config-file=${CMAKE_SOURCE_DIR}/.clang-tidy -j 2 ${FILES_CXX})
 endif()
-add_custom_target(qml-lint DEPENDS files-ui_qmllint)
+add_custom_target(qml-lint DEPENDS hn-files_qmllint)

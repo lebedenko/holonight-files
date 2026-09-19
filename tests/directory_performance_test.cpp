@@ -1,5 +1,6 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
+#include "engine_setup.h"
 
 #include <QElapsedTimer>
 #include <QGuiApplication>
@@ -54,6 +55,7 @@ TEST(DirectoryPerformance, RenderedRowsAndInteractionWhileLoading) {
     files_test::populateEntries(dir, count);
     DirectoryController controller;
     QQmlApplicationEngine engine;
+    initializeFilesEngine(engine);
     engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
     engine.loadFromModule("HolonightFiles", "Main");
     ASSERT_EQ(engine.rootObjects().size(), 1);

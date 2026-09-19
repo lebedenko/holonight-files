@@ -1,16 +1,21 @@
 #pragma once
-
 #include "clipboard_register.h"
 #include "directory_model.h"
 #include "directory_proxy_model.h"
+#include "editing_session.h"
+#include "file_command_router.h"
 #include "jump_list.h"
+#include "navigation_session.h"
 #include "places_model.h"
+#include "preview_selection.h"
 #include "preview_service.h"
+#include "session_lifecycle.h"
 #include "state/last_location_tracker.h"
 #include "state/state_store.h"
 #include "task_manager.h"
 #include "vim_mode_controller.h"
 #include "warning_sink.h"
+#include "window_event_filter.h"
 
 #include <QElapsedTimer>
 #include <QFileSystemWatcher>
@@ -19,13 +24,10 @@
 #include <QString>
 #include <QtQml/qqmlregistration.h>
 
-// The facade QML talks to: owns the DirectoryModel/DirectoryProxyModel/PlacesModel/watcher, the
-// VimModeController (NORMAL/VISUAL/SEARCH/INSERT), NORMAL-mode key-chord parsing, and
-// navigation/open dispatch.
+// QML-facing application coordinator. Private sessions own navigation, editing, preview
+// selection, command parsing and lifecycle state; invokables retain the application contract.
 class DirectoryController : public QObject {
   Q_OBJECT
-  QML_ELEMENT
-  QML_UNCREATABLE("Created by the application")
   Q_PROPERTY(QString currentPath READ currentPath NOTIFY changed)
   Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY changed)
   Q_PROPERTY(QString directoryError READ directoryError NOTIFY changed)
@@ -41,19 +43,19 @@ class DirectoryController : public QObject {
   Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
  public:
   explicit DirectoryController(QObject* parent = nullptr);
-  QString currentPath() const { return current_path_; }
+  QString currentPath() const { return navigation_.current_path_; }
   QString statusMessage() const { return status_message_; }
-  QString directoryError() const { return model_.directoryError(); }
-  bool scanning() const { return model_.scanning(); }
-  int cursorRow() const { return cursor_row_; }
-  DirectoryProxyModel* listing() { return &proxy_; }
+  QString directoryError() const { return navigation_.model_.directoryError(); }
+  bool scanning() const { return navigation_.model_.scanning(); }
+  int cursorRow() const { return navigation_.cursor_row_; }
+  DirectoryProxyModel* listing() { return &navigation_.proxy_; }
   PlacesModel* places() { return &places_; }
   PreviewService* preview() { return &preview_; }
   VimModeController* vim() { return &vim_; }
   TaskManager* tasks() { return &tasks_; }
-  bool quickLookOpen() const { return quick_look_open_; }
-  bool canGoBack() const { return jump_list_.canGoBack(); }
-  bool canGoForward() const { return jump_list_.canGoForward(); }
+  bool quickLookOpen() const { return preview_selection_.quick_look_open_; }
+  bool canGoBack() const { return navigation_.jump_list_.canGoBack(); }
+  bool canGoForward() const { return navigation_.jump_list_.canGoForward(); }
   Q_INVOKABLE void open(const QString& path, const QString& fallbackReason = {});
   // Bookmark activation entry point (SPEC.md REQ-F-022): PlaceRow calls this instead of open()
   // for origin === Bookmark rows. Home/XDG rows keep calling open(path) directly (unchanged --
@@ -87,7 +89,7 @@ class DirectoryController : public QObject {
   Q_INVOKABLE void shutdown();
   // C++-only startup wiring from main() (SPEC.md REQ-C-006). While enabled, shutdown() saves the
   // session's last Local folder to state.toml (REQ-F-017/018).
-  void configureRestore(bool enabled) { restore_enabled_ = enabled; }
+  void configureRestore(bool enabled) { lifecycle_.restore_enabled_ = enabled; }
   // Validates path on the worker thread, then opens it, or home with the matching fallback reason
   // (REQ-F-012/013). Discarded if any other navigation happens first.
   void openRestoreCandidate(const QString& path);
@@ -98,8 +100,12 @@ class DirectoryController : public QObject {
   void shutdownFinished();
 
  private:
+  friend class NavigationSession;
+  friend class EditingSession;
+  friend class PreviewSelection;
+  friend class SessionLifecycle;
   friend struct DirectoryControllerTestAccess;
-  std::function<void(const VimModeController::InsertCommitResult&)> before_commit_for_test_;
+
   void resetForNavigation();
   // restoreName is the entry the cursor lands on once the new listing settles; empty means row 0.
   // recordHistory is false only for history traversal, which has already moved the jump list.
@@ -111,15 +117,13 @@ class DirectoryController : public QObject {
   void cancelPendingRestore();
   void listingChanged();
   void ensureSearchCurrent();
-  quint64 listing_revision_ = 0;
-  quint64 search_revision_ = 0;
-  QString pre_search_name_;
+
   int takeCount();
   void setCursorRow(qint64 row);
   void clampCursorRow();
   void syncPreviewTarget();
   bool canPreviewSelection() const;
-  void handleWorkerShutdown();
+
   void handleRestoreValidated(const QString& path, RestoreOutcome outcome);
   void handleBookmarkRecheckResolved(quint64 placeId, const QString& path, bool available);
   void saveState();
@@ -127,67 +131,24 @@ class DirectoryController : public QObject {
   void beginRename(VimModeController::InsertKind kind);
   void beginCreate(VimModeController::InsertKind kind);
   void removeActivePlaceholderIfAny();
-  // The digit/"g"-chord/G/j/k motion parsing shared by NORMAL and VISUAL modes. Returns true when
-  // key was recognized and consumed.
-  bool handleCountAndMotionKeys(const QString& key, bool isDigit);
-  // Everything reachable only from NORMAL mode: toggles, navigation, Quick Look, and the mode
-  // transitions into VISUAL/INSERT/SEARCH. Returns true when key was recognized and consumed.
-  bool handleNormalOnlyKey(const QString& key);
-  bool handleNormalToggleAndNavigationKey(const QString& key);
-  bool handleModeTransitionKey(const QString& key);
-  // File-operations dispatch (SPEC.md file-operations): yy/dd chords and VISUAL y/d/D, checked
-  // ahead of the rest of NORMAL/VISUAL dispatch. Returns true when key was recognized and
-  // consumed.
-  bool handleFileOperationKey(const QString& key, bool isVisual);
-  // While tasks_.hasPrompt() is true, every key is either a valid prompt response or a swallowed
-  // no-op (REQ-F-021's "paused... does not proceed until resolved" reads as exclusive key
-  // capture) — takes priority over NORMAL/VISUAL/SEARCH entirely.
-  bool handlePromptKey(const QString& key);
-  bool eventFilter(QObject* watched, QEvent* event) override;
   QStringList collectVisualSelectionPaths() const;
   void yankOrCut(bool cut, bool wholeVisualSelection);
   void pasteRegister();
   void requestTrash(bool wholeVisualSelection);
-  DirectoryModel model_;
-  DirectoryProxyModel proxy_;
+
   PlacesModel places_;
   PreviewService preview_;
   VimModeController vim_;
   TaskManager tasks_;
   ClipboardRegister register_;
-  QFileSystemWatcher watcher_;
-  QString current_path_;
-  JumpList jump_list_;
-  LastLocationTracker last_location_tracker_;
-  StateStore state_store_;
-  std::shared_ptr<WarningSink> warnings_ = std::make_shared<StderrWarningSink>();
-  bool restore_enabled_ = false;
-  bool state_saved_ = false;
-  // Counts openInternal() calls; a restore result arriving after any other navigation is stale.
-  quint64 navigation_serial_ = 0;
-  quint64 restore_serial_ = 0;
-  QString restore_candidate_;
-  QString pending_restore_name_;
-  // navigation_serial_ snapshot at the moment each place's currently-outstanding recheck was
-  // dispatched; consulted on resolution to drop a stale navigate/message side effect if a real
-  // navigation happened in between. Keyed by place id, not row: a bookmark's row index shifts
-  // when an earlier XDG row is removed by a late startup check.
-  QHash<quint64, quint64> bookmark_dispatch_navigation_serial_;
-  // True from a navigation until its first settled load; cleared by any explicit cursor move.
-  bool awaiting_initial_load_ = false;
+
   QString status_message_;
-  QString preview_target_path_;
-  quint64 preview_revision_ = 0;
-  int cursor_row_ = 0;
-  int pending_count_ = 0;
-  bool has_pending_count_ = false;
-  bool pending_g_ = false;
-  bool pending_y_ = false;
-  bool pending_d_ = false;
-  bool quick_look_open_ = false;
-  int workers_finished_ = 0;
-  int active_placeholder_source_row_ = -1;
-  QElapsedTimer pending_g_timer_;
-  QElapsedTimer pending_y_timer_;
-  QElapsedTimer pending_d_timer_;
+
+  NavigationSession navigation_{*this};
+  EditingSession editing_{*this};
+  PreviewSelection preview_selection_{*this};
+  SessionLifecycle lifecycle_{*this};
+  FileCommandRouter commands_;
+  WindowEventFilter window_events_{*this};
+  void execute(const FileCommand& command);
 };

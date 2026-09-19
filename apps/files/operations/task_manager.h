@@ -21,8 +21,6 @@
 // DirectoryModel and PreviewService (see [[async-worker-thread-pattern]]).
 class TaskManager : public QObject {
   Q_OBJECT
-  QML_ELEMENT
-  QML_UNCREATABLE("Created by the application")
 
   Q_PROPERTY(TaskKind currentOperation READ currentOperation NOTIFY changed)
   Q_PROPERTY(QString currentItemName READ currentItemName NOTIFY changed)

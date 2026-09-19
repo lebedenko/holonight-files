@@ -1,4 +1,5 @@
 #include "directory_controller.h"
+#include "engine_setup.h"
 #include "initial_directory.h"
 #include "settings/app_settings.h"
 #include "settings/xdg_paths.h"
@@ -11,11 +12,8 @@
 #include <QQmlApplicationEngine>
 #include <QTextStream>
 #include <QTimer>
-#include <QtQml/QQmlExtensionPlugin>
 
 #include <cstdlib>
-
-Q_IMPORT_QML_PLUGIN(HolonightFilesPlugin)
 
 int main(int argc, char* argv[]) {
   QGuiApplication app(argc, argv);
@@ -53,6 +51,7 @@ int main(int argc, char* argv[]) {
   QObject::connect(&app, &QGuiApplication::lastWindowClosed, &controller, &DirectoryController::shutdown);
   QObject::connect(&controller, &DirectoryController::shutdownFinished, &app, &QCoreApplication::quit);
   QQmlApplicationEngine engine;
+  initializeFilesEngine(engine);
   QObject::connect(
       &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(EXIT_FAILURE); },
       Qt::QueuedConnection);

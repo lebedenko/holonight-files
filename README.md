@@ -213,15 +213,13 @@ task qml-lint
 task lint                 # tidy + qml-lint
 task license-check
 task install-check
-task uninstall-check      # verifies scripts/uninstall.sh in disposable staged trees; no sudo, no real /usr
-task check                # (alias: verify) build×2, test, format-check, lint, license-check, install-check, uninstall-check, in order
+task check                # (alias: verify) build×2, test, format-check, lint, license-check, install-check, QML policy/metadata, in order
 task visual-check         # captures under build/visual for inspection
 task isolated-runtime-check  # builds Release, verifies the staged payload in a network-isolated Docker container
-task clean                   # removes build/{debug,release,test,system-install}; preserves build/deps and check evidence
+task clean                   # removes build/{debug,release,test}; preserves build/deps and check evidence
 
-# System install/uninstall (require sudo and system-wide HoloNight providers under /usr; host-mutating, not run in CI):
-task install                 # configures+builds the system-install preset against /usr, installs, refreshes desktop database
-task uninstall                 # removes the installed payload from /usr and refreshes the desktop database (uninstall before reinstalling)
+# Coordinated system installation/removal is owned by the umbrella:
+# ../scripts/install.sh / ../scripts/uninstall.sh (after published onboarding)
 ```
 
 `--help` and `--version` are supported, along with an optional positional
@@ -258,33 +256,15 @@ for observed results; automatic scheduling does not promise a specific speedup.
 Override HOLONIGHT_DEPENDENCY_PREFIX and
 HOLONIGHT_QML_IMPORT_PATH as Task variables for an existing installation.
 Direct CMake users can set those cache variables with `cmake --preset debug
--D...`; CMAKE_PREFIX_PATH can supply additional installed packages. The
+-D...`; CMAKE_PREFIX_PATH and QML_IMPORT_PATH select providers without being overridden by generic CMake. The
 debug/release/test presets default to the local prefix. Task run/test set the
 installed QML and library search paths.
 
-System installation is `task install`: it configures and builds Release
-against installed `/usr` providers (the `system-install` CMake preset, not
-the development dependency prefix — HoloNight providers must already be
-installed system-wide first), installs the five payload files to `/usr` with
-`sudo`, and refreshes the desktop database. `task uninstall` removes that
-payload and refreshes the desktop database again; run it before a repeat
-`task install` to avoid partial-overwrite states (uninstall-before-reinstall).
-Both require `sudo` and mutate the real system, so neither runs in CI — CI
-instead exercises the install path via `task install-check` (a staged,
-`DESTDIR`-based install with no `sudo`) and the uninstall path via
-`task uninstall-check` (mocked privileged commands, no real `/usr` writes).
-`task isolated-runtime-check` builds Release, stages its payload plus the
-provider builds under `DESTDIR`, and verifies the result as the ordinary files-test user — five regular root:root files with
-0755 executable and 0644 asset/license modes, no development RPATH/RUNPATH, `--version`, desktop entry validity, and desktop
-launch surviving three seconds after discovery (up to three seconds) — inside a disposable, network-isolated Docker container built `FROM`
-the CI image; it requires Docker and `task deps` having already produced
-`build/deps/holonight-config`/`build/deps/holonight-qt`. `task clean` removes
-only `build/{debug,release,test,system-install}`, preserving
-`build/deps/prefix` and check evidence. The full local pipeline is
-`task deps` → `task check` (alias `task verify`) → `task isolated-runtime-check`.
-After building the runtime image, `python3 scripts/check-runtime-fixtures.py` exercises
-healthy, delayed-exit, missing-file, permission, ownership, and pre-existing-process cases
-in disposable containers, retaining logs under `build/runtime-fixtures.*`.
+System installation and removal are owned by the umbrella's `scripts/install.sh` and
+`scripts/uninstall.sh`. The installer rejects unmanaged payload collisions; it does not
+adopt or remove legacy Files installations. The uninstaller preserves modified owned files.
+Standalone builds and `DESTDIR` staging remain supported. Complete onboarding requires a
+published Files revision and an explicit umbrella pin update.
 
 CI runs deps, gives files-test ownership of build/, and runs check in C.UTF-8
 and the additional en_US.UTF-8 tests. It prepares the runtime
@@ -363,9 +343,7 @@ hard preemption of a decoder call.
 ### Executable migration and folder handling
 
 The supported command is `hn-files`; no `holonight-files` alias is installed.
-For an existing installation, run `task uninstall` followed by `task install`.
-Uninstall removes both executable names, including legacy-only and mixed installs;
-the project name, application identity, desktop ID, icon and license path stay stable.
+Existing unmanaged installations must be resolved explicitly by their owner before a coordinated install.
 
 The installed desktop entry advertises `inode/directory` and launches
 `hn-files -- %f`. Files can be selected in the desktop's default file-manager
@@ -377,3 +355,15 @@ folders are outside this integration.
 
 See [folder-handler verification](docs/sdd/folder-handler/VERIFICATION.md) for
 automated evidence and pending host chooser/display acceptance.
+
+## Architecture and ownership
+
+Private C++ code is organized under `apps/files/{application,browsing,operations,preview,settings,state,places}`.
+`DirectoryController` coordinates navigation, editing, command, preview and lifecycle sessions while preserving
+its QML API. `presentation` owns Qt Quick integration; `qml` groups listing, places, inspection and status surfaces.
+Each UI executable owns a HolonightFiles QML module and calls `initializeFilesEngine` before loading QML.
+[Alignment specification and verification](docs/sdd/holonight-alignment/README.md) records the onboarding work.
+
+For isolated runtime checks with verified existing provider artifacts, `scripts/prepare-runtime-check.sh`
+accepts `HOLONIGHT_CONFIG_BUILD` and `HOLONIGHT_QT_BUILD`; defaults remain `build/deps/<provider>`.
+Verify provider revisions, build options and the exact Qt package versions against the runtime image first.

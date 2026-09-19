@@ -12,22 +12,49 @@ namespace {
 
 struct KeyInfo {
   Key key;
-  const char* xdgName;   // the <KEY> in XDG_<KEY>_DIR
-  const char* label;     // translatable source text
-  const char* iconName;  // theme icon name
+  const char* xdg_name;   // the <KEY> in XDG_<KEY>_DIR
+  const char* label;      // translatable source text
+  const char* icon_name;  // theme icon name
 };
 
 // Order matches Key's declaration order, which is also REQ-F-005's required display order.
 constexpr std::array<KeyInfo, 9> kKeys{{
-    {Key::Desktop, "DESKTOP", QT_TRANSLATE_NOOP("PlacesModel", "Desktop"), "user-desktop"},
-    {Key::Documents, "DOCUMENTS", QT_TRANSLATE_NOOP("PlacesModel", "Documents"), "folder-documents"},
-    {Key::Downloads, "DOWNLOAD", QT_TRANSLATE_NOOP("PlacesModel", "Downloads"), "folder-download"},
-    {Key::Pictures, "PICTURES", QT_TRANSLATE_NOOP("PlacesModel", "Pictures"), "folder-pictures"},
-    {Key::Music, "MUSIC", QT_TRANSLATE_NOOP("PlacesModel", "Music"), "folder-music"},
-    {Key::Videos, "VIDEOS", QT_TRANSLATE_NOOP("PlacesModel", "Videos"), "folder-videos"},
-    {Key::Projects, "PROJECTS", QT_TRANSLATE_NOOP("PlacesModel", "Projects"), "folder-development"},
-    {Key::Templates, "TEMPLATES", QT_TRANSLATE_NOOP("PlacesModel", "Templates"), "folder-templates"},
-    {Key::Public, "PUBLICSHARE", QT_TRANSLATE_NOOP("PlacesModel", "Public"), "folder-publicshare"},
+    {.key = Key::Desktop,
+     .xdg_name = "DESKTOP",
+     .label = QT_TRANSLATE_NOOP("PlacesModel", "Desktop"),
+     .icon_name = "user-desktop"},
+    {.key = Key::Documents,
+     .xdg_name = "DOCUMENTS",
+     .label = QT_TRANSLATE_NOOP("PlacesModel", "Documents"),
+     .icon_name = "folder-documents"},
+    {.key = Key::Downloads,
+     .xdg_name = "DOWNLOAD",
+     .label = QT_TRANSLATE_NOOP("PlacesModel", "Downloads"),
+     .icon_name = "folder-download"},
+    {.key = Key::Pictures,
+     .xdg_name = "PICTURES",
+     .label = QT_TRANSLATE_NOOP("PlacesModel", "Pictures"),
+     .icon_name = "folder-pictures"},
+    {.key = Key::Music,
+     .xdg_name = "MUSIC",
+     .label = QT_TRANSLATE_NOOP("PlacesModel", "Music"),
+     .icon_name = "folder-music"},
+    {.key = Key::Videos,
+     .xdg_name = "VIDEOS",
+     .label = QT_TRANSLATE_NOOP("PlacesModel", "Videos"),
+     .icon_name = "folder-videos"},
+    {.key = Key::Projects,
+     .xdg_name = "PROJECTS",
+     .label = QT_TRANSLATE_NOOP("PlacesModel", "Projects"),
+     .icon_name = "folder-development"},
+    {.key = Key::Templates,
+     .xdg_name = "TEMPLATES",
+     .label = QT_TRANSLATE_NOOP("PlacesModel", "Templates"),
+     .icon_name = "folder-templates"},
+    {.key = Key::Public,
+     .xdg_name = "PUBLICSHARE",
+     .label = QT_TRANSLATE_NOOP("PlacesModel", "Public"),
+     .icon_name = "folder-publicshare"},
 }};
 
 const KeyInfo* infoFor(Key key) {
@@ -42,7 +69,7 @@ const KeyInfo* infoFor(Key key) {
 // XDG_<name>_DIR -> Key, or nullptr for an unrecognized key (silently dropped, REQ-C-007).
 const KeyInfo* infoForXdgName(const QString& name) {
   for (const auto& info : kKeys) {
-    if (name == QLatin1String(info.xdgName)) {
+    if (name == QLatin1String(info.xdg_name)) {
       return &info;
     }
   }
@@ -55,8 +82,8 @@ QString unescape(const QString& value) {
   QString result;
   result.reserve(value.size());
   for (qsizetype i = 0; i < value.size(); ++i) {
-    const QChar ch = value.at(i);
-    if (ch == u'\\' && i + 1 < value.size()) {
+    const QChar character = value.at(i);
+    if (character == u'\\' && i + 1 < value.size()) {
       const QChar next = value.at(i + 1);
       if (next == u'"' || next == u'\\' || next == u'$' || next == u'`') {
         result += next;
@@ -64,7 +91,7 @@ QString unescape(const QString& value) {
         continue;
       }
     }
-    result += ch;
+    result += character;
   }
   return result;
 }
@@ -132,7 +159,7 @@ QString label(Key key) {
 
 QString iconName(Key key) {
   const auto* info = infoFor(key);
-  return info == nullptr ? QString() : QLatin1String(info->iconName);
+  return info == nullptr ? QString() : QLatin1String(info->icon_name);
 }
 
 }  // namespace UserDirsParser

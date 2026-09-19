@@ -1,3 +1,4 @@
+#include "engine_setup.h"
 // T-118/T-119/T-122 (docs/sdd/file-operations/TASKS.md): a rendered VISUAL-selection trash task
 // spanning a real, distinct filesystem, and the same flow against a trash location that fails
 // validation for every item — proving a single confirmation covers the whole selection, per-item
@@ -27,13 +28,10 @@
 #include <QQuickWindow>
 #include <QTemporaryDir>
 #include <QTest>
-#include <QtQml/QQmlExtensionPlugin>
 
 #include <gtest/gtest.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
-
-Q_IMPORT_QML_PLUGIN(HolonightFilesPlugin)
 
 namespace {
 
@@ -73,6 +71,7 @@ struct RenderedWindow {
   QQuickWindow* window = nullptr;
 
   RenderedWindow() {
+    initializeFilesEngine(engine);
     engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
     engine.loadFromModule("HolonightFiles", "Main");
   }

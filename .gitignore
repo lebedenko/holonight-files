@@ -77,4 +77,5 @@ Testing/
 .codex/
 .claude/
 CLAUDE.md
-AGENTS.md
+
+__pycache__/

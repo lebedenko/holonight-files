@@ -17,8 +17,6 @@
 // DirectoryController executes it (REQ-F-041: synchronous, direct calls, no TaskManager).
 class VimModeController : public QObject {
   Q_OBJECT
-  QML_ELEMENT
-  QML_UNCREATABLE("Created by the application")
 
   Q_PROPERTY(Mode currentMode READ currentMode NOTIFY changed)
 

@@ -59,5 +59,4 @@ jobs:
           path: |
             files/build/*.log
             files/build/test/Testing/Temporary/
-            files/build/uninstall-check.*/
             files/build/install-check.*/runtime.log

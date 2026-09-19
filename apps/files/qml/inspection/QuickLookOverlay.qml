@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls.Basic as C
+import QtQuick.Controls as Controls
 import QtQuick.Window
 import Holonight.Core
 import Holonight.Controls
@@ -11,7 +11,7 @@ import Holonight.Controls
 // instance the docked PreviewPane uses — no second decode pipeline. j/k forwarded to handleKey()
 // live-update the overlay without closing it because cursor movement already flows through
 // DirectoryController::syncPreviewTarget() regardless of whether Quick Look is open.
-C.Popup {
+Controls.Popup {
     id: root
 
     required property DirectoryController controller
@@ -63,7 +63,7 @@ C.Popup {
     }
     readonly property color metadataColor: root.preview.previewErrorKind !== PreviewService.None ? HoloniightPalette.error : HoloniightPalette.textMuted
 
-    parent: C.Overlay.overlay
+    parent: Controls.Overlay.overlay
     x: parent ? Math.round((parent.width - width) / 2) : 0
     y: parent ? Math.round((parent.height - height) / 2) : 0
     width: presentation.cardSize.width
@@ -72,11 +72,11 @@ C.Popup {
     visible: root.controller.quickLookOpen
     modal: true
     focus: true
-    closePolicy: C.Popup.NoAutoClose
+    closePolicy: Controls.Popup.NoAutoClose
 
     onOpened: keyContent.forceActiveFocus()
 
-    C.Overlay.modal: Rectangle {
+    Controls.Overlay.modal: Rectangle {
         objectName: "quickLookBackdrop"
         color: HoloniightPalette.scrim
     }
@@ -181,7 +181,7 @@ C.Popup {
                 }
             }
 
-            C.BusyIndicator {
+            Controls.BusyIndicator {
                 objectName: "quickLookBusy"
                 anchors.centerIn: parent
                 width: HnMetrics.iconSize(HnControlSize.Hero)

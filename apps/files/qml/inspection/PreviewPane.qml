@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import Holonight.Core
@@ -132,7 +132,7 @@ Item {
         readonly property string entryPath: root.controller.currentPath + "/" + root.preview.name
         onEntryPathChanged: contentY = 0
 
-        ScrollBar.vertical: ScrollBar {
+        Controls.ScrollBar.vertical: Controls.ScrollBar {
             parent: root
             anchors.right: parent.right
             anchors.top: scrollArea.top

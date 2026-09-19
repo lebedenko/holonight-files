@@ -1,5 +1,6 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
+#include "engine_setup.h"
 
 #include <QIcon>
 #include <QQmlApplicationEngine>
@@ -43,6 +44,7 @@ struct SeededUserDirs {
 };
 
 struct PlacesWindow {
+  PlacesWindow() { initializeFilesEngine(engine); }
   QTemporaryDir dir{files_test::fixturePattern("places-window")};
   DirectoryController controller;
   QQmlApplicationEngine engine;

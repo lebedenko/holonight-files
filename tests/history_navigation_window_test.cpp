@@ -1,3 +1,4 @@
+#include "engine_setup.h"
 // docs/sdd/navigation-history: the header back/forward buttons and the Ctrl+O/Ctrl+I shortcuts in a
 // real rendered window (DESIGN.md §8.3). Controller-level history semantics live in
 // directory_controller_test.cpp; this file only proves the QML wiring delivers them.
@@ -38,6 +39,7 @@ struct HistoryWindow {
   QQuickItem* list = nullptr;
 
   HistoryWindow() {
+    initializeFilesEngine(engine);
     for (const auto& path : {a, b, c}) {
       QDir().mkpath(path);
       for (const auto* name : {"1.txt", "2.txt", "3.txt"}) {

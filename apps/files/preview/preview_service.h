@@ -27,8 +27,6 @@ struct PreviewWorkerCache;
 // thread, a cancellation token replaced on every new target (SPEC.md REQ-C-004).
 class PreviewService : public QObject {
   Q_OBJECT
-  QML_ELEMENT
-  QML_UNCREATABLE("Created by the application")
  public:
   // Nested (rather than a free-standing enum merely Q_ENUM'd from inside the class) so QML's
   // type resolver associates PreviewErrorKind with PreviewService's meta-object correctly —

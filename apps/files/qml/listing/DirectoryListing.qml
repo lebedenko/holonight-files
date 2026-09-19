@@ -1,9 +1,9 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import Holonight.Core
-import Holonight
 import Holonight.Controls
 
 Item {
@@ -146,7 +146,7 @@ Item {
         }
         clip: true
         focus: true
-        ScrollBar.vertical: ScrollBar {}
+        Controls.ScrollBar.vertical: Controls.ScrollBar {}
         visible: !root.controller || root.controller.directoryError.length === 0
         model: root.controller ? root.controller.listing : null
         currentIndex: root.controller ? root.controller.cursorRow : -1
@@ -397,7 +397,7 @@ Item {
             // opaque-background TextField overlaid on this delegate, covering its label, rather
             // than a separate floating popup — it scrolls/clips with the delegate for free
             // (docs/sdd/vim-modal-editing/DESIGN.md).
-            TextField {
+            Controls.TextField {
                 id: inlineEditor
                 objectName: "inlineNameEditor"
 
@@ -409,7 +409,12 @@ Item {
                 anchors.rightMargin: 8
                 visible: delegate.editingThis
                 text: root.controller.vim.insertText
-                hasError: !root.controller.vim.insertValid
+                Binding {
+                    target: inlineEditor
+                    property: "hasError"
+                    value: !root.controller.vim.insertValid
+                    when: "hasError" in inlineEditor
+                }
 
                 Keys.priority: Keys.BeforeItem
                 Keys.onShortcutOverride: event => {

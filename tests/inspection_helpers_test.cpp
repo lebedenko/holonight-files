@@ -1,4 +1,5 @@
 #include "directory_fixtures.h"
+#include "engine_setup.h"
 #include "icon_fallbacks.h"
 #include "inspection_keys.h"
 
@@ -12,7 +13,9 @@
 
 TEST(IconFallbacks, ExactChainsAreSharedWithinEngineAndIsolatedBetweenEngines) {
   QQmlEngine first;
+  initializeFilesEngine(first);
   QQmlEngine second;
+  initializeFilesEngine(second);
   auto* cache = first.singletonInstance<IconFallbacks*>("HolonightFiles", "IconFallbacks");
   ASSERT_NE(cache, nullptr);
   cache->markUnresolved("a/b");
@@ -109,4 +112,16 @@ TEST(InspectionKeys, NormalizationPopupAllowlistRepeatsAndHistory) {
   EXPECT_TRUE(controller.handleKey("v"));
   EXPECT_TRUE(keys.press(Qt::Key_Escape, "", 0, false, &controller, false));
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+}
+
+TEST(IconFallbacks, EngineInitializationIsIdempotentAndProvidersAreIndependent) {
+  QQmlEngine first;
+  QQmlEngine second;
+  initializeFilesEngine(first);
+  initializeFilesEngine(second);
+  auto* provider = first.imageProvider(QStringLiteral("icon"));
+  ASSERT_NE(provider, nullptr);
+  EXPECT_NE(provider, second.imageProvider(QStringLiteral("icon")));
+  initializeFilesEngine(first);
+  EXPECT_EQ(provider, first.imageProvider(QStringLiteral("icon")));
 }
