@@ -170,13 +170,43 @@ RowLayout {
         }
     }
 
+    RowLayout {
+        objectName: "insertGuidance"
+        visible: root.controller.vim.currentMode === VimModeController.Insert && root.controller.vim.insertValid
+        Layout.fillWidth: visible
+        spacing: HnMetrics.internalSpacing(HnControlSize.Compact)
+
+        HnKeyHint {
+            objectName: "insertConfirmKeys"
+            keyGroups: [[Qt.Key_Return]]
+        }
+        HnLabel {
+            role: HnTypographyRole.Caption
+            color: HoloniightPalette.textMuted
+            rawText: qsTr("Confirm")
+        }
+        HnKeyHint {
+            objectName: "insertCancelKeys"
+            Layout.leftMargin: HnMetrics.internalSpacing(HnControlSize.Compact)
+            keyGroups: [[Qt.Key_Escape]]
+        }
+        HnLabel {
+            role: HnTypographyRole.Caption
+            color: HoloniightPalette.textMuted
+            rawText: qsTr("Cancel")
+        }
+        Item {
+            Layout.fillWidth: true
+        }
+    }
+
     HnLabel {
         objectName: "insertStatusLabel"
         role: HnTypographyRole.Caption
-        color: root.controller.vim.insertValid ? HoloniightPalette.textMuted : HoloniightPalette.error
+        color: HoloniightPalette.error
         elide: Text.ElideMiddle
-        visible: root.controller.vim.currentMode === VimModeController.Insert
+        visible: root.controller.vim.currentMode === VimModeController.Insert && !root.controller.vim.insertValid
         Layout.fillWidth: visible
-        rawText: root.controller.vim.insertValid ? qsTr("Enter to confirm, Esc to cancel") : root.controller.vim.insertErrorMessage
+        rawText: root.controller.vim.insertErrorMessage
     }
 }

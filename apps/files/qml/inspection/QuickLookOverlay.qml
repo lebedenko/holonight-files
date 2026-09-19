@@ -25,7 +25,7 @@ Controls.Popup {
     readonly property real iconExtent: HnMetrics.iconSize(HnControlSize.Hero) * 4
     // The caption labels elide and never wrap, so their implicit heights are one line each whatever
     // the entry: the reserve, and with it the decode request size, stay constant across navigation.
-    readonly property real captionReserve: nameLabel.implicitHeight + root.captionSpacing + metadataLabel.implicitHeight + root.captionSpacing + hintLabel.implicitHeight
+    readonly property real captionReserve: nameLabel.implicitHeight + root.captionSpacing + metadataLabel.implicitHeight + root.captionSpacing + hintRow.implicitHeight
 
     QuickLookPresentationModel {
         id: presentation
@@ -38,7 +38,7 @@ Controls.Popup {
         frameCaptionGap: root.frameCaptionGap
         minCompactWidth: root.minCompactWidth
         iconExtent: root.iconExtent
-        hintImplicitWidth: hintLabel.implicitWidth
+        hintImplicitWidth: hintRow.implicitWidth
     }
 
     readonly property string metadataText: {
@@ -220,18 +220,32 @@ Controls.Popup {
             anchors.right: parent.right
         }
 
-        HnLabel {
-            id: hintLabel
+        Row {
+            id: hintRow
             objectName: "quickLookHint"
-            role: HnTypographyRole.Caption
-            color: HoloniightPalette.textDisabled
-            rawText: qsTr("Press Space or Esc to close")
-            elide: Text.ElideRight
-            horizontalAlignment: Text.AlignHCenter
+            spacing: root.captionSpacing
             anchors.top: metadataLabel.bottom
             anchors.topMargin: root.captionSpacing
-            anchors.left: parent.left
-            anchors.right: parent.right
+            anchors.horizontalCenter: parent.horizontalCenter
+            Accessible.role: Accessible.StaticText
+            Accessible.name: closeKeys.accessibleText + " " + closeLabel.rawText
+
+            HnKeyHint {
+                id: closeKeys
+                objectName: "quickLookCloseKeys"
+                anchors.verticalCenter: parent.verticalCenter
+                keyGroups: [[Qt.Key_Space], [Qt.Key_Escape]]
+                Accessible.ignored: true
+            }
+            HnLabel {
+                id: closeLabel
+                objectName: "quickLookCloseLabel"
+                anchors.verticalCenter: parent.verticalCenter
+                role: HnTypographyRole.Caption
+                color: HoloniightPalette.textDisabled
+                rawText: qsTr("Close")
+                Accessible.ignored: true
+            }
         }
     }
 }

@@ -1761,8 +1761,10 @@ TEST(Files, QuickLookCardStaysWithinBoundsForEveryKind) {
     EXPECT_NEAR(card->width(), popupSize(harness).width(), 1);
     EXPECT_NEAR(card->height(), popupSize(harness).height(), 1);
     EXPECT_TRUE(harness.window->findChild<QQuickItem*>("quickLookHint")->isVisible());
-    EXPECT_EQ(quickLookText(harness, "quickLookHint"), QStringLiteral("Press Space or Esc to close"));
-    EXPECT_EQ(quickLookColor(harness, "quickLookHint"), textDisabled);
+    EXPECT_EQ(harness.window->findChild<QQuickItem*>("quickLookCloseKeys")->property("accessibleText").toString(),
+              QStringLiteral("Space or Esc"));
+    EXPECT_EQ(quickLookText(harness, "quickLookCloseLabel"), QStringLiteral("Close"));
+    EXPECT_EQ(quickLookColor(harness, "quickLookCloseLabel"), textDisabled);
     EXPECT_EQ(quickLookColor(harness, "quickLookMetadata"), textMuted);
   }
   EXPECT_EQ(harness.popup->property("closePolicy").toInt(), 0);
@@ -2376,12 +2378,17 @@ TEST(Files, ModeBadgeRemovesPrefixes) {
 
   QTest::keyClick(window, Qt::Key_I);
   ASSERT_TRUE(harness.controller.vim()->insertValid());
-  EXPECT_EQ(insertLabel->property("rawText").toString(), "Enter to confirm, Esc to cancel");
+  EXPECT_FALSE(insertLabel->isVisible());
+  EXPECT_TRUE(window->findChild<QQuickItem*>("insertGuidance")->isVisible());
+  EXPECT_EQ(window->findChild<QQuickItem*>("insertConfirmKeys")->property("accessibleText").toString(), "Return");
+  EXPECT_EQ(window->findChild<QQuickItem*>("insertCancelKeys")->property("accessibleText").toString(), "Esc");
   QTest::keyClick(window, Qt::Key_Slash);
   QTest::keyClick(window, Qt::Key_X);
   ASSERT_FALSE(harness.controller.vim()->insertValid());
   EXPECT_FALSE(harness.controller.vim()->insertErrorMessage().isEmpty());
   EXPECT_EQ(insertLabel->property("rawText").toString(), harness.controller.vim()->insertErrorMessage());
+  EXPECT_TRUE(insertLabel->isVisible());
+  EXPECT_FALSE(window->findChild<QQuickItem*>("insertGuidance")->isVisible());
   QTest::keyClick(window, Qt::Key_Escape);
 }
 
