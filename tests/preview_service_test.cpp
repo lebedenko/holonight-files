@@ -23,10 +23,13 @@
 #include <unistd.h>
 
 using files_test::fixturePattern;
+using files_test::writeBytes;
 using files_test::writeFile;
 using files_test::writeJpegWithExif;
 using files_test::writeJpegWithExifBlob;
+using files_test::writeJpegWithoutExif;
 using files_test::writeLargeText;
+using files_test::writeNumberedLines;
 using files_test::writeSmallText;
 
 namespace {
@@ -545,4 +548,217 @@ TEST(PreviewService, WarmDiskAndMemoryReuseAvoidSourceDecodeAndUpgradeRetainsPix
   service.setQuickLookActive(false);
   QTest::qWait(200);
   EXPECT_EQ(service.image().size(), QSize(1500, 1000));
+}
+
+namespace {
+bool canReadDespiteNoPermissions(const QString& path) {
+  QFile probe(path);
+  return probe.open(QIODevice::ReadOnly);
+}
+}  // namespace
+
+TEST(PreviewService, CurrentLineStartsAtTheFirstLineOnceTextLoads) {
+  QTemporaryDir dir(fixturePattern("preview-line-init"));
+  ASSERT_TRUE(dir.isValid());
+  PreviewService service;
+  EXPECT_EQ(service.currentLineIndex(), -1);
+  setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 5));
+  EXPECT_EQ(service.currentLineIndex(), -1);  // nothing loaded yet
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.textLineCount(), 5);
+  EXPECT_EQ(service.currentLineIndex(), 0);
+}
+
+TEST(PreviewService, MoveCurrentLineClampsAtBothEnds) {
+  QTemporaryDir dir(fixturePattern("preview-line-clamp"));
+  ASSERT_TRUE(dir.isValid());
+  PreviewService service;
+  setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 5));
+  ASSERT_TRUE(settled(service));
+  service.moveCurrentLineUp();
+  EXPECT_EQ(service.currentLineIndex(), 0);
+  for (int i = 0; i < 4; ++i) {
+    service.moveCurrentLineDown();
+    EXPECT_EQ(service.currentLineIndex(), i + 1);
+  }
+  for (int i = 0; i < 5; ++i) {
+    service.moveCurrentLineDown();
+  }
+  EXPECT_EQ(service.currentLineIndex(), 4);
+  for (int i = 0; i < 10; ++i) {
+    service.moveCurrentLine(-1);
+  }
+  EXPECT_EQ(service.currentLineIndex(), 0);
+}
+
+TEST(PreviewService, CurrentLineSignalFiresOncePerActualChange) {
+  QTemporaryDir dir(fixturePattern("preview-line-signal"));
+  ASSERT_TRUE(dir.isValid());
+  PreviewService service;
+  setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 3));
+  ASSERT_TRUE(settled(service));
+  QSignalSpy spy(&service, &PreviewService::currentLineIndexChanged);
+  service.moveCurrentLineUp();  // already first: no change
+  EXPECT_EQ(spy.count(), 0);
+  service.moveCurrentLineDown();
+  EXPECT_EQ(spy.count(), 1);
+  service.moveCurrentLineDown();
+  EXPECT_EQ(spy.count(), 2);
+  service.moveCurrentLineDown();  // already last: no change
+  EXPECT_EQ(spy.count(), 2);
+  service.moveCurrentLine(0);
+  EXPECT_EQ(spy.count(), 2);
+}
+
+TEST(PreviewService, EmptyFileShowsOneEmptyLineThatCannotMove) {
+  QTemporaryDir dir(fixturePattern("preview-line-empty"));
+  ASSERT_TRUE(dir.isValid());
+  PreviewService service;
+  setTargetFromFile(service, files_test::writeEmptyText(dir));
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.textLineCount(), 1);
+  EXPECT_EQ(service.currentLineIndex(), 0);
+  QSignalSpy spy(&service, &PreviewService::currentLineIndexChanged);
+  service.moveCurrentLineDown();
+  service.moveCurrentLineUp();
+  EXPECT_EQ(service.currentLineIndex(), 0);
+  EXPECT_EQ(spy.count(), 0);
+}
+
+TEST(PreviewService, NoLinesMeansMinusOneAndMovesAreIgnored) {
+  QTemporaryDir dir(fixturePattern("preview-line-none"));
+  ASSERT_TRUE(dir.isValid());
+  PreviewService service;
+  setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 3));
+  ASSERT_TRUE(settled(service));
+  service.moveCurrentLineDown();
+  ASSERT_EQ(service.currentLineIndex(), 1);
+  QSignalSpy spy(&service, &PreviewService::currentLineIndexChanged);
+  setTargetFromFile(service, dir.path());  // a directory has no text
+  EXPECT_EQ(service.currentLineIndex(), -1);
+  EXPECT_EQ(service.textLineCount(), 0);
+  EXPECT_EQ(spy.count(), 1);
+  service.moveCurrentLineDown();
+  service.moveCurrentLineUp();
+  EXPECT_EQ(service.currentLineIndex(), -1);
+  EXPECT_EQ(spy.count(), 1);
+  service.clear();
+  EXPECT_EQ(service.currentLineIndex(), -1);
+}
+
+TEST(PreviewService, UnreadableTextFileHasNoLinesButStaysEligible) {
+  QTemporaryDir dir(fixturePattern("preview-line-denied"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeBytes(dir, "denied.txt", "secret");
+  ASSERT_TRUE(QFile::setPermissions(path, QFileDevice::Permissions()));
+  if (canReadDespiteNoPermissions(path)) {
+    GTEST_SKIP() << "running with privileges that bypass file permissions";
+  }
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::PermissionDenied);
+  EXPECT_EQ(service.currentLineIndex(), -1);
+  EXPECT_TRUE(service.quickLookEligible());  // REQ-F-021: the overlay opens and shows the error
+  service.moveCurrentLineDown();
+  EXPECT_EQ(service.currentLineIndex(), -1);
+}
+
+TEST(PreviewService, OpeningQuickLookResetsTheCurrentLineToTheFirst) {
+  QTemporaryDir dir(fixturePattern("preview-line-open"));
+  ASSERT_TRUE(dir.isValid());
+  PreviewService service;
+  setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 6));
+  ASSERT_TRUE(settled(service));
+  service.moveCurrentLine(3);
+  ASSERT_EQ(service.currentLineIndex(), 3);
+  QSignalSpy spy(&service, &PreviewService::currentLineIndexChanged);
+  service.setQuickLookActive(true);
+  EXPECT_EQ(service.currentLineIndex(), 0);
+  EXPECT_EQ(spy.count(), 1);
+  service.moveCurrentLine(2);
+  service.setQuickLookActive(true);  // already active: not an open transition
+  EXPECT_EQ(service.currentLineIndex(), 2);
+  service.setQuickLookActive(false);
+  EXPECT_EQ(service.currentLineIndex(), 2);
+  service.setQuickLookActive(true);
+  EXPECT_EQ(service.currentLineIndex(), 0);
+}
+
+TEST(PreviewService, SamePathReloadKeepsAndClampsTheCurrentLineButANewPathResetsIt) {
+  QTemporaryDir dir(fixturePattern("preview-line-reload"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeNumberedLines(dir, "a.txt", 10);
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  service.moveCurrentLine(7);
+  ASSERT_EQ(service.currentLineIndex(), 7);
+
+  writeNumberedLines(dir, "a.txt", 12);  // external edit: same path, new size
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.textLineCount(), 12);
+  EXPECT_EQ(service.currentLineIndex(), 7);
+
+  writeNumberedLines(dir, "a.txt", 4);  // shrinks below the retained line
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.currentLineIndex(), 3);
+
+  setTargetFromFile(service, writeNumberedLines(dir, "b.txt", 9));
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.currentLineIndex(), 0);
+}
+
+TEST(PreviewService, QuickLookEligibilityFollowsTheMimeGate) {
+  QTemporaryDir dir(fixturePattern("preview-gate"));
+  ASSERT_TRUE(dir.isValid());
+  PreviewService service;
+  EXPECT_FALSE(service.quickLookEligible());  // no entry
+
+  const auto eligible = [&](const QString& path) {
+    setTargetFromFile(service, path);
+    EXPECT_TRUE(settled(service));
+    return service.quickLookEligible();
+  };
+  const auto text = writeNumberedLines(dir, "a.txt", 2);
+  setTargetFromFile(service, text);
+  EXPECT_FALSE(service.quickLookEligible());  // MIME not resolved yet
+  ASSERT_TRUE(settled(service));
+  EXPECT_TRUE(service.quickLookEligible());
+
+  EXPECT_TRUE(eligible(writeJpegWithoutExif(dir)));
+  EXPECT_TRUE(eligible(writeBytes(dir, "empty-no-extension", {})));  // application/x-zerosize
+  EXPECT_FALSE(eligible(writeBytes(dir, "data.json", "{\"a\": 1}\n")));
+  EXPECT_FALSE(eligible(writeBytes(dir, "notes.md", "# title\n")));
+  EXPECT_FALSE(eligible(writeBytes(dir, "run.sh", "#!/bin/sh\necho hi\n")));
+  EXPECT_FALSE(eligible(dir.path()));  // directory
+  service.clear();
+  EXPECT_FALSE(service.quickLookEligible());
+}
+
+TEST(PreviewService, StatFailedEntryIsNotQuickLookEligible) {
+  PreviewService service;
+  service.setTarget(QStringLiteral("/nonexistent/x.txt"), false, -1, {}, 0120777, true,
+                    QStringLiteral("Broken symbolic link"));
+  EXPECT_FALSE(service.quickLookEligible());
+}
+
+TEST(PreviewService, LoadingTextNeverBlocksTheUiThread) {
+  QTemporaryDir dir(fixturePattern("preview-line-offthread"));
+  ASSERT_TRUE(dir.isValid());
+  PreviewService service;
+  // The hook runs on the worker: the UI thread must keep dispatching timer events while it blocks.
+  PreviewServiceTestAccess::beforeDispatch(service, [] { QThread::msleep(400); });
+  int ticks = 0;
+  QTimer timer;
+  timer.setInterval(10);
+  QObject::connect(&timer, &QTimer::timeout, [&ticks] { ++ticks; });
+  timer.start();
+  setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 3));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return ticks >= 5; }, 2000));
+  EXPECT_TRUE(service.busy());  // the load is still pending while the UI thread stayed responsive
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.textLineCount(), 3);
 }

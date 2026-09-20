@@ -8,9 +8,9 @@ import Holonight.Controls
 
 // The mockup's "Quick look" card: a centered, padded card no larger than 92% of the window, holding
 // the preview above a filename / metadata / hint caption. Binds to the *same* controller.preview
-// instance the docked PreviewPane uses — no second decode pipeline. j/k forwarded to handleKey()
-// live-update the overlay without closing it because cursor movement already flows through
-// DirectoryController::syncPreviewTarget() regardless of whether Quick Look is open.
+// instance the docked PreviewPane uses — no second decode pipeline. The overlay is pinned to the file it
+// was opened on: j/k/arrows forwarded to handleKey() move the text viewer's current line (owned by
+// PreviewService) and never the listing cursor. This file only renders that state.
 Controls.Popup {
     id: root
 
@@ -56,7 +56,7 @@ Controls.Popup {
             return SizeFormat.formatSize(root.preview.size);
         }
         if (root.preview.hasText)
-            return SizeFormat.formatSize(root.preview.size) + (root.preview.textTruncated ? qsTr(" · truncated") : "");
+            return root.preview.textTruncated ? qsTr("%1 · truncated").arg(SizeFormat.formatSize(root.preview.size)) : SizeFormat.formatSize(root.preview.size);
         if (root.preview.busy)
             return SizeFormat.formatSize(root.preview.size);
         return root.preview.mimeTypeDescription.length > 0 ? root.preview.mimeTypeDescription : root.preview.mimeType;
@@ -74,7 +74,10 @@ Controls.Popup {
     focus: true
     closePolicy: Controls.Popup.NoAutoClose
 
-    onOpened: keyContent.forceActiveFocus()
+    onOpened: {
+        keyContent.forceActiveFocus();
+        textViewer.positionViewAtBeginning();
+    }
 
     Controls.Overlay.modal: Rectangle {
         objectName: "quickLookBackdrop"
@@ -137,27 +140,95 @@ Controls.Popup {
                 border.color: HoloniightPalette.borderSubtle
                 radius: HnAppearance.roundedRadius(HnSurfaceRole.Card, width, height, HnAppearance.revision)
 
-                Flickable {
+                TextMetrics {
+                    id: rowMetrics
+                    font.family: HolonightTheme.monospaceFont
+                    font.pointSize: HolonightTheme.monospaceFontSize
+                    text: "Ag"
+                }
+
+                TextMetrics {
+                    id: gutterMetrics
+                    font: rowMetrics.font
+                    // Widest line number: only changes when the line count crosses a digit boundary.
+                    text: "0".repeat(String(root.preview.textLineCount).length)
+                }
+
+                // Vertical-only viewer. Rows have a constant height and a width taken from the view (never from
+                // content), the current row is a per-delegate bool rather than a ListView highlight item, and
+                // scrolling is imperative — none of these read contentY/contentHeight, so there is no binding loop.
+                ListView {
+                    id: textViewer
+                    objectName: "quickLookText"
                     anchors.fill: parent
                     anchors.margins: root.cardPadding
                     clip: true
-                    contentWidth: width
-                    contentHeight: quickLookText.implicitHeight
+                    flickableDirection: Flickable.VerticalFlick
                     boundsBehavior: Flickable.StopAtBounds
+                    keyNavigationEnabled: false
+                    activeFocusOnTab: false
+                    Keys.priority: Keys.BeforeItem
+                    Keys.forwardTo: [keyContent]
+                    model: root.preview.textLines
 
-                    TextEdit {
-                        id: quickLookText
-                        objectName: "quickLookText"
-                        Keys.priority: Keys.BeforeItem
-                        Keys.forwardTo: [keyContent]
-                        width: parent.width
-                        readOnly: true
-                        selectByMouse: true
-                        wrapMode: TextEdit.WrapAnywhere
-                        text: root.preview.textContent
-                        font.family: HolonightTheme.monospaceFont
-                        font.pointSize: HolonightTheme.monospaceFontSize
-                        color: HoloniightPalette.textPrimary
+                    delegate: Item {
+                        id: line
+                        objectName: "quickLookLine"
+                        required property int index
+                        required property string lineText
+                        required property int lineNumber
+                        readonly property bool isCurrent: line.index === root.preview.currentLineIndex
+                        width: ListView.view.width
+                        height: rowMetrics.height
+
+                        Rectangle {
+                            objectName: "quickLookCurrentLine"
+                            anchors.fill: parent
+                            visible: line.isCurrent
+                            color: HoloniightPalette.surfaceRaised
+                            radius: HnMetrics.borderWidth * 2
+                        }
+
+                        Text {
+                            id: numberText
+                            objectName: "quickLookLineNumbers"
+                            width: gutterMetrics.width
+                            horizontalAlignment: Text.AlignRight
+                            text: line.lineNumber
+                            textFormat: Text.PlainText
+                            font: rowMetrics.font
+                            color: line.isCurrent ? HoloniightPalette.textPrimary : HoloniightPalette.textMuted
+                        }
+
+                        Text {
+                            objectName: "quickLookLineText"
+                            x: numberText.width + root.cardPadding
+                            width: line.width - x
+                            text: line.lineText
+                            textFormat: Text.PlainText
+                            wrapMode: Text.NoWrap
+                            elide: Text.ElideNone
+                            clip: true
+                            font: rowMetrics.font
+                            color: HoloniightPalette.textPrimary
+                        }
+                    }
+
+                    // Scrolls only when PreviewService moves the line (Contain = minimal scroll), so the mouse
+                    // wheel never changes the current line and a j at the last line does not snap the view back.
+                    Connections {
+                        target: root.preview
+                        function onCurrentLineIndexChanged() {
+                            if (root.preview.currentLineIndex >= 0)
+                                textViewer.positionViewAtIndex(root.preview.currentLineIndex, ListView.Contain);
+                        }
+                    }
+
+                    Connections {
+                        target: root.preview.textLines
+                        function onModelReset() {
+                            textViewer.positionViewAtBeginning();
+                        }
                     }
                 }
             }

@@ -55,14 +55,28 @@ table. Both tables share left-aligned label and value columns. Rows without a va
 cut off. The sidebar scrolls vertically when its content exceeds the window height.
 Size text matches the listing exactly, and folders show `Dir`. The
 sidebar no longer shows text content or permissions; press `Space` to open
-Quick Look, a centered card over the dimmed window (at most 92% of it). Images
-are framed at their own aspect ratio, text files get a scrollable monospace view,
-and folders, errors and other files get a compact icon card. Below the preview
-it shows the name, a metadata line (`6000 × 4000 · 8.3 MB`, the size, `Dir`, or
-the error) and a close hint. It live-updates as you move with `j`/`k` (keeping its
-size with a spinner while the next file loads, refitting on window resize) and closes
-on `Space`/`Escape`. See the [Quick Look verification](docs/sdd/quick-look-redesign/VERIFICATION.md)
-for automated evidence and pending native acceptance.
+Quick Look, a centered card over the dimmed window (at most 92% of it). It opens
+only for images and `text/plain` files; on directories, archives and other types
+(including JSON and Markdown) `Space` does nothing. Images are framed at their own
+aspect ratio. Text files get a read-only monospace line viewer with a line-number
+gutter and a highlighted current line: at most the first 100 KiB is loaded (the
+caption then adds `· truncated`), `LF`, `CRLF` and `CR` all end a line, invalid
+UTF-8 shows as `�`, and an empty file shows one empty line. Long lines are clipped,
+not wrapped. Unreadable files and undecodable images get a compact icon card with
+the error. Below the preview it shows the name, a metadata line
+(`6000 × 4000 · 8.3 MB`, the size, or the error) and a close hint.
+
+Quick Look is pinned to the file it was opened on. In a text file `j`/`k` (or
+`ArrowDown`/`ArrowUp`) move the current line and the view follows it; the mouse wheel
+scrolls without changing it. They never move the listing cursor or switch the
+preview to another file, and every other key is ignored. Close with `Space` or
+`Escape`, move in the listing, and press `Space` again to view another file. If
+the listing changes under the pinned file, Quick Look closes. See the
+[Quick Look text viewer spec](docs/sdd/quick-look-text-viewer/SPEC.md) and its
+[design](docs/sdd/quick-look-text-viewer/DESIGN.md); the earlier
+[Quick Look verification](docs/sdd/quick-look-redesign/VERIFICATION.md) predates the
+pinned behavior (its live-update-on-`j`/`k` evidence is superseded) but still records
+pending native acceptance.
 Quick Look's C++ presentation model owns classification, retained geometry and
 decode-size requests; QML supplies measurements and renders the card. See the
 [C++ presentation verification](docs/sdd/quick-look-cpp-presentation/VERIFICATION.md).
@@ -147,7 +161,7 @@ through previously visited folders (count prefixes such as `3 Ctrl+O` work), as 
 arrow buttons at the left of the header. Returning to a folder puts the cursor back on the entry it
 was on, and `h` places the cursor on the folder you just left. Revisiting a folder moves it to the
 end of the history instead of discarding forward entries. History holds up to 100 folders, lives in
-memory only (not kept across restarts), works in NORMAL mode only, and pauses while a prompt is open.
+memory only (not kept across restarts), works in NORMAL mode only, and pauses while a prompt or Quick Look is open.
 Folders that no longer exist are skipped and dropped, with a "Skipped missing" status message.
 See the [navigation history specification](docs/sdd/navigation-history/SPEC.md) and
 [verification record](docs/sdd/navigation-history/VERIFICATION.md).
@@ -204,7 +218,7 @@ task deps                 # builds sibling providers locally, without source cha
 task build
 task run
 # f toggles fullscreen, Escape leaves fullscreen (preserving tiling), q quits
-# Space opens/closes Quick Look for the entry under the cursor
+# Space opens/closes Quick Look for an image or text/plain file; j/k then move its current line
 task test
 task build PRESET=release
 task format-check

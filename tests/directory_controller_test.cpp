@@ -4,6 +4,7 @@
 #include "directory_fixtures.h"
 #include "directory_model_test_access.h"
 #include "initial_directory.h"
+#include "preview_fixtures.h"
 #include "settings/xdg_paths.h"
 #include "settings_fixtures.h"
 #include "state/state_store.h"
@@ -22,12 +23,20 @@
 using files_test::fixturePattern;
 using files_test::runningAsRoot;
 using files_test::writeFile;
+using files_test::writeNumberedLines;
 
 using files_test::findPlaceRow;
 
 namespace {
 bool settled(const DirectoryController& controller) {
   return QTest::qWaitFor([&] { return !controller.scanning(); });
+}
+// The preview worker has answered for the entry under the cursor (Quick Look gating needs its MIME).
+bool previewSettled(DirectoryController& controller) {
+  return QTest::qWaitFor([&] { return controller.preview()->hasEntry() && !controller.preview()->busy(); }, 5000);
+}
+bool quickLookReady(DirectoryController& controller) {
+  return QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }, 5000);
 }
 }  // namespace
 
@@ -185,6 +194,7 @@ TEST(DirectoryController, SpaceTogglesQuickLookWhenACursorIsOnAValidRow) {
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   EXPECT_FALSE(controller.quickLookOpen());
+  ASSERT_TRUE(quickLookReady(controller));
   EXPECT_TRUE(controller.handleKey(" "));
   EXPECT_TRUE(controller.quickLookOpen());
   EXPECT_TRUE(controller.handleKey(" "));
@@ -246,8 +256,9 @@ TEST(DirectoryController, Stage1And2KeybindingsStillDispatchThroughHandleKeyUnch
   EXPECT_TRUE(controller.handleKey("s"));
   EXPECT_EQ(nameAt(0), "a.txt");
 
-  // Space Quick Look, unchanged since Stage 2.
+  // Space Quick Look, unchanged since Stage 2 (now gated on the previewed file's MIME).
   EXPECT_FALSE(controller.quickLookOpen());
+  ASSERT_TRUE(quickLookReady(controller));
   EXPECT_TRUE(controller.handleKey(" "));
   EXPECT_TRUE(controller.quickLookOpen());
   EXPECT_TRUE(controller.handleKey(" "));
@@ -263,26 +274,151 @@ TEST(DirectoryController, EscapeClosesQuickLookAndReturnsFalseWhenAlreadyClosed)
   ASSERT_TRUE(settled(controller));
   // Closed already: falls through so the window-level fullscreen Shortcut can handle Escape.
   EXPECT_FALSE(controller.handleKey("Escape"));
+  ASSERT_TRUE(quickLookReady(controller));
   ASSERT_TRUE(controller.handleKey(" "));
   ASSERT_TRUE(controller.quickLookOpen());
   EXPECT_TRUE(controller.handleKey("Escape"));
   EXPECT_FALSE(controller.quickLookOpen());
 }
 
-TEST(DirectoryController, JAndKKeepUpdatingThePreviewWhileQuickLookStaysOpen) {
-  QTemporaryDir dir(fixturePattern("ctrl-quicklook-live"));
+TEST(DirectoryController, QuickLookStaysPinnedToItsFileWhileJKAndArrowsMoveTheCurrentLine) {
+  QTemporaryDir dir(fixturePattern("ctrl-quicklook-pinned"));
+  ASSERT_TRUE(dir.isValid());
+  writeNumberedLines(dir, "a.txt", 30);
+  writeNumberedLines(dir, "b.txt", 30);
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(quickLookReady(controller));
+  ASSERT_TRUE(controller.handleKey(" "));
+  ASSERT_TRUE(controller.quickLookOpen());
+  const auto pinnedName = controller.preview()->name();
+  const auto pinnedRow = controller.cursorRow();
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 0);
+
+  for (int i = 0; i < 10; ++i) {
+    EXPECT_TRUE(controller.handleKey(i % 2 == 0 ? "j" : "ArrowDown"));
+    EXPECT_TRUE(controller.quickLookOpen());
+    EXPECT_EQ(controller.cursorRow(), pinnedRow);
+    EXPECT_EQ(controller.preview()->name(), pinnedName);
+  }
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 10);
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_TRUE(controller.handleKey(i % 2 == 0 ? "k" : "ArrowUp"));
+  }
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 6);
+  EXPECT_EQ(controller.cursorRow(), pinnedRow);
+  EXPECT_EQ(controller.preview()->name(), pinnedName);
+
+  EXPECT_TRUE(controller.handleKey("Escape"));
+  EXPECT_FALSE(controller.quickLookOpen());
+  EXPECT_EQ(controller.cursorRow(), pinnedRow);
+}
+
+TEST(DirectoryController, QuickLookLineMovementClampsAndDoesNotEmitListingChanges) {
+  QTemporaryDir dir(fixturePattern("ctrl-quicklook-clamp"));
+  ASSERT_TRUE(dir.isValid());
+  writeNumberedLines(dir, "a.txt", 3);
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(quickLookReady(controller));
+  ASSERT_TRUE(controller.handleKey(" "));
+  QSignalSpy changed(&controller, &DirectoryController::changed);
+  for (int i = 0; i < 5; ++i) {
+    EXPECT_TRUE(controller.handleKey("k"));
+  }
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 0);
+  for (int i = 0; i < 5; ++i) {
+    EXPECT_TRUE(controller.handleKey("j"));
+  }
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 2);
+  EXPECT_EQ(changed.count(), 0);
+}
+
+TEST(DirectoryController, QuickLookSwallowsEveryOtherKeyWithoutMovingAnything) {
+  QTemporaryDir dir(fixturePattern("ctrl-quicklook-swallow"));
+  ASSERT_TRUE(dir.isValid());
+  writeNumberedLines(dir, "a.txt", 5);
+  writeNumberedLines(dir, "b.txt", 5);
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(quickLookReady(controller));
+  ASSERT_TRUE(controller.handleKey("3"));  // a pending count typed before opening is discarded
+  ASSERT_TRUE(controller.handleKey(" "));
+  const auto pinnedName = controller.preview()->name();
+  for (const auto* key : {"G", "g", "h", "l", "Return", "v", "/", ".", "s", "y", "d", "5"}) {
+    SCOPED_TRACE(key);
+    EXPECT_TRUE(controller.handleKey(key));
+    EXPECT_TRUE(controller.quickLookOpen());
+    EXPECT_EQ(controller.cursorRow(), 0);
+    EXPECT_EQ(controller.preview()->name(), pinnedName);
+    EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+  }
+  EXPECT_TRUE(controller.handleKey("j"));
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 1);  // the discarded/ignored counts did not multiply j
+}
+
+TEST(DirectoryController, ArrowKeysAreIgnoredOutsideQuickLook) {
+  QTemporaryDir dir(fixturePattern("ctrl-arrows-closed"));
   ASSERT_TRUE(dir.isValid());
   writeFile(dir, "a.txt");
   writeFile(dir, "b.txt");
   DirectoryController controller;
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
-  ASSERT_TRUE(controller.handleKey(" "));
-  ASSERT_TRUE(controller.quickLookOpen());
-  const auto firstName = controller.preview()->name();
-  EXPECT_TRUE(controller.handleKey("j"));
-  EXPECT_TRUE(controller.quickLookOpen());  // still open — j/k never close it
-  EXPECT_NE(controller.preview()->name(), firstName);
+  EXPECT_FALSE(controller.handleKey("ArrowDown"));
+  EXPECT_EQ(controller.cursorRow(), 0);
+}
+
+TEST(DirectoryController, SpaceOpensQuickLookOnlyForImagesAndPlainText) {
+  QTemporaryDir dir(fixturePattern("ctrl-quicklook-gate"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("adir"));
+  writeNumberedLines(dir, "note.txt", 3);
+  writeFile(dir, "photo.jpg", files_test::renderJpegBytes());
+  writeFile(dir, "data.json", "{\"a\": 1}\n");
+  writeFile(dir, "readme.md", "# hi\n");
+  writeFile(dir, "bundle.tar.gz", QByteArray("\x1f\x8b\x08\x00", 4) + QByteArray(64, '\0'));
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+
+  const auto rowNamed = [&](const QString& name) {
+    for (int row = 0; row < controller.listing()->rowCount(); ++row) {
+      if (controller.listing()->data(controller.listing()->index(row, 0), DirectoryModel::NameRole).toString() ==
+          name) {
+        return row;
+      }
+    }
+    return -1;
+  };
+  const auto pressSpaceOn = [&](const QString& name) {
+    const int row = rowNamed(name);
+    EXPECT_GE(row, 0) << qPrintable(name);
+    controller.handleKey("g");
+    controller.handleKey("g");
+    for (int i = 0; i < row; ++i) {
+      controller.handleKey("j");
+    }
+    EXPECT_TRUE(previewSettled(controller)) << qPrintable(name);
+    return controller.handleKey(" ");
+  };
+
+  for (const auto* name : {"adir", "data.json", "readme.md", "bundle.tar.gz"}) {
+    SCOPED_TRACE(name);
+    EXPECT_TRUE(pressSpaceOn(QString::fromLatin1(name)));  // consumed...
+    EXPECT_FALSE(controller.quickLookOpen());              // ...but a no-op
+    EXPECT_EQ(controller.cursorRow(), rowNamed(QString::fromLatin1(name)));
+  }
+  for (const auto* name : {"note.txt", "photo.jpg"}) {
+    SCOPED_TRACE(name);
+    ASSERT_TRUE(pressSpaceOn(QString::fromLatin1(name)));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return controller.quickLookOpen(); }, 1000));
+    EXPECT_TRUE(controller.handleKey(" "));
+    EXPECT_FALSE(controller.quickLookOpen());
+  }
 }
 
 TEST(DirectoryController, VPressEntersVisualModeAndEscapeExitsIt) {
@@ -1477,16 +1613,32 @@ TEST(DirectoryController, GoBackAndGoForwardAlwaysUseCountOneIgnoringPendingCoun
   EXPECT_EQ(controller.currentPath(), fixture.b);
 }
 
-TEST(DirectoryController, HistoryNavigationClosesQuickLook) {
+TEST(DirectoryController, HistoryNavigationStaysPinnedUntilQuickLookCloses) {
   QTemporaryDir dir(fixturePattern("history-quicklook"));
   const auto fixture = buildHistoryFixture(dir);
   DirectoryController controller;
   ASSERT_TRUE(openSettled(controller, fixture.a));
   ASSERT_TRUE(openSettled(controller, fixture.b));
+  ASSERT_TRUE(openSettled(controller, fixture.c));
+  controller.navigateHistoryBack();
+  ASSERT_TRUE(settled(controller));
+  ASSERT_EQ(controller.currentPath(), fixture.b);
+  ASSERT_TRUE(quickLookReady(controller));
   controller.handleKey(" ");
   ASSERT_TRUE(controller.quickLookOpen());
-  controller.navigateHistoryBack();
+  const auto row = controller.cursorRow();
+  const auto name = controller.preview()->name();
+  for (const auto navigate : {&DirectoryController::navigateHistoryBack, &DirectoryController::navigateHistoryForward,
+                              &DirectoryController::goBack, &DirectoryController::goForward}) {
+    (controller.*navigate)();
+    EXPECT_TRUE(controller.quickLookOpen());
+    EXPECT_EQ(controller.currentPath(), fixture.b);
+    EXPECT_EQ(controller.cursorRow(), row);
+    EXPECT_EQ(controller.preview()->name(), name);
+  }
+  controller.handleKey("Escape");
   EXPECT_FALSE(controller.quickLookOpen());
+  controller.navigateHistoryBack();
   ASSERT_TRUE(settled(controller));
   EXPECT_EQ(controller.currentPath(), fixture.a);
 }
@@ -1881,6 +2033,7 @@ TEST(DirectoryController, BookmarkCompletionPreservesInterveningInteractionGuard
                 "version = 1\n[[bookmarks]]\npath = \"" + home.filePath("target").toUtf8() + "\"\n");
       DirectoryController controller;
       ASSERT_TRUE(openSettled(controller, home.filePath("current")));
+      ASSERT_TRUE(quickLookReady(controller));
       const auto row = findPlaceRow(*controller.places(), home.filePath("target"));
       ASSERT_GE(row, 0);
       QSignalSpy resolved(controller.places(), &PlacesModel::bookmarkRecheckResolved);

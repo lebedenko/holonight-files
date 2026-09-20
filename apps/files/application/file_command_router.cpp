@@ -162,6 +162,9 @@ bool FileCommandRouter::handleKey(const QString& key) {
     // events through here (REQ-C-001), but stay a safe no-op regardless.
     return false;
   }
+  if (context_.quickLookOpen) {
+    return handleQuickLookKey(key);
+  }
 
   if (pending_g_ && pending_g_timer_.elapsed() > kPendingGTimeoutMs) {
     pending_g_ = false;
@@ -205,6 +208,21 @@ bool FileCommandRouter::handleKey(const QString& key) {
   }
   takeCount();
   return false;
+}
+// Quick Look pins the previewed file: only close and line-movement keys act, and every other key is
+// swallowed so nothing can move or open anything behind the overlay. Count prefixes are ignored.
+bool FileCommandRouter::handleQuickLookKey(const QString& key) {
+  reset();
+  if (key == u" ") {
+    command_.kind = FileCommand::Kind::ToggleQuickLook;
+  } else if (key == u"Escape") {
+    command_.kind = FileCommand::Kind::CloseQuickLook;
+  } else if (key == u"j" || key == u"ArrowDown") {
+    command_ = {.kind = FileCommand::Kind::MoveQuickLookLine, .count = 1};
+  } else if (key == u"k" || key == u"ArrowUp") {
+    command_ = {.kind = FileCommand::Kind::MoveQuickLookLine, .count = -1};
+  }
+  return true;
 }
 bool FileCommandRouter::handleFileOperationKey(const QString& key, bool isVisual) {
   if (key != u"y") {

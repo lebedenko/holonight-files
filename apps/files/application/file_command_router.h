@@ -17,6 +17,7 @@ struct FileCommand {
     Open,
     ToggleQuickLook,
     CloseQuickLook,
+    MoveQuickLookLine,
     Visual,
     ExitVisual,
     RenamePrepend,
@@ -61,6 +62,7 @@ class FileCommandRouter {
   bool handleKey(const QString& key);
   bool handleFileOperationKey(const QString& key, bool isVisual);
   bool handlePromptKey(const QString& key);
+  bool handleQuickLookKey(const QString& key);
   FileCommand command_;
   FileCommandContext context_{};
   int pending_count_ = 0;

@@ -28,6 +28,7 @@
 #include <QThread>
 #include <QWheelEvent>
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
@@ -825,6 +826,7 @@ TEST(Files, QuickLookConsumesSpaceBeforeDelegateActivationAndRestoresFocus) {
   const auto cleanup = qScopeGuard([] { QDesktopServices::unsetUrlHandler("file"); });
   QTest::keyClick(window, Qt::Key_J);
   QTest::keyClick(window, Qt::Key_K);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }, 5000));
   QTest::keyClick(window, Qt::Key_Space);
   ASSERT_TRUE(QTest::qWaitFor([&] { return popup->property("opened").toBool(); }));
   EXPECT_TRUE(receiver.received.isEmpty());
@@ -848,10 +850,12 @@ TEST(Files, QuickLookConsumesSpaceBeforeDelegateActivationAndRestoresFocus) {
   auto* text = window->findChild<QQuickItem*>("quickLookText");
   ASSERT_NE(text, nullptr);
   text->forceActiveFocus();
+  // Quick Look is pinned: j/k move the viewer's current line (clamped on a one-line file), never the cursor.
   QTest::keyClick(window, Qt::Key_J);
-  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_EQ(controller.cursorRow(), 0);
   QTest::keyClick(window, Qt::Key_K);
   EXPECT_EQ(controller.cursorRow(), 0);
+  EXPECT_TRUE(controller.quickLookOpen());
   window->showFullScreen();
   QTest::qWait(100);
   QTest::keyClick(window, Qt::Key_Escape);
@@ -904,12 +908,19 @@ TEST(Files, NativeInspectionAcceptance) {
   QTest::keyClick(window, Qt::Key_K);
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->hasImage(); }));
   const auto cachedMs = elapsed.elapsed();
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }, 5000));
   QTest::keyClick(window, Qt::Key_Space);
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.quickLookOpen(); }));
   QTest::qWait(250);
+  // Quick Look is pinned, so j no longer steps to the next image while it is open: close, step, reopen.
+  QTest::keyClick(window, Qt::Key_Space);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.quickLookOpen(); }));
   elapsed.restart();
   QTest::keyClick(window, Qt::Key_J);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->hasImage(); }));
+  ASSERT_TRUE(
+      QTest::qWaitFor([&] { return controller.preview()->hasImage() && controller.preview()->quickLookEligible(); }));
+  QTest::keyClick(window, Qt::Key_Space);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.quickLookOpen(); }));
   const auto quickLookMs = elapsed.elapsed();
   QTest::keyClick(window, Qt::Key_Space);
   QTest::keyClick(window, Qt::Key_K);
@@ -1002,6 +1013,7 @@ TEST(Files, InspectionImageSplitterAndPixelSizing) {
   if (!capture.isEmpty()) {
     EXPECT_TRUE(window->grabWindow().save(capture + "-image-pane.png"));
   }
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }, 5000));
   QTest::keyClick(window, Qt::Key_Space);
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.quickLookOpen(); }));
   auto* area = window->findChild<QQuickItem*>("quickLookImageArea");
@@ -1268,7 +1280,7 @@ TEST(Files, PromptsCaptureKeysAndCtrlCInEveryModeWithoutChangingEditorState) {
       QTest::keyClick(window, Qt::Key_I);
     }
     if (modeName == "quicklook") {
-      ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->hasEntry(); }));
+      ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }, 5000));
       QTest::keyClick(window, Qt::Key_Space);
       ASSERT_TRUE(controller.quickLookOpen());
     }
@@ -1670,8 +1682,27 @@ void loadQuickLookHarness(QuickLookHarness& harness, const QString& path, QSize 
 }
 
 void openQuickLook(QuickLookHarness& harness) {
+  // Quick Look only opens for images and text/plain, whose MIME the worker reports asynchronously.
+  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.controller.preview()->quickLookEligible(); }, 5000));
   QTest::keyClick(harness.window, Qt::Key_Space);
   ASSERT_TRUE(QTest::qWaitFor([&] { return harness.popup->property("opened").toBool(); }));
+}
+
+void closeQuickLook(QuickLookHarness& harness) {
+  if (!harness.controller.quickLookOpen()) {
+    return;
+  }
+  QTest::keyClick(harness.window, Qt::Key_Escape);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.popup->property("visible").toBool(); }));
+}
+
+// Quick Look is pinned to one file, so showing another means closing, moving the listing cursor and reopening.
+void showQuickLookOn(QuickLookHarness& harness, const QString& name) {
+  ASSERT_NO_FATAL_FAILURE(closeQuickLook(harness));
+  harness.controller.handleKey(QStringLiteral("g"));  // stepPreviewTo only moves forward: start from the top
+  harness.controller.handleKey(QStringLiteral("g"));
+  ASSERT_TRUE(stepPreviewTo(harness.controller, name));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
 }
 
 QColor paletteColor(QQmlEngine& engine, const char* name) {
@@ -1699,25 +1730,65 @@ QString quickLookText(const QuickLookHarness& harness, const char* objectName) {
   return item != nullptr ? item->property("text").toString() : QString();
 }
 
+// Delegates are visual children of a ListView's content item, not QObject children.
+QList<QQuickItem*> descendantsNamed(QQuickItem* root, const QString& name) {
+  QList<QQuickItem*> found;
+  QList<QQuickItem*> pending{root};
+  while (!pending.isEmpty()) {
+    auto* item = pending.takeLast();
+    for (auto* child : item->childItems()) {
+      if (child->objectName() == name) {
+        found.append(child);
+      }
+      pending.append(child);
+    }
+  }
+  return found;
+}
+
+QQuickItem* quickLookViewer(const QuickLookHarness& harness) {
+  return harness.window->findChild<QQuickItem*>("quickLookText");
+}
+
+QQuickItem* viewerContent(const QuickLookHarness& harness) {
+  auto* viewer = quickLookViewer(harness);
+  return viewer != nullptr ? viewer->property("contentItem").value<QQuickItem*>() : nullptr;
+}
+
+// The delegate whose highlight is visible, or nullptr.
+QQuickItem* highlightedRow(const QuickLookHarness& harness) {
+  auto* content = viewerContent(harness);
+  if (content == nullptr) {
+    return nullptr;
+  }
+  for (auto* row : descendantsNamed(content, "quickLookLine")) {
+    for (auto* mark : descendantsNamed(row, "quickLookCurrentLine")) {
+      if (mark->isVisible()) {
+        return row;
+      }
+    }
+  }
+  return nullptr;
+}
+
+QString rowNumber(QQuickItem* row) {
+  const auto numbers = descendantsNamed(row, "quickLookLineNumbers");
+  return numbers.isEmpty() ? QString() : numbers.first()->property("text").toString();
+}
+
+// True when the row lies fully inside the viewer's visible area.
+bool rowInViewport(const QuickLookHarness& harness, QQuickItem* row) {
+  auto* viewer = quickLookViewer(harness);
+  if (viewer == nullptr || row == nullptr) {
+    return false;
+  }
+  const auto top = row->mapToItem(viewer, QPointF(0, 0)).y();
+  return top >= -0.5 && top + row->height() <= viewer->height() + 0.5;
+}
+
 QColor quickLookColor(const QuickLookHarness& harness, const char* objectName) {
   auto* item = harness.window->findChild<QQuickItem*>(objectName);
   return item != nullptr ? item->property("color").value<QColor>() : QColor();
-}
-
-// Worker-side gate for PreviewServiceTestAccess::beforeDispatch: jobs wait while `held` is set.
-struct DispatchGate {
-  std::atomic_bool held{false};
-  std::atomic_int waiting{0};
-};
-
-void installDispatchGate(PreviewService& service, DispatchGate& gate) {
-  PreviewServiceTestAccess::beforeDispatch(service, [&gate] {
-    gate.waiting.fetch_add(1);
-    while (gate.held.load()) {
-      QThread::msleep(1);
-    }
-    gate.waiting.fetch_sub(1);
-  });
 }
 
 void expectCardWithinBounds(const QuickLookHarness& harness) {
@@ -1744,17 +1815,16 @@ TEST(Files, QuickLookCardStaysWithinBoundsForEveryKind) {
   files_test::writeSmallText(dir, "02-notes.txt");
   QuickLookHarness harness;
   ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
-  ASSERT_TRUE(stepPreviewTo(harness.controller, "folder"));
-  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, "01-image.jpg"));
   auto* card = harness.window->findChild<QQuickItem*>("quickLookCard");
   ASSERT_NE(card, nullptr);
   const auto textDisabled = paletteColor(harness.engine, "textDisabled");
   const auto textMuted = paletteColor(harness.engine, "textMuted");
   ASSERT_TRUE(textDisabled.isValid());
   EXPECT_NE(textDisabled, textMuted);
-  for (const auto* name : {"folder", "01-image.jpg", "02-notes.txt"}) {
+  for (const auto* name : {"01-image.jpg", "02-notes.txt"}) {
     SCOPED_TRACE(name);
-    ASSERT_TRUE(stepPreviewTo(harness.controller, name));
+    ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, QString::fromLatin1(name)));
     QTest::qWait(20);
     expectCardWithinBounds(harness);
     EXPECT_GT(card->property("radius").toReal(), 0);
@@ -1814,10 +1884,10 @@ TEST(Files, QuickLookNameElidesLongFilenamesAndStaysCentered) {
     const auto center = label->mapToItem(card, QPointF(label->width() / 2, 0)).x();
     EXPECT_NEAR(center, card->width() / 2, 1);
   };
-  ASSERT_TRUE(stepPreviewTo(harness.controller, longName));
+  ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, longName));
   ASSERT_TRUE(QTest::qWaitFor([&] { return label->property("truncated").toBool(); }));
   expectCentered();
-  ASSERT_TRUE(stepPreviewTo(harness.controller, "b.txt"));
+  ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, "b.txt"));
   ASSERT_TRUE(QTest::qWaitFor([&] { return label->property("text").toString() == QStringLiteral("b.txt"); }));
   QTest::qWait(20);
   EXPECT_FALSE(label->property("truncated").toBool());
@@ -1839,7 +1909,8 @@ TEST(Files, QuickLookImageFrameAspectFitsPreviewBounds) {
   ASSERT_NE(area, nullptr);
   const auto preview = quickLookPreviewBounds(harness);
   const auto waitForImage = [&](const QString& name) {
-    return stepPreviewTo(harness.controller, name) &&
+    showQuickLookOn(harness, name);
+    return !::testing::Test::HasFatalFailure() &&
            QTest::qWaitFor([&] { return harness.controller.preview()->hasImage() && area->isVisible(); });
   };
 
@@ -1870,38 +1941,6 @@ TEST(Files, QuickLookImageFrameAspectFitsPreviewBounds) {
   expectCardWithinBounds(harness);
 }
 
-// quick-look-redesign REQ-F-008: size only until the source dimensions are known.
-TEST(Files, QuickLookImageMetadataLineShowsDimensionsThenSizeOnly) {
-  QTemporaryDir dir(files_test::fixturePattern("quicklook-image-metadata"));
-  ASSERT_TRUE(dir.isValid());
-  ASSERT_FALSE(files_test::writeFile(dir, "a.txt").isEmpty());
-  ASSERT_FALSE(files_test::writeFile(dir, "b.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
-  DispatchGate gate;
-  QuickLookHarness harness;
-  const auto release = qScopeGuard([&gate] { gate.held.store(false); });
-  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
-  installDispatchGate(*harness.controller.preview(), gate);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
-  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
-  gate.held.store(true);
-  harness.controller.handleKey(QStringLiteral("j"));
-  ASSERT_EQ(harness.controller.preview()->name(), QStringLiteral("b.jpg"));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return gate.waiting.load() > 0; }));
-  const auto sizeText = quickLookText(harness, "previewSizeValue");
-  ASSERT_FALSE(sizeText.isEmpty());
-  EXPECT_EQ(sizeText, SizeFormat{}.formatSize(harness.controller.preview()->size()));
-  auto* listing = harness.window->findChild<QQuickItem*>("directoryListView");
-  ASSERT_NE(listing, nullptr);
-  auto* row = listing->property("currentItem").value<QQuickItem*>();
-  ASSERT_NE(row, nullptr);
-  EXPECT_EQ(row->property("metadata").toString(), sizeText);
-  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), sizeText);
-  EXPECT_FALSE(quickLookText(harness, "quickLookMetadata").contains(QChar(0x00d7)));
-  gate.held.store(false);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
-  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), QStringLiteral("600 × 400 · ") + sizeText);
-}
-
 // quick-look-redesign REQ-F-009/010.
 TEST(Files, QuickLookTextFrameFillsPreviewBoundsWithMonospaceView) {
   QTemporaryDir dir(files_test::fixturePattern("quicklook-text"));
@@ -1910,162 +1949,281 @@ TEST(Files, QuickLookTextFrameFillsPreviewBoundsWithMonospaceView) {
   files_test::writeSmallText(dir, "02-small.txt");
   QuickLookHarness harness;
   ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
-  ASSERT_TRUE(stepPreviewTo(harness.controller, "01-large.txt"));
-  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, "01-large.txt"));
   auto* text = harness.window->findChild<QQuickItem*>("quickLookText");
   ASSERT_NE(text, nullptr);
   ASSERT_TRUE(QTest::qWaitFor([&] { return text->isVisible(); }));
-  // TextEdit -> Flickable contentItem -> Flickable -> rounded surface -> preview frame.
-  auto* flickable = text->parentItem() != nullptr ? text->parentItem()->parentItem() : nullptr;
-  ASSERT_NE(flickable, nullptr);
-  ASSERT_TRUE(flickable->inherits("QQuickFlickable"));
-  auto* frame = flickable->parentItem() != nullptr ? flickable->parentItem()->parentItem() : nullptr;
+  // ListView -> rounded surface -> preview frame.
+  ASSERT_TRUE(text->inherits("QQuickListView"));
+  auto* frame = text->parentItem() != nullptr ? text->parentItem()->parentItem() : nullptr;
   ASSERT_NE(frame, nullptr);
   const auto preview = quickLookPreviewBounds(harness);
   EXPECT_NEAR(frame->width(), preview.width(), 1);
   EXPECT_NEAR(frame->height(), preview.height(), 1);
-  EXPECT_TRUE(text->property("readOnly").toBool());
-  EXPECT_NE(text->property("wrapMode").toInt(), 0);
+  EXPECT_FALSE(text->property("interactive").isNull());
+  EXPECT_EQ(text->property("flickableDirection").toInt(), 2);  // Flickable.VerticalFlick: no horizontal scrolling
   auto* theme = harness.engine.singletonInstance<QObject*>("Holonight.Core", "HolonightTheme");
   ASSERT_NE(theme, nullptr);
-  EXPECT_EQ(text->property("font").value<QFont>().family(), theme->property("monospaceFont").toString());
-  ASSERT_TRUE(QTest::qWaitFor([&] { return flickable->property("contentHeight").toReal() > flickable->height(); }));
-  EXPECT_EQ(flickable->property("contentWidth").toReal(), flickable->width());
+  auto* content = text->property("contentItem").value<QQuickItem*>();
+  ASSERT_NE(content, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !descendantsNamed(content, "quickLookLine").isEmpty(); }));
+  const auto rows = descendantsNamed(content, "quickLookLine");
+  const auto numbers = descendantsNamed(content, "quickLookLineNumbers");
+  const auto bodies = descendantsNamed(content, "quickLookLineText");
+  ASSERT_FALSE(numbers.isEmpty());
+  ASSERT_EQ(numbers.size(), bodies.size());
+  for (auto* body : bodies) {  // monospace, one row per line, never wrapped
+    EXPECT_EQ(body->property("font").value<QFont>().family(), theme->property("monospaceFont").toString());
+    EXPECT_EQ(body->property("wrapMode").toInt(), 0);  // Text.NoWrap
+  }
+  // The gutter shows 1..N and exactly the current row (line 1 on open) carries the highlight.
+  QStringList shown;
+  int highlighted = 0;
+  for (auto* number : numbers) {
+    shown.append(number->property("text").toString());
+  }
+  for (auto* row : rows) {
+    for (auto* mark : descendantsNamed(row, "quickLookCurrentLine")) {
+      highlighted += mark->isVisible() ? 1 : 0;
+    }
+  }
+  EXPECT_TRUE(shown.contains(QStringLiteral("1")));
+  EXPECT_EQ(highlighted, 1);
+  EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 0);
   expectCardWithinBounds(harness);
 
   ASSERT_TRUE(harness.controller.preview()->textTruncated());
   const auto largeSize = quickLookText(harness, "previewSizeValue");
   EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), largeSize + QStringLiteral(" · truncated"));
-  ASSERT_TRUE(stepPreviewTo(harness.controller, "02-small.txt"));
+  ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, "02-small.txt"));
   ASSERT_FALSE(harness.controller.preview()->textTruncated());
   EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), quickLookText(harness, "previewSizeValue"));
 }
 
-// quick-look-redesign REQ-F-011/012.
-TEST(Files, QuickLookCompactCardShowsDirIconAndStaysSmall) {
-  QTemporaryDir dir(files_test::fixturePattern("quicklook-compact"));
-  ASSERT_TRUE(dir.isValid());
-  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
-  QuickLookHarness harness;
-  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
-  ASSERT_TRUE(stepPreviewTo(harness.controller, "folder"));
-  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
-  auto* icon = harness.window->findChild<QQuickItem*>("quickLookIcon");
-  ASSERT_NE(icon, nullptr);
-  EXPECT_TRUE(icon->isVisible());
-  EXPECT_FALSE(icon->property("source").toUrl().isEmpty());
-  const auto bounds = quickLookBounds(harness);
-  const auto size = popupSize(harness);
-  EXPECT_LT(size.width(), bounds.width() / 2);
-  EXPECT_LT(size.height(), bounds.height() / 2);
-  expectCardWithinBounds(harness);
-  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), QStringLiteral("Dir"));
-  EXPECT_EQ(quickLookColor(harness, "quickLookMetadata"), paletteColor(harness.engine, "textMuted"));
-  harness.window->resize(1920, 1080);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->width() == 1920; }));
-  EXPECT_EQ(popupSize(harness), size);
-  expectCardWithinBounds(harness);
-}
-
-// quick-look-redesign REQ-F-012: errors in the error color, other types by description.
-TEST(Files, QuickLookCompactCardShowsErrorAndMimeDescription) {
-  QTemporaryDir dir(files_test::fixturePattern("quicklook-errors"));
-  ASSERT_TRUE(dir.isValid());
-  files_test::writeRandomBinary(dir, "01-random.bin");
-  files_test::writeBrokenSymlink(dir, "02-broken");
-  files_test::writeCorruptJpeg(dir, "03-corrupt.jpg");
-  QuickLookHarness harness;
-  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
-  ASSERT_TRUE(stepPreviewTo(harness.controller, "01-random.bin"));
-  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
-  const auto* preview = harness.controller.preview();
-  const auto metadata = quickLookText(harness, "quickLookMetadata");
-  EXPECT_FALSE(metadata.isEmpty());
-  EXPECT_TRUE(metadata == preview->mimeTypeDescription() || metadata == preview->mimeType()) << metadata.toStdString();
-  EXPECT_LT(popupSize(harness).width(), quickLookBounds(harness).width() / 2);
-  const auto error = paletteColor(harness.engine, "error");
-  for (const auto* name : {"02-broken", "03-corrupt.jpg"}) {
-    SCOPED_TRACE(name);
-    ASSERT_TRUE(stepPreviewTo(harness.controller, name));
-    ASSERT_NE(preview->previewErrorKind(), PreviewService::PreviewErrorKind::None);
-    ASSERT_FALSE(preview->previewErrorMessage().isEmpty());
-    EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), preview->previewErrorMessage());
-    EXPECT_EQ(quickLookColor(harness, "quickLookMetadata"), error);
-    EXPECT_TRUE(harness.window->findChild<QQuickItem*>("quickLookIcon")->isVisible());
-    expectCardWithinBounds(harness);
+void pressKeyTimes(QuickLookHarness& harness, Qt::Key key, int times) {
+  for (int i = 0; i < times; ++i) {
+    QTest::keyClick(harness.window, key);
   }
 }
 
-// quick-look-redesign REQ-F-013/014/015.
-TEST(Files, QuickLookRetainsSettledGeometryWhilePending) {
-  QTemporaryDir dir(files_test::fixturePattern("quicklook-pending"));
+// quick-look-text-viewer REQ-F-003/012: the highlight follows the current line and the viewport follows both ways.
+TEST(Files, QuickLookViewerHighlightsAndScrollsToTheCurrentLine) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-scroll"));
   ASSERT_TRUE(dir.isValid());
-  ASSERT_FALSE(files_test::writeFile(dir, "01-landscape.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
-  ASSERT_FALSE(files_test::writeFile(dir, "02-portrait.jpg", files_test::renderJpegBytes({400, 600})).isEmpty());
-  DispatchGate gate;
+  ASSERT_FALSE(files_test::writeNumberedLines(dir, "a.txt", 200).isEmpty());
   QuickLookHarness harness;
-  const auto release = qScopeGuard([&gate] { gate.held.store(false); });
-  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
-  installDispatchGate(*harness.controller.preview(), gate);
-  ASSERT_TRUE(QTest::qWaitFor(
-      [&] { return !harness.controller.preview()->busy() && harness.controller.preview()->hasImage(); }));
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path(), QSize(900, 500)));
   ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
-  QTest::qWait(400);  // Let the Quick Look sized re-decode finish.
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
-  const auto settled = popupSize(harness);
-  auto* busy = harness.window->findChild<QQuickItem*>("quickLookBusy");
-  auto* area = harness.window->findChild<QQuickItem*>("quickLookImageArea");
-  ASSERT_NE(busy, nullptr);
-  ASSERT_NE(area, nullptr);
-  EXPECT_FALSE(busy->isVisible());
+  auto* viewer = quickLookViewer(harness);
+  ASSERT_NE(viewer, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return highlightedRow(harness) != nullptr; }));
+  EXPECT_EQ(rowNumber(highlightedRow(harness)), QStringLiteral("1"));
+  EXPECT_EQ(viewer->property("contentY").toReal(), 0);
+  // Only a screenful of rows fits, so line 50 is well below the first viewport.
+  ASSERT_LT(viewer->height(), 200 * descendantsNamed(viewerContent(harness), "quickLookLine").first()->height());
 
-  QSignalSpy widthChanges(harness.popup, SIGNAL(widthChanged()));
-  QSignalSpy heightChanges(harness.popup, SIGNAL(heightChanged()));
-  gate.held.store(true);
-  harness.controller.handleKey(QStringLiteral("j"));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return gate.waiting.load() > 0; }));
-  QTest::qWait(50);
-  EXPECT_EQ(popupSize(harness), settled);
-  EXPECT_EQ(widthChanges.count(), 0);
-  EXPECT_EQ(heightChanges.count(), 0);
-  EXPECT_EQ(quickLookText(harness, "quickLookName"), QStringLiteral("02-portrait.jpg"));
-  const auto sizeText = quickLookText(harness, "previewSizeValue");
-  EXPECT_FALSE(sizeText.isEmpty());
-  EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), sizeText);
-  EXPECT_TRUE(busy->isVisible());
-  EXPECT_TRUE(busy->property("running").toBool());
-  EXPECT_FALSE(area->isVisible());
+  pressKeyTimes(harness, Qt::Key_J, 49);
+  EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 49);
+  ASSERT_TRUE(QTest::qWaitFor([&] {
+    auto* row = highlightedRow(harness);
+    return row != nullptr && rowNumber(row) == QStringLiteral("50") && rowInViewport(harness, row);
+  }));
+  EXPECT_GT(viewer->property("contentY").toReal(), 0);
 
-  gate.held.store(false);
-  ASSERT_TRUE(QTest::qWaitFor(
-      [&] { return !harness.controller.preview()->busy() && harness.controller.preview()->hasImage(); }));
-  QTest::qWait(400);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
-  EXPECT_LE(widthChanges.count(), 1);
-  EXPECT_LE(heightChanges.count(), 1);
-  const auto portrait = popupSize(harness);
-  EXPECT_LT(portrait.width(), settled.width());
-  EXPECT_GT(portrait.height(), settled.height() - 1);
-  EXPECT_FALSE(busy->isVisible());
-  EXPECT_TRUE(area->isVisible());
-  EXPECT_LE(qAbs((area->width() * 600) - (area->height() * 400)), 600);
+  pressKeyTimes(harness, Qt::Key_K, 45);
+  EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 4);
+  ASSERT_TRUE(QTest::qWaitFor([&] {
+    auto* row = highlightedRow(harness);
+    return row != nullptr && rowNumber(row) == QStringLiteral("5") && rowInViewport(harness, row);
+  }));
+  // Arrow keys behave like j/k.
+  QTest::keyClick(harness.window, Qt::Key_Down);
+  EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 5);
+  QTest::keyClick(harness.window, Qt::Key_Up);
+  EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 4);
+  EXPECT_EQ(harness.controller.cursorRow(), 0);
+}
+
+// quick-look-text-viewer REQ-F-013. The wheel event is synthesized in-process and delivered straight to the window;
+// no native pointer is moved (AGENTS.md). A real wheel/pointer check is manual.
+TEST(Files, QuickLookWheelScrollsTheViewportWithoutChangingTheCurrentLine) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-wheel"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(files_test::writeNumberedLines(dir, "a.txt", 200).isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path(), QSize(900, 500)));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  auto* viewer = quickLookViewer(harness);
+  ASSERT_NE(viewer, nullptr);
+  pressKeyTimes(harness, Qt::Key_J, 30);
+  ASSERT_EQ(harness.controller.preview()->currentLineIndex(), 30);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return rowInViewport(harness, highlightedRow(harness)); }));
+  const auto local = viewer->mapToScene(QPointF(viewer->width() / 2, viewer->height() / 2));
+  const auto wheel = [&](int delta) {
+    QWheelEvent event(local, harness.window->mapToGlobal(local.toPoint()), QPoint(), QPoint(0, delta), Qt::NoButton,
+                      Qt::NoModifier, Qt::NoScrollPhase, false);
+    static ulong timestamp = 1000;
+    timestamp += 200;  // Flickable ignores wheel events whose timestamp does not advance
+    event.setTimestamp(timestamp);
+    QCoreApplication::sendEvent(harness.window, &event);
+    QTest::qWait(30);
+  };
+  // Wheel scrolling can keep moving briefly (kinetic flick): sample once contentY has stopped changing.
+  const auto settledContentY = [&] {
+    qreal last = -1;
+    [[maybe_unused]] const bool stopped = QTest::qWaitFor(
+        [&] {
+          const auto now = viewer->property("contentY").toReal();
+          const bool still = qFuzzyCompare(now + 1, last + 1);
+          last = now;
+          QTest::qWait(60);
+          return still;
+        },
+        3000);
+    return viewer->property("contentY").toReal();
+  };
+
+  const auto before = settledContentY();
+  for (int i = 0; i < 3; ++i) {
+    wheel(-120);  // wheel down
+  }
+  const auto scrolledDown = settledContentY();
+  EXPECT_GT(scrolledDown, before);
+  EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 30);
+  ASSERT_NE(highlightedRow(harness), nullptr) << "the current row is still highlighted wherever it scrolled";
+
+  for (int i = 0; i < 3; ++i) {
+    wheel(120);  // wheel up
+  }
+  EXPECT_LT(settledContentY(), scrolledDown);
+  EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 30);
+  EXPECT_EQ(harness.controller.cursorRow(), 0);
+}
+
+// quick-look-text-viewer REQ-F-004/017: one row per line, clipped at the right edge, no horizontal scrolling.
+TEST(Files, QuickLookLongLineIsClippedWithoutHorizontalScrolling) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-clip"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(files_test::writeBytes(dir, "a.txt", QByteArray(400, 'x') + "\nshort\n").isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path(), QSize(700, 400)));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  auto* viewer = quickLookViewer(harness);
+  ASSERT_NE(viewer, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return descendantsNamed(viewerContent(harness), "quickLookLine").size() == 2; }));
+  auto rows = descendantsNamed(viewerContent(harness), "quickLookLine");
+  std::ranges::sort(rows, [](const QQuickItem* upper, const QQuickItem* lower) { return upper->y() < lower->y(); });
+  EXPECT_NEAR(rows[0]->height(), rows[1]->height(), 0.01);  // the long line still occupies exactly one row
+  EXPECT_NEAR(rows[1]->y() - rows[0]->y(), rows[0]->height(), 0.01);
+  auto* const body = descendantsNamed(rows[0], "quickLookLineText").first();
+  EXPECT_LE(body->x() + body->width(), viewer->width() + 0.5);        // clipped to the viewport width
+  EXPECT_GT(body->property("contentWidth").toReal(), body->width());  // the text really is wider than the viewport
+  EXPECT_EQ(rowNumber(rows[0]), QStringLiteral("1"));                 // gutter stays visible
+  EXPECT_LE(viewer->property("contentWidth").toReal(), viewer->width() + 0.5);
+  const auto wheelPos = viewer->mapToScene(QPointF(viewer->width() / 2, viewer->height() / 2));
+  QWheelEvent horizontal(wheelPos, harness.window->mapToGlobal(wheelPos.toPoint()), QPoint(), QPoint(-240, 0),
+                         Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+  horizontal.setTimestamp(9000);
+  QCoreApplication::sendEvent(harness.window, &horizontal);
+  QTest::qWait(30);
+  EXPECT_EQ(viewer->property("contentX").toReal(), 0);
+}
+
+// quick-look-text-viewer REQ-F-017: an empty file shows one highlighted empty line that cannot move.
+TEST(Files, QuickLookEmptyFileShowsOneHighlightedEmptyLine) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-empty"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(files_test::writeEmptyText(dir).isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return highlightedRow(harness) != nullptr; }));
+  auto* row = highlightedRow(harness);
+  EXPECT_EQ(rowNumber(row), QStringLiteral("1"));
+  EXPECT_TRUE(descendantsNamed(row, "quickLookLineText").first()->property("text").toString().isEmpty());
+  EXPECT_EQ(descendantsNamed(viewerContent(harness), "quickLookLine").size(), 1);
+  pressKeyTimes(harness, Qt::Key_J, 3);
+  pressKeyTimes(harness, Qt::Key_K, 3);
+  EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 0);
+  EXPECT_EQ(rowNumber(highlightedRow(harness)), QStringLiteral("1"));
+}
+
+// quick-look-text-viewer REQ-NF-003: 100+ current-line moves, auto-scroll and resizes raise no binding loop.
+TEST(Files, QuickLookLineNavigationAndResizeProduceNoBindingLoops) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-line-loops"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(files_test::writeNumberedLines(dir, "a.txt", 300).isEmpty());
+  bindingLoopCounter().warnings.store(0);
+  bindingLoopCounter().previous = qInstallMessageHandler(countBindingLoops);
+  const auto restoreHandler = qScopeGuard([] { qInstallMessageHandler(bindingLoopCounter().previous); });
+
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  const QList<QSize> sizes{{1280, 800}, {640, 420}, {1600, 1000}};
+  int expected = 0;
+  for (const auto size : sizes) {
+    harness.window->resize(size);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->size() == QSizeF(size); }));
+    pressKeyTimes(harness, Qt::Key_J, 60);
+    expected += 60;
+    EXPECT_EQ(harness.controller.preview()->currentLineIndex(), expected);
+    pressKeyTimes(harness, Qt::Key_K, 20);
+    expected -= 20;
+    EXPECT_EQ(harness.controller.preview()->currentLineIndex(), expected);
+    expectCardWithinBounds(harness);
+  }
+  ASSERT_TRUE(QTest::qWaitFor([&] { return rowInViewport(harness, highlightedRow(harness)); }));
+  EXPECT_EQ(bindingLoopCounter().warnings.load(), 0);
+}
+
+// quick-look-redesign REQ-F-012: errors in the error color. Only entries that pass the Quick Look gate can open
+// (images and text/plain), so the compact error card is reached via a corrupt image and an unreadable text file.
+TEST(Files, QuickLookCompactCardShowsErrorForUnreadableAndCorruptFiles) {
+  QTemporaryDir dir(files_test::fixturePattern("quicklook-errors"));
+  ASSERT_TRUE(dir.isValid());
+  const auto denied = files_test::writeFile(dir, "01-denied.txt", "secret");
+  ASSERT_TRUE(QFile::setPermissions(denied, QFileDevice::Permissions()));
+  QFile probe(denied);
+  const bool deniedIsReadable = probe.open(QIODevice::ReadOnly);
+  probe.close();
+  files_test::writeCorruptJpeg(dir, "02-corrupt.jpg");
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
+  const auto* preview = harness.controller.preview();
+  const auto error = paletteColor(harness.engine, "error");
+  QStringList names{QStringLiteral("02-corrupt.jpg")};
+  if (!deniedIsReadable) {  // privileged runs bypass file permissions
+    names.prepend(QStringLiteral("01-denied.txt"));
+  }
+  for (const auto& name : names) {
+    SCOPED_TRACE(name.toStdString());
+    ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, name));
+    ASSERT_NE(preview->previewErrorKind(), PreviewService::PreviewErrorKind::None);
+    ASSERT_FALSE(preview->previewErrorMessage().isEmpty());
+    EXPECT_EQ(preview->currentLineIndex(), -1);
+    EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), preview->previewErrorMessage());
+    EXPECT_EQ(quickLookColor(harness, "quickLookMetadata"), error);
+    EXPECT_TRUE(harness.window->findChild<QQuickItem*>("quickLookIcon")->isVisible());
+    EXPECT_LT(popupSize(harness).width(), quickLookBounds(harness).width() / 2);
+    expectCardWithinBounds(harness);
+    QTest::keyClick(harness.window, Qt::Key_J);  // no lines: consumed, nothing moves, still open
+    EXPECT_TRUE(harness.controller.quickLookOpen());
+    EXPECT_EQ(preview->currentLineIndex(), -1);
+  }
 }
 
 // quick-look-redesign REQ-F-016.
 TEST(Files, QuickLookReopenOnDifferentKindUsesNewGeometry) {
   QTemporaryDir dir(files_test::fixturePattern("quicklook-reopen"));
   ASSERT_TRUE(dir.isValid());
-  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
-  ASSERT_FALSE(files_test::writeFile(dir, "image.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
+  files_test::writeCorruptJpeg(dir, "01-corrupt.jpg");  // compact error card
+  ASSERT_FALSE(files_test::writeFile(dir, "02-image.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
   QuickLookHarness harness;
   ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
-  ASSERT_TRUE(stepPreviewTo(harness.controller, "folder"));
-  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, "01-corrupt.jpg"));
   const auto compact = popupSize(harness);
-  QTest::keyClick(harness.window, Qt::Key_Escape);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.popup->property("visible").toBool(); }));
-  ASSERT_TRUE(stepPreviewTo(harness.controller, "image.jpg"));
-  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, "02-image.jpg"));
   auto* area = harness.window->findChild<QQuickItem*>("quickLookImageArea");
   ASSERT_NE(area, nullptr);
   const auto preview = quickLookPreviewBounds(harness);
@@ -2095,7 +2253,7 @@ TEST(Files, QuickLookRequestedSizeStableAcrossNavigationButNotResize) {
   const auto calls = QuickLookPresentationModelTestAccess::requestedSizeCallCount(*presentation);
   EXPECT_TRUE(requested.isValid() && !requested.isEmpty());
   for (const auto* name : {"02.jpg", "03.jpg"}) {
-    ASSERT_TRUE(stepPreviewTo(harness.controller, name));
+    ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, QString::fromLatin1(name)));
     QTest::qWait(50);
     EXPECT_EQ(PreviewServiceTestAccess::quickLookRequestedSize(preview), requested);
     EXPECT_EQ(QuickLookPresentationModelTestAccess::requestedSizeCallCount(*presentation), calls);
@@ -2110,12 +2268,10 @@ TEST(Files, QuickLookRequestedSizeStableAcrossNavigationButNotResize) {
 TEST(Files, QuickLookNavigationAndResizeProduceNoBindingLoops) {
   QTemporaryDir dir(files_test::fixturePattern("quicklook-loops"));
   ASSERT_TRUE(dir.isValid());
-  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
   ASSERT_FALSE(files_test::writeFile(dir, "01.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
   ASSERT_FALSE(files_test::writeFile(dir, "02.jpg", files_test::renderJpegBytes({200, 900})).isEmpty());
   files_test::writeSmallText(dir, "03.txt");
   files_test::writeCorruptJpeg(dir, "04.jpg");
-  files_test::writeBrokenSymlink(dir, "05-broken");
 
   bindingLoopCounter().warnings.store(0);
   bindingLoopCounter().previous = qInstallMessageHandler(countBindingLoops);
@@ -2128,8 +2284,8 @@ TEST(Files, QuickLookNavigationAndResizeProduceNoBindingLoops) {
   for (const auto size : sizes) {
     harness.window->resize(size);
     ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->size() == QSizeF(size); }));
-    for (const auto* name : {"folder", "01.jpg", "02.jpg", "03.txt", "04.jpg", "05-broken"}) {
-      ASSERT_TRUE(stepPreviewTo(harness.controller, name));
+    for (const auto* name : {"01.jpg", "02.jpg", "03.txt", "04.jpg"}) {
+      ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, QString::fromLatin1(name)));
       expectCardWithinBounds(harness);
     }
     for (int step = 0; step < 5; ++step) {
@@ -2140,17 +2296,17 @@ TEST(Files, QuickLookNavigationAndResizeProduceNoBindingLoops) {
   EXPECT_EQ(bindingLoopCounter().warnings.load(), 0);
 }
 
-// quick-look-redesign regression: navigating onto files inside Quick Look emits navigated(), which
-// used to pull focus onto the listing behind the modal popup.
-TEST(Files, QuickLookKeepsFocusWhileNavigatingAndCloses) {
+// quick-look-redesign regression: key handling inside Quick Look must not pull focus onto the listing behind
+// the modal popup. j now moves the viewer's current line (the file stays pinned), never the cursor.
+TEST(Files, QuickLookKeepsFocusWhileMovingTheCurrentLineAndCloses) {
   QTemporaryDir dir(files_test::fixturePattern("quicklook-close"));
   ASSERT_TRUE(dir.isValid());
-  for (int i = 0; i < 40; ++i) {
-    const QSize size = (i % 2) == 0 ? QSize(300, 200) : QSize(120, 240);
-    ASSERT_FALSE(files_test::writeFile(dir, QStringLiteral("%1.jpg").arg(i, 2, 10, QLatin1Char('0')),
-                                       files_test::renderJpegBytes(size))
-                     .isEmpty());
+  QByteArray lines;
+  for (int i = 1; i <= 60; ++i) {
+    lines += "line " + QByteArray::number(i) + '\n';
   }
+  ASSERT_FALSE(files_test::writeFile(dir, "a.txt", lines).isEmpty());
+  ASSERT_FALSE(files_test::writeFile(dir, "b.txt", lines).isEmpty());
   QuickLookHarness harness;
   ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
   auto* content = harness.window->findChild<QQuickItem*>("quickLookContent");
@@ -2159,60 +2315,19 @@ TEST(Files, QuickLookKeepsFocusWhileNavigatingAndCloses) {
     SCOPED_TRACE(closeKey);
     ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
     const auto startRow = harness.controller.cursorRow();
+    ASSERT_EQ(harness.controller.preview()->currentLineIndex(), 0);
     for (int step = 0; step < 30; ++step) {
-      QTest::keyClick(harness.window, closeKey == Qt::Key_Escape ? Qt::Key_J : Qt::Key_K);
+      QTest::keyClick(harness.window, Qt::Key_J);
       QTest::qWait(5);
       ASSERT_EQ(harness.window->activeFocusItem(), content) << "step " << step;
     }
-    EXPECT_NE(harness.controller.cursorRow(), startRow);
+    EXPECT_EQ(harness.controller.cursorRow(), startRow);
+    EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 30);
     QTest::keyClick(harness.window, closeKey);
     ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.popup->property("visible").toBool(); }));
     EXPECT_FALSE(harness.controller.quickLookOpen());
     EXPECT_TRUE(harness.window->findChild<QQuickItem*>("directoryListView")->hasActiveFocus());
   }
-}
-
-// REQ-F-001/005/013: pending geometry follows resized bounds, including its caption.
-TEST(Files, QuickLookPendingResizeKeepsCaptionInsideCard) {
-  QTemporaryDir dir(files_test::fixturePattern("quicklook-pending-resize"));
-  ASSERT_TRUE(dir.isValid());
-  ASSERT_FALSE(files_test::writeFile(dir, "01.jpg", files_test::renderJpegBytes({600, 400})).isEmpty());
-  ASSERT_FALSE(files_test::writeFile(dir, "02.jpg", files_test::renderJpegBytes({400, 600})).isEmpty());
-  DispatchGate gate;
-  QuickLookHarness harness;
-  const auto release = qScopeGuard([&gate] { gate.held.store(false); });
-  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
-  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
-  QTest::qWait(400);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->busy(); }));
-  installDispatchGate(*harness.controller.preview(), gate);
-  gate.held.store(true);
-  harness.controller.handleKey(QStringLiteral("j"));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return gate.waiting.load() > 0; }));
-  const auto settled = popupSize(harness);
-  harness.window->resize(640, 420);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->size() == QSizeF(640, 420); }));
-  auto* hint = harness.window->findChild<QQuickItem*>("quickLookHint");
-  auto* card = harness.window->findChild<QQuickItem*>("quickLookCard");
-  ASSERT_NE(hint, nullptr);
-  ASSERT_NE(card, nullptr);
-  const auto bottom = hint->mapToItem(card, QPointF(0, hint->height())).y();
-  EXPECT_LE(bottom, card->height());
-  auto* area = harness.window->findChild<QQuickItem*>("quickLookImageArea");
-  ASSERT_NE(area, nullptr);
-  auto* frame = area->parentItem();
-  ASSERT_NE(frame, nullptr);
-  EXPECT_GE(frame->mapToItem(card, QPointF()).x(), 0);
-  EXPECT_LE(frame->mapToItem(card, QPointF(frame->width(), frame->height())).x(), card->width());
-  expectCardWithinBounds(harness);
-  EXPECT_LE(hint->mapToScene(QPointF(0, hint->height())).y(), harness.window->height());
-  harness.window->resize(1280, 800);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return harness.overlay->size() == QSizeF(1280, 800); }));
-  EXPECT_EQ(popupSize(harness), settled);
-  EXPECT_LE(hint->mapToItem(card, QPointF(0, hint->height())).y(), card->height());
-  EXPECT_TRUE(harness.controller.preview()->busy());
-  EXPECT_FALSE(harness.controller.preview()->hasImage());
 }
 
 namespace {

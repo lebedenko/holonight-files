@@ -1,7 +1,7 @@
 #include "inspection_keys.h"
 
 namespace {
-QString normalized(int key, const QString& text) {
+QString normalized(int key, const QString& text, bool popup) {
   switch (key) {
     case Qt::Key_Space:
       return QStringLiteral(" ");
@@ -11,6 +11,10 @@ QString normalized(int key, const QString& text) {
       return QStringLiteral("Return");
     case Qt::Key_Enter:
       return QStringLiteral("Enter");
+    case Qt::Key_Up:
+      return popup ? QStringLiteral("ArrowUp") : text;
+    case Qt::Key_Down:
+      return popup ? QStringLiteral("ArrowDown") : text;
     default:
       return text;
   }
@@ -31,8 +35,9 @@ bool InspectionKeys::press(int key, const QString& text, int modifiers, bool aut
     }
     return true;
   }
-  const auto input = normalized(key, text);
-  if (popup && input != " " && input != "Escape" && input != "j" && input != "k") {
+  const auto input = normalized(key, text, popup);
+  if (popup && input != " " && input != "Escape" && input != "j" && input != "k" && input != "ArrowUp" &&
+      input != "ArrowDown") {
     return false;
   }
   if (input == " " && autoRepeat) {

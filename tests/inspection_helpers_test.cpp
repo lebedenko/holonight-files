@@ -72,6 +72,7 @@ TEST(InspectionKeys, NormalizationPopupAllowlistRepeatsAndHistory) {
   ASSERT_TRUE(QDir(dir.path()).mkdir("child"));
   files_test::writeFile(dir, "child/a.txt");
   files_test::writeFile(dir, "child/b.txt");
+  files_test::writeFile(dir, "root.txt");  // Quick Look needs a previewable entry (directories are not)
   DirectoryController controller;
   const InspectionKeys keys;
   auto settle = [&] { return QTest::qWaitFor([&] { return !controller.scanning(); }); };
@@ -86,6 +87,8 @@ TEST(InspectionKeys, NormalizationPopupAllowlistRepeatsAndHistory) {
   }
   EXPECT_FALSE(keys.press(Qt::Key_J, "", 0, false, &controller, false));
   EXPECT_FALSE(keys.press(Qt::Key_F1, "?", 0, false, &controller, false));
+  ASSERT_TRUE(controller.handleKey("j"));  // from child/ to root.txt
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }, 5000));
   EXPECT_TRUE(keys.press(Qt::Key_Space, "wrong", 0, false, &controller, false));
   EXPECT_TRUE(controller.quickLookOpen());
   EXPECT_TRUE(keys.press(Qt::Key_Space, "", 0, true, &controller, true));
@@ -124,4 +127,26 @@ TEST(IconFallbacks, EngineInitializationIsIdempotentAndProvidersAreIndependent) 
   EXPECT_NE(provider, second.imageProvider(QStringLiteral("icon")));
   initializeFilesEngine(first);
   EXPECT_EQ(provider, first.imageProvider(QStringLiteral("icon")));
+}
+
+TEST(InspectionKeys, ArrowKeysReachTheQuickLookLineMoverOnlyInPopups) {
+  QTemporaryDir dir(files_test::fixturePattern("inspection-arrows"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::writeFile(dir, "a.txt", "one\ntwo\nthree\n");
+  DirectoryController controller;
+  const InspectionKeys keys;
+  controller.open(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }, 5000));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->currentLineIndex() == 0; }, 5000));
+  EXPECT_FALSE(keys.press(Qt::Key_Down, "", 0, false, &controller, false));  // listing: not a bound key
+  ASSERT_TRUE(keys.press(Qt::Key_Space, " ", 0, false, &controller, false));
+  ASSERT_TRUE(controller.quickLookOpen());
+  EXPECT_TRUE(keys.press(Qt::Key_Down, "", 0, false, &controller, true));
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 1);
+  EXPECT_TRUE(keys.press(Qt::Key_Down, "", 0, true, &controller, true));  // held-key repeat is allowed
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 2);
+  EXPECT_TRUE(keys.press(Qt::Key_Up, "", 0, false, &controller, true));
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 1);
+  EXPECT_EQ(controller.cursorRow(), 0);
 }

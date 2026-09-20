@@ -48,6 +48,10 @@ add_library(files-private STATIC
   preview/preview_selection.h
   preview/preview_service.cpp
   preview/preview_service.h
+  preview/text_line_model.cpp
+  preview/text_line_model.h
+  preview/text_lines.cpp
+  preview/text_lines.h
   preview/text_preview_service.cpp
   preview/text_preview_service.h
   preview/thumbnail_service.cpp

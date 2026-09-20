@@ -1,8 +1,10 @@
 #pragma once
 
 #include "exif_reader.h"
+#include "text_line_model.h"
 #include "text_preview_service.h"
 
+#include <QAbstractItemModel>
 #include <QDateTime>
 #include <QImage>
 #include <QObject>
@@ -64,9 +66,13 @@ class PreviewService : public QObject {
   Q_PROPERTY(QString exifLensModel READ exifLensModel NOTIFY changed)
   Q_PROPERTY(QString exifAperture READ exifAperture NOTIFY changed)
   Q_PROPERTY(bool hasText READ hasText NOTIFY changed)
-  Q_PROPERTY(QString textContent READ textContent NOTIFY changed)
   Q_PROPERTY(bool textTruncated READ textTruncated NOTIFY changed)
   Q_PROPERTY(qint64 textTotalSize READ textTotalSize NOTIFY changed)
+  // Quick Look line viewer: one row per line of the (capped) text. currentLineIndex is 0-based and -1
+  // when there are no lines (pending, error, not text); QML only renders it, never writes it.
+  Q_PROPERTY(QAbstractItemModel* textLines READ textLines CONSTANT)
+  Q_PROPERTY(int textLineCount READ textLineCount NOTIFY changed)
+  Q_PROPERTY(int currentLineIndex READ currentLineIndex NOTIFY currentLineIndexChanged)
   Q_PROPERTY(PreviewErrorKind previewErrorKind READ previewErrorKind NOTIFY changed)
   Q_PROPERTY(QString previewErrorMessage READ previewErrorMessage NOTIFY changed)
   // The selected row's DirectoryModel::IconNameRole chain, verbatim (SPEC.md REQ-F-015): the pane
@@ -96,9 +102,11 @@ class PreviewService : public QObject {
   QString exifLensModel() const { return exif_.lensModel; }
   QString exifAperture() const { return exif_.aperture; }
   bool hasText() const { return has_text_; }
-  QString textContent() const { return text_.content; }
   bool textTruncated() const { return text_.wasTruncated; }
   qint64 textTotalSize() const { return text_.totalSize; }
+  QAbstractItemModel* textLines() { return &text_lines_; }
+  int textLineCount() const { return text_lines_.rowCount(); }
+  int currentLineIndex() const { return current_line_; }
   PreviewErrorKind previewErrorKind() const { return error_.kind; }
   QString previewErrorMessage() const { return error_.message; }
   QString iconName() const { return icon_name_; }
@@ -108,12 +116,22 @@ class PreviewService : public QObject {
   void setTarget(const QString& path, bool isDir, qint64 size, const QDateTime& modified, quint32 mode, bool statFailed,
                  const QString& statError, const QString& iconName = {}, quint64 revision = 0);
   void clear();  // REQ-F-009
+  // Moves the current line by delta, clamped to the loaded lines. No-op (no signal) when there are no
+  // lines or the index would not change.
+  void moveCurrentLine(int delta);
+  // Quick Look gate: images and text/plain (plus application/x-zerosize so an empty file without a .txt
+  // extension opens as one empty line). False until the worker has reported a MIME, for directories and
+  // for stat-failed entries. Deliberately not a Q_PROPERTY: QML never gates (REQ-C-007).
+  bool quickLookEligible() const;
+  Q_INVOKABLE void moveCurrentLineDown() { moveCurrentLine(1); }
+  Q_INVOKABLE void moveCurrentLineUp() { moveCurrentLine(-1); }
   Q_INVOKABLE void setRequestedSize(PreviewConsumer consumer, QSize pixels);
   void setQuickLookActive(bool active);  // REQ-F-004/005, called by both QML consumers
   void shutdown();
 
  signals:
   void changed();
+  void currentLineIndexChanged();
   void shutdownFinished();
 
  private:
@@ -124,6 +142,10 @@ class PreviewService : public QObject {
   void applyResult(const PreviewResult& result);
   void cancelInFlight();
   void resetDisplayState();
+  // Emits changed(), then currentLineIndexChanged() if the index differs from the last notified value.
+  // All state is assigned before either signal fires.
+  void notifyChanged();
+  void notifyCurrentLine();
   // Snapshotted on the UI thread before dispatch; lets tests deterministically exercise the
   // 3-second decode timeout without a pathological fixture (see DirectoryModel's analogous
   // before_open_for_test_ seam).
@@ -144,6 +166,7 @@ class PreviewService : public QObject {
   QString permissions_;
   QString mime_type_;
   QString mime_type_description_;
+  QString gate_mime_;
   bool is_dir_ = false;
   quint32 mode_ = 0;
   bool stat_failed_ = false;
@@ -158,6 +181,11 @@ class PreviewService : public QObject {
   ExifReader::ExifSummary exif_;
   bool has_text_ = false;
   TextPreviewService::TextPreviewResult text_;
+  TextLineModel text_lines_;
+  int current_line_ = -1;
+  int notified_line_ = -1;
+  // Where the highlight returns after a same-path reload; reset when Quick Look opens or the path changes.
+  int retained_line_ = 0;
   PreviewError error_;
 
   quint64 generation_ = 0;

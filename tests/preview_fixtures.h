@@ -262,8 +262,8 @@ inline QString writeSmallText(const QTemporaryDir& dir, const QString& name = QS
   return path;
 }
 
-// The first 64 KiB (readHead's cutoff) is all 'A'; everything past it is 'B', so a test can assert
-// exactly what a truncated head-read should — and should not — contain.
+// The first 64 KiB is all 'A'; everything past it is 'B', so a test can assert exactly what a
+// truncated head-read should — and should not — contain (readHead's cap is now 100 KiB).
 inline QString writeLargeText(const QTemporaryDir& dir, const QString& name = QStringLiteral("large.txt")) {
   QByteArray content(64 * 1024, 'A');
   content += QByteArray(140 * 1024, 'B');
@@ -285,6 +285,66 @@ inline QString writeUtf8Multilang(const QTemporaryDir& dir,
   }
   file.write(QStringLiteral("Café résumé — naïve. 日本語のテキスト。 😀🎉📁 Здравствуй, мир!\n").toUtf8());
   return path;
+}
+
+inline QString writeBytes(const QTemporaryDir& dir, const QString& name, const QByteArray& bytes) {
+  const auto path = dir.filePath(name);
+  QFile file(path);
+  if (file.open(QIODevice::WriteOnly)) {
+    file.write(bytes);
+  }
+  return path;
+}
+
+// Exactly `bytes` bytes of 'x', with a '\n' after every 99 characters so the file is many short lines.
+inline QString writeTextOfSize(const QTemporaryDir& dir, const QString& name, qsizetype bytes) {
+  QByteArray content;
+  content.reserve(bytes);
+  while (content.size() < bytes) {
+    content.append((content.size() % 100) == 99 ? '\n' : 'x');
+  }
+  return writeBytes(dir, name, content);
+}
+
+// N lines "line 1\n" .. "line N\n"; the file ends with a terminator (which adds no extra line).
+inline QString writeNumberedLines(const QTemporaryDir& dir, const QString& name, int count) {
+  QByteArray content;
+  for (int i = 1; i <= count; ++i) {
+    content += "line " + QByteArray::number(i) + '\n';
+  }
+  return writeBytes(dir, name, content);
+}
+
+inline QString writeEmptyText(const QTemporaryDir& dir, const QString& name = QStringLiteral("empty.txt")) {
+  return writeBytes(dir, name, {});
+}
+
+// "a", "b", "c" separated (and terminated) by CRLF / lone CR: three lines, same as the LF form.
+inline QString writeCrlfText(const QTemporaryDir& dir, const QString& name = QStringLiteral("crlf.txt")) {
+  return writeBytes(dir, name, "a\r\nb\r\nc\r\n");
+}
+
+inline QString writeCrText(const QTemporaryDir& dir, const QString& name = QStringLiteral("cr.txt")) {
+  return writeBytes(dir, name, "a\rb\rc\r");
+}
+
+// Valid text followed by bytes that can never appear in UTF-8 (0xFF 0xFE).
+inline QString writeInvalidUtf8Text(const QTemporaryDir& dir, const QString& name = QStringLiteral("invalid.txt")) {
+  return writeBytes(dir, name, QByteArray("hello\xff\xfe", 7));
+}
+
+// One line of `length` characters and no terminator, for clipping and layout-cost tests.
+inline QString writeSingleLongLine(const QTemporaryDir& dir, qsizetype length,
+                                   const QString& name = QStringLiteral("long-line.txt")) {
+  return writeBytes(dir, name, QByteArray(length, 'x'));
+}
+
+// A 3-byte character ("日") straddles byte 102,400, so a 102,400-byte cap cuts it in half.
+inline QString writeCutMidUtf8Text(const QTemporaryDir& dir, const QString& name = QStringLiteral("cut_mid.txt")) {
+  QByteArray content(102400 - 1, 'a');
+  content += QByteArray("日");
+  content += QByteArray(10, 'b');
+  return writeBytes(dir, name, content);
 }
 
 inline QString writeRandomBinary(const QTemporaryDir& dir, const QString& name = QStringLiteral("random.bin")) {

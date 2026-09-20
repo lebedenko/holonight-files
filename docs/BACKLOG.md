@@ -139,6 +139,14 @@ layout while loading, refitting it when the window resizes. Review remediation
 and pending native 1.5× rendering/latency acceptance are tracked in
 [Quick Look verification](sdd/quick-look-redesign/VERIFICATION.md).
 
+Quick Look is now a pinned text/image viewer: `Space` opens it only for images and
+`text/plain`, `j`/`k`/arrows move a current line in a 100 KiB-capped line viewer, and the
+previewed file no longer follows the listing cursor. This supersedes the live-update-on-`j`/`k`
+behavior recorded in the two Quick Look verification documents above. Spec, design and
+tasks: [quick-look-text-viewer](sdd/quick-look-text-viewer/SPEC.md). The user confirmed native
+wheel/drag scrolling, focus restoration, copy behavior and responsiveness on 2026-09-21
+with no issues. Isolated runtime verification remains pending before publication.
+
 Quick Look geometry, classification and decode-size coordination now belong to a
 C++ presentation model. QML retains measurement, styling, captions and input
 handling. Automated evidence and pending native 1.5× acceptance are tracked in

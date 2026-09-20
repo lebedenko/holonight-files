@@ -328,18 +328,36 @@ TEST(WindowHistoryNavigation, CountThenCtrlOTraversesCountEntries) {
   EXPECT_EQ(rendered.controller.currentPath(), rendered.c);
 }
 
-TEST(WindowHistoryNavigation, QuickLookOpenThenCtrlOClosesItAndNavigates) {
+TEST(WindowHistoryNavigation, QuickLookConsumesHistoryShortcutsUntilClosed) {
   HistoryWindow rendered;
   ASSERT_TRUE(rendered.start());
+  QTest::keyClick(rendered.window, Qt::Key_O, Qt::ControlModifier);
+  ASSERT_TRUE(settled(rendered.controller));
+  ASSERT_EQ(rendered.controller.currentPath(), rendered.b);  // both history directions have a target
   auto* popup = rendered.window->findChild<QObject*>("quickLookOverlay");
   ASSERT_NE(popup, nullptr);
   ASSERT_TRUE(QTest::qWaitFor([&] { return !rendered.controller.preview()->busy(); }));
   QTest::keyClick(rendered.window, Qt::Key_Space);
   ASSERT_TRUE(QTest::qWaitFor([&] { return popup->property("opened").toBool(); }));
-  QTest::keyClick(rendered.window, Qt::Key_O, Qt::ControlModifier);
+  const auto row = rendered.controller.cursorRow();
+  const auto name = rendered.controller.preview()->name();
+  for (const auto key : {Qt::Key_O, Qt::Key_I}) {
+    QTest::keyClick(rendered.window, key, Qt::ControlModifier);
+    EXPECT_TRUE(popup->property("opened").toBool());
+    EXPECT_TRUE(rendered.controller.quickLookOpen());
+    EXPECT_EQ(rendered.controller.currentPath(), rendered.b);
+    EXPECT_EQ(rendered.controller.cursorRow(), row);
+    EXPECT_EQ(rendered.controller.preview()->name(), name);
+  }
+  QTest::keyClick(rendered.window, Qt::Key_Escape);
   ASSERT_TRUE(QTest::qWaitFor([&] { return !popup->property("visible").toBool(); }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return rendered.list->hasActiveFocus(); }));
+  QTest::keyClick(rendered.window, Qt::Key_O, Qt::ControlModifier);
   ASSERT_TRUE(settled(rendered.controller));
   EXPECT_FALSE(rendered.controller.quickLookOpen());
+  EXPECT_EQ(rendered.controller.currentPath(), rendered.a);
+  QTest::keyClick(rendered.window, Qt::Key_I, Qt::ControlModifier);
+  ASSERT_TRUE(settled(rendered.controller));
   EXPECT_EQ(rendered.controller.currentPath(), rendered.b);
   EXPECT_TRUE(QTest::qWaitFor([&] { return rendered.list->hasActiveFocus(); }));
 }

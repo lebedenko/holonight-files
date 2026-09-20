@@ -235,6 +235,10 @@ void DirectoryController::execute(const FileCommand& command) {
       preview_.setQuickLookActive(quickLookOpen());
       emit changed();
       break;
+    case Kind::MoveQuickLookLine:
+      // Only the viewer's current line moves; the listing did not change, so no changed() and no retarget.
+      preview_.moveCurrentLine(command.count);
+      break;
     case Kind::Visual:
       cancelPendingRestore();
       vim_.enterVisual(cursorRow());

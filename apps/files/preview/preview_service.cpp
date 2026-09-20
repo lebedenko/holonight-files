@@ -22,6 +22,10 @@ struct PreviewResult {
   bool final = true;
   QString mime_type;
   QString mime_type_description;
+  // MIME used only for Quick Look gating: the sniffed type, or an extension-only guess when the file
+  // cannot be opened or read, so an unreadable text/plain file can still open Quick Look and show
+  // its error.
+  QString gate_mime;
   QImage image;
   QSize source_pixel_size;
   ExifReader::ExifSummary exif;
@@ -72,7 +76,7 @@ struct PreviewWorkerCache {
 namespace {
 constexpr int kDecodeTimeoutMs = 3000;
 constexpr int kResizeDebounceMs = 150;
-constexpr qint64 kTextHeadBytes = 65536;
+constexpr qint64 kTextViewerMaxBytes = 102400;
 constexpr qint64 kSniffBytes = 8192;
 
 QString formatPermissions(quint32 rawMode) {
@@ -172,6 +176,8 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
   if (cancel->load()) {
     return result;
   }
+  // In-memory glob match only: no file I/O.
+  result.gate_mime = QMimeDatabase().mimeTypeForFile(path, QMimeDatabase::MatchExtension).name();
   // POSIX open is required for nonblocking, close-on-exec descriptor verification.
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
   const int descriptor = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
@@ -211,12 +217,13 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
   QMimeDatabase mimeDatabase;
   const auto mime = mimeDatabase.mimeTypeForFileNameAndData(path, sniff);
   result.mime_type = mime.name();
+  result.gate_mime = mime.name();
   result.mime_type_description = mime.comment();
   if (mime.name().startsWith(QStringLiteral("image/"))) {
     return decodeImage(file, path, identity, result, cancel, requestedSize, cache, publish, beforeFullDecode);
   }
   if (!TextPreviewService::looksBinary(sniff)) {
-    result.text = TextPreviewService::readHead(file, kTextHeadBytes);
+    result.text = TextPreviewService::readHead(file, kTextViewerMaxBytes);
     result.has_text = result.text.error.isEmpty();
     if (!result.has_text) {
       result.error = {.kind = PreviewService::PreviewErrorKind::DecodeFailed, .message = result.text.error};
@@ -247,7 +254,7 @@ PreviewService::PreviewService(QObject* parent)
     pending_job_ = false;
     resetDisplayState();
     error_ = {.kind = PreviewErrorKind::DecodeTimeout, .message = tr("Cannot decode image")};
-    emit changed();
+    notifyChanged();
   });
   resize_debounce_timer_.setSingleShot(true);
   connect(&resize_debounce_timer_, &QTimer::timeout, this, [this] {
@@ -287,6 +294,9 @@ void PreviewService::setTarget(const QString& path, bool isDir, qint64 size, con
   revision_ = revision;
   cancelInFlight();
   busy_ = false;
+  if (path_ != path) {
+    retained_line_ = 0;
+  }
   path_ = path;
   name_ = QFileInfo(path).fileName();
   size_ = size;
@@ -303,20 +313,20 @@ void PreviewService::setTarget(const QString& path, bool isDir, qint64 size, con
     error_ = {.kind = statError.contains(QStringLiteral("Broken symbolic link")) ? PreviewErrorKind::BrokenSymlink
                                                                                  : PreviewErrorKind::PermissionDenied,
               .message = statError};
-    emit changed();
+    notifyChanged();
     return;
   }
   if (!S_ISREG(mode) && !S_ISLNK(mode) && !isDir) {
     mime_type_ = S_ISFIFO(mode) ? QStringLiteral("inode/fifo") : QStringLiteral("application/octet-stream");
-    emit changed();
+    notifyChanged();
     return;
   }
   if (isDir) {
     mime_type_ = QStringLiteral("inode/directory");
-    emit changed();
+    notifyChanged();
     return;
   }
-  emit changed();  // Metadata is visible instantly; image/text/EXIF follow asynchronously.
+  notifyChanged();  // Metadata is visible instantly; image/text/EXIF follow asynchronously.
   dispatch();
 }
 
@@ -332,8 +342,9 @@ void PreviewService::clear() {
   icon_name_.clear();
   is_dir_ = false;
   busy_ = false;
+  retained_line_ = 0;
   resetDisplayState();
-  emit changed();
+  notifyChanged();
 }
 
 void PreviewService::setRequestedSize(PreviewConsumer consumer, QSize pixels) {
@@ -346,6 +357,11 @@ void PreviewService::setRequestedSize(PreviewConsumer consumer, QSize pixels) {
 }
 
 void PreviewService::setQuickLookActive(bool active) {
+  if (active && !quick_look_active_) {
+    retained_line_ = 0;
+    current_line_ = text_lines_.rowCount() > 0 ? 0 : -1;
+    notifyCurrentLine();
+  }
   quick_look_active_ = active;
   updateRequestedSize();
 }
@@ -440,6 +456,7 @@ void PreviewService::applyResult(const PreviewResult& result) {
   busy_ = !result.final;
   mime_type_ = result.mime_type;
   mime_type_description_ = result.mime_type_description;
+  gate_mime_ = result.gate_mime;
   if (!result.image.isNull() && (display_image_.isNull() || (result.image.width() >= display_image_.width() &&
                                                              result.image.height() >= display_image_.height()))) {
     display_image_ = result.image;
@@ -448,8 +465,15 @@ void PreviewService::applyResult(const PreviewResult& result) {
   exif_ = result.exif;
   has_text_ = result.has_text;
   text_ = result.text;
+  if (has_text_) {
+    text_lines_.setLines(text_.lines);
+    current_line_ = qMin(retained_line_, static_cast<int>(text_.lines.size()) - 1);
+  } else {
+    text_lines_.clear();
+    current_line_ = -1;
+  }
   error_ = result.error;
-  emit changed();
+  notifyChanged();
   if (result.final && mime_type_.startsWith(QStringLiteral("image/")) && !display_image_.isNull()) {
     resize_debounce_timer_.start(kResizeDebounceMs);
   }
@@ -472,7 +496,44 @@ void PreviewService::resetDisplayState() {
   source_pixel_size_ = QSize();
   exif_ = ExifReader::ExifSummary();
   mime_type_description_.clear();
+  gate_mime_.clear();
   has_text_ = false;
   text_ = TextPreviewService::TextPreviewResult();
+  text_lines_.clear();
+  current_line_ = -1;
   error_ = PreviewError();
+}
+
+void PreviewService::notifyChanged() {
+  emit changed();
+  notifyCurrentLine();
+}
+
+void PreviewService::notifyCurrentLine() {
+  if (current_line_ != notified_line_) {
+    notified_line_ = current_line_;
+    emit currentLineIndexChanged();
+  }
+}
+
+bool PreviewService::quickLookEligible() const {
+  if (!has_entry_ || stat_failed_ || is_dir_) {
+    return false;
+  }
+  return gate_mime_.startsWith(QStringLiteral("image/")) || gate_mime_ == QStringLiteral("text/plain") ||
+         gate_mime_ == QStringLiteral("application/x-zerosize");
+}
+
+void PreviewService::moveCurrentLine(int delta) {
+  const int count = text_lines_.rowCount();
+  if (current_line_ < 0 || count == 0) {
+    return;
+  }
+  const int target = qBound(0, current_line_ + delta, count - 1);
+  if (target == current_line_) {
+    return;
+  }
+  current_line_ = target;
+  retained_line_ = target;
+  notifyCurrentLine();
 }

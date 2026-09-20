@@ -1,5 +1,7 @@
 #include "text_preview_service.h"
 
+#include "text_lines.h"
+
 #include <QFile>
 #include <QFileInfo>
 
@@ -49,8 +51,9 @@ TextPreviewResult readHead(QFile& file, qint64 maxBytes) {
     result.error = file.errorString();
     return result;
   }
-  result.content = QString::fromUtf8(bytes);
   result.wasTruncated = result.totalSize > bytes.size();
+  const QByteArrayView loaded = result.wasTruncated ? TextLines::trimIncompleteUtf8Tail(bytes) : QByteArrayView(bytes);
+  result.lines = TextLines::splitLines(TextLines::decodeUtf8(loaded));
   return result;
 }
 

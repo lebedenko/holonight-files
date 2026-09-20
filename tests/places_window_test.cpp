@@ -135,6 +135,8 @@ TEST(PlacesWindow, GuardsBlockActivation) {
   view.click();
   EXPECT_EQ(view.controller.currentPath(), view.dir.path());
   QTest::keyClick(view.window, Qt::Key_Escape);
+  view.controller.handleKey("j");  // Quick Look needs a previewable file: move from "target/" to file.txt
+  ASSERT_TRUE(QTest::qWaitFor([&] { return view.controller.preview()->quickLookEligible(); }, 5000));
   view.controller.handleKey(" ");
   ASSERT_TRUE(view.controller.quickLookOpen());
   EXPECT_FALSE(view.places->isEnabled());

@@ -1,6 +1,6 @@
 add_files_application(files-smoke smoke.cpp size_format_test.cpp inspection_helpers_test.cpp directory_model_test.cpp directory_proxy_model_test.cpp
   directory_controller_test.cpp directory_performance_test.cpp initial_directory_test.cpp
-  thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp preview_service_test.cpp
+  thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp text_lines_test.cpp text_line_model_test.cpp preview_service_test.cpp
   quick_look_presentation_model_test.cpp preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp
   name_validator_test.cpp fuzzy_matcher_test.cpp vim_mode_controller_test.cpp
   clipboard_register_test.cpp file_operation_service_test.cpp trash_service_test.cpp

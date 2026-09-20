@@ -43,8 +43,10 @@ QString NavigationSession::outgoingCursorName() const {
 }
 void NavigationSession::traverseHistory(int direction, int count) {
   // Rechecked here, not only in QML bindings, so direct callers get the same gating
-  // (REQ-F-021/022). The count was already consumed by the caller (REQ-F-023).
-  if (controller_.tasks_.hasPrompt() || controller_.vim_.currentMode() != VimModeController::Mode::Normal) {
+  // (REQ-F-021/022). Quick Look pins the file even when history bypasses the command router.
+  // The count was already consumed by the caller (REQ-F-023).
+  if (controller_.quickLookOpen() || controller_.tasks_.hasPrompt() ||
+      controller_.vim_.currentMode() != VimModeController::Mode::Normal) {
     return;
   }
   const auto result = jump_list_.traverse(direction, count, outgoingCursorName(),

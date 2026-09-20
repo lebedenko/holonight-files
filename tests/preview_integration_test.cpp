@@ -55,7 +55,14 @@ TEST(PreviewIntegration, CursorMovementThroughMixedFileTypesUpdatesThePreviewLiv
   controller.handleKey("j");
   ASSERT_TRUE(previewSettled(controller));
   EXPECT_TRUE(controller.preview()->hasText());
-  EXPECT_TRUE(controller.preview()->textContent().contains(QStringLiteral("日本語")));
+  bool foundJapanese = false;
+  auto* lines = controller.preview()->textLines();
+  for (int row = 0; row < lines->rowCount(); ++row) {
+    foundJapanese =
+        foundJapanese ||
+        lines->data(lines->index(row, 0), TextLineModel::LineTextRole).toString().contains(QStringLiteral("日本語"));
+  }
+  EXPECT_TRUE(foundJapanese);
 }
 
 TEST(PreviewIntegration, RevisitingAnAlreadyCachedEntryUpdatesWithinTheLatencyBudget) {
@@ -78,7 +85,7 @@ TEST(PreviewIntegration, RevisitingAnAlreadyCachedEntryUpdatesWithinTheLatencyBu
   EXPECT_LT(elapsed.elapsed(), 500);  // REQ-NF-002's cached-path budget, generously bounded here
 }
 
-TEST(PreviewIntegration, QuickLookOpensShowsTheSamePreviewLiveUpdatesAndCloses) {
+TEST(PreviewIntegration, QuickLookOpensPinnedToItsFileAndJMovesTheCurrentLineNotTheSelection) {
   QTemporaryDir dir(fixturePattern("preview-quicklook-flow"));
   ASSERT_TRUE(dir.isValid());
   writeJpegWithExif(dir, "01-photo.jpg");
@@ -92,11 +99,32 @@ TEST(PreviewIntegration, QuickLookOpensShowsTheSamePreviewLiveUpdatesAndCloses) 
   ASSERT_TRUE(controller.quickLookOpen());
   EXPECT_TRUE(controller.preview()->hasImage());  // same PreviewService instance as the pane
 
+  // j is consumed by Quick Look: the photo stays previewed, the cursor stays on row 0, and there is no
+  // text line to move on an image.
+  controller.handleKey("j");
+  ASSERT_TRUE(controller.quickLookOpen());
+  EXPECT_EQ(controller.cursorRow(), 0);
+  EXPECT_EQ(controller.preview()->name(), QStringLiteral("01-photo.jpg"));
+  EXPECT_TRUE(controller.preview()->hasImage());
+  EXPECT_EQ(controller.preview()->currentLineIndex(), -1);
+
+  ASSERT_TRUE(controller.handleKey("Escape"));
+  EXPECT_FALSE(controller.quickLookOpen());
+  EXPECT_EQ(controller.cursorRow(), 0);
+
+  // After closing, j navigates the listing again; reopening on the text file shows its lines.
   controller.handleKey("j");
   ASSERT_TRUE(previewSettled(controller));
-  ASSERT_TRUE(controller.quickLookOpen());  // still open
+  EXPECT_EQ(controller.preview()->name(), QStringLiteral("02-notes.txt"));
+  ASSERT_TRUE(controller.handleKey(" "));
+  ASSERT_TRUE(controller.quickLookOpen());
   EXPECT_TRUE(controller.preview()->hasText());
-
+  EXPECT_GT(controller.preview()->textLineCount(), 1);
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 0);
+  controller.handleKey("j");
+  EXPECT_EQ(controller.preview()->currentLineIndex(), 1);
+  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_EQ(controller.preview()->name(), QStringLiteral("02-notes.txt"));
   ASSERT_TRUE(controller.handleKey("Escape"));
   EXPECT_FALSE(controller.quickLookOpen());
 }
@@ -137,6 +165,8 @@ TEST(PreviewIntegration, SelectedFileEditsPermissionsReplacementRenameAndDeletio
   const auto renamed = dir.filePath("renamed.txt");
   ASSERT_TRUE(QFile::rename(path, renamed));
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->name() == "renamed.txt"; }));
+  ASSERT_TRUE(previewSettled(controller));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }));
   controller.handleKey(" ");
   EXPECT_TRUE(controller.quickLookOpen());
   ASSERT_TRUE(QFile::remove(renamed));
