@@ -268,6 +268,46 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
   }
 }
 
+TEST(Files, WindowAnchorOnlySeparatorsOccupyAndPaint) {
+  QTemporaryDir dir(files_test::fixturePattern("separator-geometry"));
+  ASSERT_FALSE(files_test::writeFile(dir, "example.txt").isEmpty());
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  initializeFilesEngine(engine);
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  controller.open(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+  QCoreApplication::processEvents();
+  const QImage rendered = window->grabWindow();
+  ASSERT_FALSE(rendered.isNull());
+  const qreal dpr = window->effectiveDevicePixelRatio();
+
+  const auto expectSeparator = [window, &rendered, dpr](const char* name) {
+    auto* separator = window->findChild<QQuickItem*>(name);
+    ASSERT_NE(separator, nullptr) << name;
+    auto* line = separator->findChild<QQuickItem*>("separatorLine");
+    ASSERT_NE(line, nullptr) << name;
+    EXPECT_GT(separator->width(), 0) << name;
+    EXPECT_GT(separator->height(), 0) << name;
+    EXPECT_TRUE(separator->isVisible()) << name;
+    EXPECT_TRUE(line->isVisible()) << name;
+    EXPECT_GT(line->width(), 0) << name;
+    EXPECT_GT(line->height(), 0) << name;
+    const QPointF center = line->mapToScene(QPointF(line->width() / 2, line->height() / 2));
+    const QPoint pixel(qFloor(center.x() * dpr), qFloor(center.y() * dpr));
+    ASSERT_TRUE(rendered.rect().contains(pixel)) << name;
+    EXPECT_EQ(rendered.pixelColor(pixel), separator->property("color").value<QColor>()) << name;
+  };
+  for (const auto* name : {"headerDivider", "sidebarDivider", "columnHeaderDivider", "sizeColumnDivider",
+                           "modifiedColumnDivider", "footerDivider"}) {
+    expectSeparator(name);
+  }
+}
+
 namespace {
 struct LoadedWindow {
   std::unique_ptr<QQmlApplicationEngine> engine = [] {

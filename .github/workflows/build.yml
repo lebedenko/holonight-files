@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: lebedenko/holonight-qt
-          ref: 8fe24ff83f8108631c2b7b0351994f7e513acfcd
+          ref: 863af4183bdf09ce05199b37e8f5dfb46a311ba1
           path: holonight-qt
       - name: Build CI image locally
         shell: bash

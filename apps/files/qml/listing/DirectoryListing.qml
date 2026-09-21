@@ -53,6 +53,7 @@ Item {
     Rectangle {
         id: columnHeader
         objectName: "directoryColumnHeader"
+        z: 1
         anchors {
             top: parent.top
             left: parent.left
@@ -60,9 +61,10 @@ Item {
         }
         height: HnMetrics.controlHeight(HnControlSize.Compact)
         color: "transparent"
-        clip: true
+        // Labels elide within their cells. A fractional header clip can truncate the snapped bottom rule.
 
         RowLayout {
+            id: headerCells
             anchors.fill: parent
             // The gutter spacer replaces the leading padding, matching the delegates' leftPadding: 0.
             anchors.leftMargin: 0
@@ -86,6 +88,7 @@ Item {
                 Layout.leftMargin: root.iconColumnWidth + root.columnSpacing
             }
             HnLabel {
+                id: sizeHeader
                 objectName: "sizeColumnHeader"
                 role: HnTypographyRole.Body
                 rawText: qsTr("Size")
@@ -96,15 +99,9 @@ Item {
                 Layout.maximumWidth: root.sizeColumnWidth
                 Layout.fillHeight: true
                 verticalAlignment: Text.AlignVCenter
-
-                HnSeparator {
-                    orientation: Qt.Vertical
-                    color: HoloniightPalette.borderPassive
-                    x: -(root.columnSpacing + width) / 2
-                    height: parent.height
-                }
             }
             HnLabel {
+                id: modifiedHeader
                 objectName: "modifiedColumnHeader"
                 role: HnTypographyRole.Body
                 rawText: qsTr("Modified")
@@ -114,17 +111,32 @@ Item {
                 Layout.maximumWidth: root.modifiedColumnWidth
                 Layout.fillHeight: true
                 verticalAlignment: Text.AlignVCenter
-
-                HnSeparator {
-                    orientation: Qt.Vertical
-                    color: HoloniightPalette.borderPassive
-                    x: -(root.columnSpacing + width) / 2
-                    height: parent.height
-                }
             }
         }
 
+        // The bottom rule owns each junction. Both branches reference its leading boundary.
         HnSeparator {
+            objectName: "sizeColumnDivider"
+            orientation: Qt.Vertical
+            visible: root.showSize
+            x: headerCells.x + sizeHeader.x - root.columnSpacing / 2
+            anchors.top: parent.top
+            anchors.bottom: columnHeaderDivider.top
+        }
+
+        HnSeparator {
+            objectName: "modifiedColumnDivider"
+            orientation: Qt.Vertical
+            visible: root.showModified
+            x: headerCells.x + modifiedHeader.x - root.columnSpacing / 2
+            anchors.top: parent.top
+            anchors.bottom: columnHeaderDivider.top
+        }
+
+        HnSeparator {
+            id: columnHeaderDivider
+            objectName: "columnHeaderDivider"
+            crossAxisAlignment: HnSeparator.Trailing
             color: HoloniightPalette.borderPassive
             anchors {
                 left: parent.left

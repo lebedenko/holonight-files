@@ -1,4 +1,4 @@
-add_files_application(files-smoke smoke.cpp size_format_test.cpp inspection_helpers_test.cpp directory_model_test.cpp directory_proxy_model_test.cpp
+add_files_application(files-smoke smoke.cpp separator_window_test.cpp size_format_test.cpp inspection_helpers_test.cpp directory_model_test.cpp directory_proxy_model_test.cpp
   directory_controller_test.cpp directory_performance_test.cpp initial_directory_test.cpp
   thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp text_lines_test.cpp text_line_model_test.cpp preview_service_test.cpp
   quick_look_presentation_model_test.cpp preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp
@@ -9,12 +9,13 @@ add_files_application(files-smoke smoke.cpp size_format_test.cpp inspection_help
   warning_sink_test.cpp xdg_paths_test.cpp toml_document_test.cpp settings_registry_test.cpp app_settings_test.cpp
   location_classifier_test.cpp state_store_test.cpp last_location_tracker_test.cpp user_dirs_parser_test.cpp
   bookmark_store_test.cpp place_availability_checker_test.cpp)
-target_link_libraries(files-smoke PRIVATE Qt6::Test GTest::gtest)
+find_package(Qt6 REQUIRED COMPONENTS OpenGL)
+target_link_libraries(files-smoke PRIVATE Qt6::Test Qt6::OpenGL GTest::gtest)
 target_compile_definitions(files-smoke PRIVATE FILES_FIXTURE_DIR="${CMAKE_CURRENT_BINARY_DIR}/fixtures/files"
   FILES_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME files-smoke COMMAND files-smoke)
 set_tests_properties(files-smoke PROPERTIES ENVIRONMENT
-  "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
+  "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
 
 # A fresh headless process prevents earlier rendered tests from hiding copy memory growth.
 qt_add_executable(files-memory-benchmark file_operation_memory_test.cpp)
@@ -40,7 +41,7 @@ add_files_application(files-fsops-window-smoke window_cross_filesystem_test.cpp 
 target_link_libraries(files-fsops-window-smoke PRIVATE Qt6::Test GTest::gtest)
 add_test(NAME files-fsops-window-smoke COMMAND files-fsops-window-smoke)
 set_tests_properties(files-fsops-window-smoke PROPERTIES ENVIRONMENT
-  "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}"
+  "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}"
   TIMEOUT 60)
 set_target_properties(files-fsops-window-smoke PROPERTIES QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
 
@@ -64,4 +65,19 @@ set_tests_properties(files-smoke PROPERTIES TIMEOUT 180)
 
 add_test(NAME files-fusion-editing COMMAND files-smoke --gtest_filter=Files.RuntimeStyleEditingShowsValidationAndCommits)
 set_tests_properties(files-fusion-editing PROPERTIES ENVIRONMENT
-  "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH};FILES_TEST_STYLE=Fusion" TIMEOUT 15)
+  "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH};FILES_TEST_STYLE=Fusion" TIMEOUT 15)
+
+# Opt in on hosts with a real GPU; each test asserts the backend rather than accepting fallback.
+option(FILES_ACCELERATED_SEPARATOR_TESTS "Run GPU separator acceptance (requires OpenGL)" OFF)
+foreach(ratio IN ITEMS 1.0 1.25 1.5 1.5625 1.75 2.0)
+  add_test(NAME files-separator-software-${ratio}
+    COMMAND files-smoke --gtest_filter=Files.WindowSeparatorJunctions)
+  set_tests_properties(files-separator-software-${ratio} PROPERTIES ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${ratio};QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
+  if(FILES_ACCELERATED_SEPARATOR_TESTS)
+    add_test(NAME files-separator-opengl-${ratio}
+      COMMAND files-smoke --gtest_filter=Files.WindowSeparatorJunctions)
+    set_tests_properties(files-separator-opengl-${ratio} PROPERTIES LABELS accelerated ENVIRONMENT
+      "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=rhi;QSG_RHI_BACKEND=opengl;QT_SCALE_FACTOR=${ratio};FILES_SEPARATOR_BACKEND=opengl;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
+  endif()
+endforeach()

@@ -19,7 +19,6 @@ HnHeaderBar {
     readonly property bool historyEnabled: root.controller.vim.currentMode === VimModeController.Normal && !root.controller.tasks.hasPrompt
 
     horizontalPadding: 0
-    dividerVisible: true
     dividerColor: HoloniightPalette.borderPassive
 
     Rectangle {

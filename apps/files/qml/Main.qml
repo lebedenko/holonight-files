@@ -70,6 +70,8 @@ HnApplicationWindow {
         spacing: 0
 
         AppHeaderBar {
+            // Paint the owned bottom boundary above adjacent content backgrounds.
+            z: 1
             objectName: "appHeaderBar"
             controller: window.controller
             sidebarWidth: window.sidebarWidth
@@ -99,6 +101,8 @@ HnApplicationWindow {
                 }
 
                 HnSeparator {
+                    objectName: "sidebarDivider"
+                    crossAxisAlignment: HnSeparator.Trailing
                     orientation: Qt.Vertical
                     color: HoloniightPalette.borderPassive
                     anchors {
@@ -160,6 +164,7 @@ HnApplicationWindow {
             color: HoloniightPalette.surface
 
             HnSeparator {
+                objectName: "footerDivider"
                 color: HoloniightPalette.borderPassive
                 anchors {
                     top: parent.top

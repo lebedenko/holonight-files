@@ -35,7 +35,7 @@ set +e
 # Isolated config/state, so a user's own config.toml can't add warnings to the log.
 mkdir -p "$stage/xdg/state"
 XDG_CONFIG_HOME="$stage/xdg/config" XDG_STATE_HOME="$stage/xdg/state" \
-  QT_QPA_PLATFORM=offscreen QSG_RHI_BACKEND=software timeout 3 "$stage/usr/bin/hn-files" > runtime.log 2>&1
+  QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software timeout 3 "$stage/usr/bin/hn-files" > runtime.log 2>&1
 status=$?
 set -e
 cat runtime.log
