@@ -10,13 +10,14 @@ env:
   LD_LIBRARY_PATH: '{{.HOLONIGHT_DEPENDENCY_PREFIX}}/lib'
 tasks:
   deps:
-    desc: Build sibling providers into project-local directories
+    desc: Refresh changed sibling providers in the project-local prefix
     cmds: ['bash scripts/prepare-deps.sh']
   configure:
     desc: Configure the selected build preset
     cmds: ['cmake --preset {{.PRESET}} -DCMAKE_PREFIX_PATH="{{.HOLONIGHT_DEPENDENCY_PREFIX}}" -DQML_IMPORT_PATH="{{.HOLONIGHT_QML_IMPORT_PATH}}"']
   build:
     desc: Configure and build the selected preset
+    deps: [deps]
     cmds:
       - task: configure
         vars: {PRESET: '{{.PRESET}}'}

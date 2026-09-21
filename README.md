@@ -272,7 +272,9 @@ HOLONIGHT_QML_IMPORT_PATH as Task variables for an existing installation.
 Direct CMake users can set those cache variables with `cmake --preset debug
 -D...`; CMAKE_PREFIX_PATH and QML_IMPORT_PATH select providers without being overridden by generic CMake. The
 debug/release/test presets default to the local prefix. Task run/test set the
-installed QML and library search paths.
+installed QML and library search paths. Each build checks the selected Config and Qt provider
+Git revisions against `build/deps/provider-revisions.tsv`; changed providers are rebuilt before
+configuration, while unchanged providers are reused.
 
 System installation and removal are owned by the umbrella's `scripts/install.sh` and
 `scripts/uninstall.sh`. The installer rejects unmanaged payload collisions; it does not
