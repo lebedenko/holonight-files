@@ -783,3 +783,33 @@ TEST(PreviewService, LoadingTextNeverBlocksTheUiThread) {
   ASSERT_TRUE(settled(service));
   EXPECT_EQ(service.textLineCount(), 3);
 }
+
+// A fitted integer size is not a safe bound for a second aspect-ratio fit.
+// 2400x1600 -> 1100x733 -> 1099x733 used to miss adequacy and decode repeatedly.
+class PreviewRoundedBounds : public testing::TestWithParam<int> {};
+
+TEST_P(PreviewRoundedBounds, FullDecodeFitsOriginalBoundsOnceAndReusesAdequatePixels) {
+  QTemporaryDir dir(fixturePattern("rounded-preview"));
+  const bool png = GetParam() == 0;
+  const auto bytes =
+      png ? files_test::renderPngBytes({2400, 1600}) : files_test::orientationJpeg({2400, 1600}, GetParam());
+  const auto path = writeFile(dir, png ? "image.png" : "image.jpg", bytes);
+  const QSize source = GetParam() >= 5 ? QSize(1600, 2400) : QSize(2400, 1600);
+  std::atomic_int attempts = 0;
+  PreviewService service;
+  PreviewServiceTestAccess::beforeFullDecode(service, [&] { ++attempts; });
+  service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {1100, 1100});
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  ASSERT_EQ(service.sourcePixelSize(), source);
+  ASSERT_EQ(service.image().size(), source.scaled({1100, 1100}, Qt::KeepAspectRatio));
+  ASSERT_EQ(attempts.load(), 1);
+  const auto retained = service.image().cacheKey();
+  service.clear();
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.image().cacheKey(), retained);
+  EXPECT_EQ(attempts.load(), 1);
+}
+
+INSTANTIATE_TEST_SUITE_P(PngAndExif, PreviewRoundedBounds, testing::Values(0, 2, 6, 7));

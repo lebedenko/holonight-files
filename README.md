@@ -395,3 +395,12 @@ See [migration SDD](docs/sdd/shared-image-architecture/DESIGN.md).
 Image previews and thumbnails apply intrinsic EXIF orientation, including mirrors.
 The pane and Quick Look show oriented full-resolution dimensions. Legacy disk
 thumbnails regenerate lazily; see the [image orientation cycle](docs/sdd/image-orientation/SPEC.md).
+
+### Preview performance measurements
+
+The opt-in [preview performance runner](docs/sdd/preview-performance/README.md) measures
+cache reuse, resizing/Quick Look and selection under memory pressure in five fresh
+Release processes per workload. It generates public synthetic PNG/JPEG fixtures,
+validates oriented pixels, isolates caches and preserves timing, decode-attempt and
+RSS evidence. See [findings and verification](docs/sdd/preview-performance/VERIFICATION.md).
+These offscreen measurements do not close native sharp-preview acceptance.

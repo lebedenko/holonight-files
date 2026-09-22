@@ -834,7 +834,9 @@ int main(int argc, char* argv[]) {
   }
   qunsetenv("QT_QUICK_CONTROLS_FALLBACK_STYLE");
   qunsetenv("QT_QUICK_CONTROLS_CONF");
-  qputenv("XDG_CACHE_HOME", QByteArray(FILES_FIXTURE_DIR) + "/cache");
+  if (!qEnvironmentVariableIsSet("FILES_PREVIEW_PERFORMANCE")) {
+    qputenv("XDG_CACHE_HOME", QByteArray(FILES_FIXTURE_DIR) + "/cache");
+  }
   const QGuiApplication app(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

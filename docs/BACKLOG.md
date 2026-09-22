@@ -170,3 +170,10 @@ The reproduced warning and regression evidence are recorded in
 
 Image orientation correction is implemented with EXIF 1–8 coverage and lazy thumbnail
 migration. Acceptance and manual comparison status: [verification](sdd/image-orientation/VERIFICATION.md).
+
+## Preview performance instrumentation
+
+The [preview performance cycle](sdd/preview-performance/README.md) adds reproducible,
+opt-in offscreen cache/resize/selection measurements. Its
+[verification record](sdd/preview-performance/VERIFICATION.md) tracks acceptance and
+findings. Native sharp-preview acceptance remains open and separate.

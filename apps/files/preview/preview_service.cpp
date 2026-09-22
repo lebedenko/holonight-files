@@ -147,8 +147,10 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
     if (cancel->load()) {
       return result;
     }
+    // The provider fits the source to this bound. Fitting an already rounded
+    // `needed` size again can lose a pixel and cause endless adequacy upgrades.
     result.image = tier ? ThumbnailService::lookupOrDecode(file, path, identity, *tier, needed, &error)
-                        : ThumbnailService::decodeScaled(file, needed, &error);
+                        : ThumbnailService::decodeScaled(file, requestedSize, &error);
   }
   if (cancel->load()) {
     return result;

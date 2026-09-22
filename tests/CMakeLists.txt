@@ -1,7 +1,7 @@
 add_files_application(files-smoke smoke.cpp separator_window_test.cpp size_format_test.cpp inspection_helpers_test.cpp directory_model_test.cpp directory_proxy_model_test.cpp
   directory_controller_test.cpp directory_performance_test.cpp initial_directory_test.cpp
   thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp text_lines_test.cpp text_line_model_test.cpp preview_service_test.cpp
-  quick_look_presentation_model_test.cpp preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp
+  quick_look_presentation_model_test.cpp preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp preview_performance_test.cpp
   name_validator_test.cpp fuzzy_matcher_test.cpp vim_mode_controller_test.cpp
   clipboard_register_test.cpp file_operation_service_test.cpp trash_service_test.cpp
   task_manager_test.cpp directory_controller_file_ops_test.cpp icon_name_resolver_test.cpp icon_image_provider_test.cpp
@@ -87,3 +87,9 @@ foreach(ratio IN ITEMS 1.0 1.25 1.5 1.5625 1.75 2.0)
       "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=rhi;QSG_RHI_BACKEND=opengl;QT_SCALE_FACTOR=${ratio};FILES_SEPARATOR_BACKEND=opengl;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
   endif()
 endforeach()
+
+# Runner correctness is deterministic; the performance matrix remains opt-in.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME files-preview-runner COMMAND ${Python3_EXECUTABLE}
+  "${CMAKE_SOURCE_DIR}/scripts/check-measure-preview.py")
+set_tests_properties(files-preview-runner PROPERTIES TIMEOUT 30)
