@@ -1,12 +1,12 @@
 #include "preview_service.h"
 
 #include "exif_reader.h"
+#include "image_policy.h"
 #include "text_preview_service.h"
 #include "thumbnail_service.h"
 
 #include <QFile>
 #include <QFileInfo>
-#include <QImageReader>
 #include <QMimeDatabase>
 
 #include <cstring>
@@ -127,8 +127,9 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
                           const std::function<void()>& beforeFullDecode) {
   file.seek(0);
   {
-    const QImageReader sizer(&file);
-    result.source_pixel_size = sizer.size();
+    result.source_pixel_size =
+        HolonightImages::inspect(file, kPreviewImageLimits, *cancel, HolonightImages::OrientationPolicy::Ignore, false)
+            .sourceSize;
   }
   const auto needed = ThumbnailService::requiredSize(result.source_pixel_size, requestedSize);
   const auto tier = result.source_pixel_size.isValid() && !result.source_pixel_size.isEmpty()
@@ -235,9 +236,6 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
 
 PreviewService::PreviewService(QObject* parent)
     : QObject(parent), worker_(new QObject), cache_(std::make_shared<PreviewWorkerCache>()) {
-  // Process-wide: bounds how much memory any single QImageReader::read() call may allocate,
-  // regardless of which thread calls it (see thumbnail_service.cpp's matching header-size guard).
-  QImageReader::setAllocationLimit(256);
   worker_->moveToThread(&thread_);
   connect(&thread_, &QThread::finished, worker_, &QObject::deleteLater);
   connect(&thread_, &QThread::finished, this, &PreviewService::shutdownFinished);

@@ -1,11 +1,12 @@
 #include "thumbnail_service.h"
 
+#include "image_policy.h"
+
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QImageReader>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
@@ -16,12 +17,6 @@ namespace ThumbnailService {
 namespace {
 
 constexpr std::array kTiers = {Tier::Normal, Tier::Large, Tier::XLarge, Tier::XXLarge};
-// QImageReader::read() is one blocking, non-interruptible call — a decompression-bomb PNG or a
-// huge TIFF can occupy the worker thread for a long time regardless of cancellation checks. A
-// cheap header-only size() read lets pathological inputs fail fast instead of attempting the
-// decode at all (SPEC.md REQ-NF-001, REQ-NF-003).
-constexpr qint64 kMaxDecodedBytes = 256LL * 1024 * 1024;
-
 QString cacheKeyFor(const QString& uri) {
   return QString::fromLatin1(QCryptographicHash::hash(uri.toUtf8(), QCryptographicHash::Md5).toHex());
 }
@@ -80,33 +75,16 @@ bool cacheEntryValid(const QImage& cached, const QString& uri, const QFileInfo& 
 // format plugins with scaled-decode support (JPEG, PNG) avoid allocating a full-resolution bitmap
 // just to downscale it (REQ-NF-003).
 QImage decodeBounded(QFile& file, QSize bound, QString* errorOut) {
-  if (!file.seek(0)) {
-    if (errorOut != nullptr) {
-      *errorOut = file.errorString();
-    }
-    return {};
+  const std::atomic_bool cancelled{false};
+  auto result = HolonightImages::decode(
+      file, {.limits = kPreviewImageLimits, .bound = bound, .orientation = HolonightImages::OrientationPolicy::Ignore},
+      cancelled);
+  if (result.outcome != HolonightImages::Outcome::Success && errorOut != nullptr) {
+    *errorOut = result.outcome == HolonightImages::Outcome::ResourceLimit
+                    ? QObject::tr("Image exceeds the decode memory limit.")
+                    : QObject::tr("The image is damaged or could not be decoded.");
   }
-  QImageReader reader(&file);
-  if (!reader.canRead()) {
-    if (errorOut != nullptr) {
-      *errorOut = reader.errorString();
-    }
-    return {};
-  }
-  const auto sourceSize = reader.size();
-  if (sourceSize.isValid() && qint64{sourceSize.width()} * qint64{sourceSize.height()} * 4 > kMaxDecodedBytes) {
-    if (errorOut != nullptr) {
-      *errorOut = QObject::tr("Image exceeds the decode memory limit.");
-    }
-    return {};
-  }
-  const auto target = requiredSize(sourceSize, bound);
-  reader.setScaledSize(target);
-  QImage image = reader.read();
-  if (image.isNull() && errorOut != nullptr) {
-    *errorOut = reader.errorString();
-  }
-  return image;
+  return result.image;
 }
 
 void writeCacheEntry(const QString& cachePath, const QImage& image, const QString& uri, const QFileInfo& sourceInfo,
@@ -172,14 +150,23 @@ QImage lookup(QFile& file, const QString& path, const QString& revision, Tier se
     if (static_cast<int>(tier) < static_cast<int>(selected)) {
       continue;
     }
-    QImageReader reader(cacheDir(tier) + QLatin1Char('/') + cacheKeyFor(uri) + QStringLiteral(".png"));
-    const auto size = reader.size();
+    QFile cachedFile(cacheDir(tier) + QLatin1Char('/') + cacheKeyFor(uri) + QStringLiteral(".png"));
+    if (!cachedFile.open(QIODevice::ReadOnly)) {
+      continue;
+    }
+    const std::atomic_bool cancelled{false};
+    const auto inspection = HolonightImages::inspect(cachedFile, kPreviewImageLimits, cancelled,
+                                                     HolonightImages::OrientationPolicy::Ignore, false);
+    if (inspection.outcome != HolonightImages::Outcome::Success) {
+      continue;
+    }
+    const auto size = inspection.sourceSize;
     const auto limit = static_cast<int>(tier);
     if (size.width() < required.width() || size.height() < required.height() || size.width() > limit ||
         size.height() > limit) {
       continue;
     }
-    auto cached = reader.read();
+    auto cached = decodeBounded(cachedFile, {limit, limit}, nullptr);
     if (cacheEntryValid(cached, uri, sourceInfo) && cached.width() >= required.width() &&
         cached.height() >= required.height() &&
         (revision.isEmpty() || cached.text(QStringLiteral("Files::Revision")) == revision)) {
@@ -212,8 +199,10 @@ QImage lookupOrDecode(QFile& file, const QString& path, const QString& revision,
   file.seek(0);
   QSize source;
   {
-    const QImageReader reader(&file);
-    source = reader.size();
+    const std::atomic_bool cancelled{false};
+    source = HolonightImages::inspect(file, kPreviewImageLimits, cancelled, HolonightImages::OrientationPolicy::Ignore,
+                                      false)
+                 .sourceSize;
   }
   if (!source.isValid() || source.isEmpty()) {
     return decodeScaled(file, {128, 128}, errorOut);

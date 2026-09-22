@@ -2,6 +2,7 @@
 #include "directory_fixtures.h"
 #include "engine_setup.h"
 #include "icon_fallbacks.h"
+#include "image_policy.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
 #include "quick_look_presentation_model_test_access.h"
@@ -824,6 +825,7 @@ TEST(Files, EmbeddedStyleSelection) {
 }
 
 int main(int argc, char* argv[]) {
+  configurePreviewImageLimits();
   const auto testStyle = qgetenv("FILES_TEST_STYLE");
   if (testStyle.isEmpty()) {
     qunsetenv("QT_QUICK_CONTROLS_STYLE");

@@ -10,6 +10,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
+#include <QtEndian>
 
 #include <gtest/gtest.h>
 
@@ -211,4 +212,22 @@ TEST(ThumbnailService, CacheWriteFailureDoesNotPreventDecode) {
   EXPECT_EQ(ThumbnailService::lookupOrDecode(file, path, "revision", ThumbnailService::Tier::Large, {200, 100}, nullptr)
                 .size(),
             QSize(256, 128));
+}
+
+TEST(ThumbnailService, MigrationPreservesStoredPixelOrientation) {
+  QTemporaryDir dir(fixturePattern("thumbnail-orientation"));
+  auto jpeg = renderJpegBytes({120, 60});
+  // EXIF orientation 6, a little-endian TIFF with a single SHORT in IFD0.
+  const auto exif = QByteArray::fromHex("45786966000049492a0008000000010012010300010000000600000000000000");
+  QByteArray length(2, '\0');
+  qToBigEndian(static_cast<quint16>(exif.size() + 2), length.data());
+  jpeg.insert(2, QByteArray("\xff\xe1", 2) + length + exif);
+  const auto path = files_test::writeFile(dir, "oriented.jpg", jpeg);
+  QImageReader control(path);
+  control.setAutoTransform(true);
+  ASSERT_EQ(control.read().size(), QSize(60, 120));
+  QFile source(path);
+  ASSERT_TRUE(source.open(QIODevice::ReadOnly));
+  EXPECT_EQ(ThumbnailService::decodeScaled(source, {40, 40}, nullptr).size(), QSize(40, 20));
+  EXPECT_TRUE(source.isOpen());
 }

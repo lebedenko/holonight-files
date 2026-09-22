@@ -1,3 +1,4 @@
+#include "image_policy.h"
 // SPDX-FileCopyrightText: 2026 Andrii L <lebeden@gmail.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -118,6 +119,7 @@ void validateRssMeasurement() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  configurePreviewImageLimits();
   const QCoreApplication app(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   if (QCoreApplication::arguments().contains("--validate-rss-measurement")) {

@@ -383,3 +383,11 @@ Each UI executable owns a HolonightFiles QML module and calls `initializeFilesEn
 For isolated runtime checks with verified existing provider artifacts, `scripts/prepare-runtime-check.sh`
 accepts `HOLONIGHT_CONFIG_BUILD` and `HOLONIGHT_QT_BUILD`; defaults remain `build/deps/<provider>`.
 Verify provider revisions, build options and the exact Qt package versions against the runtime image first.
+
+## Shared raster processing
+
+Build and install `holonight-images` before configuring, or use `task deps` with a sibling checkout
+(`HOLONIGHT_IMAGES_SOURCE` overrides its location). `find_package(HolonightImages CONFIG REQUIRED)`
+provides `HolonightImages::Images`; custom builds pass its prefix through `CMAKE_PREFIX_PATH`.
+The provider owns raster decoding and structured EXIF extraction; presentation and scheduling remain here.
+See [migration SDD](docs/sdd/shared-image-architecture/DESIGN.md).

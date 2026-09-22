@@ -7,10 +7,7 @@
 #include <atomic>
 #include <memory>
 
-// Wraps libexif's C API behind one entry point. No exceptions anywhere in this file, matching
-// libexif's own C error-signalling convention (NULL returns, not longjmp/exceptions) and
-// SPEC.md REQ-C-001. A missing or corrupted individual tag leaves that one field empty; it never
-// aborts the whole read (REQ-F-023).
+// Formats shared structured EXIF facts for Files presentation.
 namespace ExifReader {
 
 struct ExifSummary {

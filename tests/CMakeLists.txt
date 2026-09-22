@@ -10,7 +10,8 @@ add_files_application(files-smoke smoke.cpp separator_window_test.cpp size_forma
   location_classifier_test.cpp state_store_test.cpp last_location_tracker_test.cpp user_dirs_parser_test.cpp
   bookmark_store_test.cpp place_availability_checker_test.cpp)
 find_package(Qt6 REQUIRED COMPONENTS OpenGL)
-target_link_libraries(files-smoke PRIVATE Qt6::Test Qt6::OpenGL GTest::gtest)
+pkg_check_modules(EXIF REQUIRED IMPORTED_TARGET libexif)
+target_link_libraries(files-smoke PRIVATE Qt6::Test Qt6::OpenGL GTest::gtest PkgConfig::EXIF)
 target_compile_definitions(files-smoke PRIVATE FILES_FIXTURE_DIR="${CMAKE_CURRENT_BINARY_DIR}/fixtures/files"
   FILES_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME files-smoke COMMAND files-smoke)
@@ -53,7 +54,7 @@ set_tests_properties(files-reject-argument PROPERTIES WILL_FAIL TRUE)
 
 find_program(FILES_BASH_EXECUTABLE bash REQUIRED)
 add_test(NAME files-provider-revisions COMMAND ${FILES_BASH_EXECUTABLE}
-  "${CMAKE_CURRENT_SOURCE_DIR}/provider_revisions_test.sh" "${CMAKE_SOURCE_DIR}")
+  "${CMAKE_CURRENT_SOURCE_DIR}/shared_provider_revisions_test.sh" "${CMAKE_SOURCE_DIR}")
 set_tests_properties(files-provider-revisions PROPERTIES TIMEOUT 30)
 
 # Shadow the installed module with an invalid provider to exercise startup failure.

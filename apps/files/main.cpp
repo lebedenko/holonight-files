@@ -1,5 +1,6 @@
 #include "directory_controller.h"
 #include "engine_setup.h"
+#include "image_policy.h"
 #include "initial_directory.h"
 #include "settings/app_settings.h"
 #include "settings/xdg_paths.h"
@@ -16,6 +17,7 @@
 #include <cstdlib>
 
 int main(int argc, char* argv[]) {
+  configurePreviewImageLimits();
   QGuiApplication app(argc, argv);
   QGuiApplication::setApplicationName(QStringLiteral("holonight-files"));
   QGuiApplication::setApplicationDisplayName(QStringLiteral("HoloNight Files"));

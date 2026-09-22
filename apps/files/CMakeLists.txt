@@ -84,7 +84,7 @@ target_include_directories(files-private PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/state"
   "${CMAKE_CURRENT_SOURCE_DIR}/places"
 )
-target_link_libraries(files-private PUBLIC Qt6::Quick Qt6::Svg PRIVATE tomlplusplus::tomlplusplus PkgConfig::EXIF)
+target_link_libraries(files-private PUBLIC Qt6::Quick Qt6::Svg HolonightImages::Images PRIVATE tomlplusplus::tomlplusplus)
 
 qt_extract_metatypes(files-private)
 
