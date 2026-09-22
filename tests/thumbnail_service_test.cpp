@@ -10,8 +10,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
-#include <QtEndian>
 
+#include <array>
 #include <gtest/gtest.h>
 
 using files_test::fixturePattern;
@@ -214,20 +214,99 @@ TEST(ThumbnailService, CacheWriteFailureDoesNotPreventDecode) {
             QSize(256, 128));
 }
 
-TEST(ThumbnailService, MigrationPreservesStoredPixelOrientation) {
-  QTemporaryDir dir(fixturePattern("thumbnail-orientation"));
-  auto jpeg = renderJpegBytes({120, 60});
-  // EXIF orientation 6, a little-endian TIFF with a single SHORT in IFD0.
-  const auto exif = QByteArray::fromHex("45786966000049492a0008000000010012010300010000000600000000000000");
-  QByteArray length(2, '\0');
-  qToBigEndian(static_cast<quint16>(exif.size() + 2), length.data());
-  jpeg.insert(2, QByteArray("\xff\xe1", 2) + length + exif);
-  const auto path = files_test::writeFile(dir, "oriented.jpg", jpeg);
-  QImageReader control(path);
-  control.setAutoTransform(true);
-  ASSERT_EQ(control.read().size(), QSize(60, 120));
+namespace {
+class ThumbnailOrientation : public testing::TestWithParam<int> {};
+
+void expectCorners(const QImage& image, int orientation) {
+  ASSERT_FALSE(image.isNull());
+  // Stored quadrant indices at displayed TL, TR, BL, BR, from EXIF semantics.
+  constexpr std::array<std::array<int, 4>, 8> corners = {
+      {{0, 1, 2, 3}, {1, 0, 3, 2}, {3, 2, 1, 0}, {2, 3, 0, 1}, {0, 2, 1, 3}, {2, 0, 3, 1}, {3, 1, 2, 0}, {1, 3, 0, 2}}};
+  const std::array<QColor, 4> colors = {Qt::red, Qt::green, Qt::blue, Qt::yellow};
+  for (int i = 0; i < 4; ++i) {
+    const auto actual =
+        image.pixelColor(image.width() * (i % 2 == 0 ? 1 : 3) / 4, image.height() * (i < 2 ? 1 : 3) / 4);
+    const auto expected = colors.at(corners.at(orientation - 1).at(i));
+    EXPECT_NEAR(actual.red(), expected.red(), 20);
+    EXPECT_NEAR(actual.green(), expected.green(), 20);
+    EXPECT_NEAR(actual.blue(), expected.blue(), 20);
+  }
+}
+}  // namespace
+
+TEST_P(ThumbnailOrientation, AppliesCornersRectangularBoundsAndNoUpscaling) {
+  FakeCacheHome home;
+  QTemporaryDir dir(fixturePattern("orientation"));
+  const auto path = files_test::writeFile(dir, "image.jpg", files_test::orientationJpeg({120, 60}, GetParam()));
   QFile source(path);
   ASSERT_TRUE(source.open(QIODevice::ReadOnly));
-  EXPECT_EQ(ThumbnailService::decodeScaled(source, {40, 40}, nullptr).size(), QSize(40, 20));
+  const auto bounded = ThumbnailService::decodeScaled(source, {40, 60}, nullptr);
+  EXPECT_EQ(bounded.size(), GetParam() >= 5 ? QSize(30, 60) : QSize(40, 20));
+  expectCorners(bounded, GetParam());
+  const auto small = ThumbnailService::decodeScaled(source, {500, 500}, nullptr);
+  EXPECT_EQ(small.size(), GetParam() >= 5 ? QSize(60, 120) : QSize(120, 60));
+  expectCorners(small, GetParam());
   EXPECT_TRUE(source.isOpen());
+}
+
+TEST_P(ThumbnailOrientation, MigratesLegacyCacheAndReusesOrientedPixelsAcrossTiers) {
+  FakeCacheHome home;
+  QTemporaryDir dir(fixturePattern("orientation-cache"));
+  const auto path = files_test::writeFile(dir, "image.jpg", files_test::orientationJpeg({2400, 1200}, GetParam()));
+  QFile source(path);
+  ASSERT_TRUE(source.open(QIODevice::ReadOnly));
+  using namespace ThumbnailService;
+  const std::array names = {"normal", "large", "x-large", "xx-large"};
+  int index = 0;
+  for (const auto tier : {Tier::Normal, Tier::Large, Tier::XLarge, Tier::XXLarge}) {
+    const int extent = static_cast<int>(tier);
+    const QSize required = GetParam() >= 5 ? QSize(extent / 2, extent) : QSize(extent, extent / 2);
+    const auto cachePath =
+        cachePathFor(home.dir.path(), path).replace("/normal/", "/" + QString::fromLatin1(names.at(index++)) + "/");
+    const auto cold = lookupOrDecode(source, path, "revision", tier, required, nullptr);
+    EXPECT_EQ(cold.size(), required);
+    expectCorners(cold, GetParam());
+    const QImage marked(cachePath);
+    ASSERT_EQ(marked.text("Files::OrientationPolicy"), "applied-v1");
+    // Valid legacy identity/resolution cannot establish orientation, especially for mirrors.
+    for (const auto& marker : {QString(), QString("different-v1")}) {
+      QImageReader storedReader(path);
+      storedReader.setAutoTransform(false);
+      QImage legacy = storedReader.read().scaled(required);
+      for (const auto& key : marked.textKeys()) {
+        if (key != "Files::OrientationPolicy") {
+          legacy.setText(key, marked.text(key));
+        }
+      }
+      if (!marker.isEmpty()) {
+        legacy.setText("Files::OrientationPolicy", marker);
+      }
+      ASSERT_TRUE(legacy.save(cachePath));
+      EXPECT_TRUE(lookup(source, path, "revision", tier, required).isNull());
+      EXPECT_TRUE(lookup(source, path, {}, tier, required).isNull());
+      const auto regenerated = lookupOrDecode(source, path, "revision", tier, required, nullptr);
+      expectCorners(regenerated, GetParam());
+      const QImage persisted(cachePath);
+      EXPECT_EQ(persisted.text("Files::OrientationPolicy"), "applied-v1");
+      source.close();  // Reuse without source decode, with no second transform.
+      const auto warm = lookup(source, path, "revision", tier, required);
+      EXPECT_EQ(warm, persisted);
+      expectCorners(warm, GetParam());
+      ASSERT_TRUE(source.open(QIODevice::ReadOnly));
+    }
+    EXPECT_EQ(QDir(home.dir.path() + "/thumbnails").entryList(QDir::Dirs | QDir::NoDotAndDotDot).size(), index);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(ExifValues, ThumbnailOrientation, testing::Range(1, 9));
+
+TEST(ThumbnailService, MissingAndInvalidOrientationUseStoredDimensionsAndCorners) {
+  FakeCacheHome home;
+  QTemporaryDir dir(fixturePattern("orientation-invalid"));
+  for (const auto orientation : {std::optional<int>{}, std::optional<int>{0}, std::optional<int>{9}}) {
+    const auto path = files_test::writeFile(dir, "image.jpg", files_test::orientationJpeg({120, 60}, orientation));
+    const auto image = ThumbnailService::decodeScaled(path, {500, 500}, nullptr);
+    EXPECT_EQ(image.size(), QSize(120, 60));
+    expectCorners(image, 1);
+  }
 }

@@ -167,3 +167,6 @@ Native visual and accessibility acceptance remain pending in the
 Inline editing now avoids echoing controller text updates back into its binding.
 The reproduced warning and regression evidence are recorded in
 [modal editing verification](sdd/vim-modal-editing/VERIFICATION.md).
+
+Image orientation correction is implemented with EXIF 1–8 coverage and lazy thumbnail
+migration. Acceptance and manual comparison status: [verification](sdd/image-orientation/VERIFICATION.md).

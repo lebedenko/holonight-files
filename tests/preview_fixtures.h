@@ -170,6 +170,26 @@ inline QByteArray spliceJpegExif(const QByteArray& jpeg, const QByteArray& exifB
   return jpeg.left(2) + segment + jpeg.mid(2);
 }
 
+// Stored quadrants: red, green, blue, yellow. Minimal TIFF for controllable EXIF.
+inline QByteArray orientationJpeg(QSize size, std::optional<int> orientation) {
+  QImage image(size, QImage::Format_RGB32);
+  const QColor colors[] = {Qt::red, Qt::green, Qt::blue, Qt::yellow};
+  for (int y = 0; y < size.height(); ++y) {
+    for (int x = 0; x < size.width(); ++x) {
+      image.setPixelColor(x, y, colors[(y >= size.height() / 2 ? 2 : 0) + (x >= size.width() / 2 ? 1 : 0)]);
+    }
+  }
+  QBuffer buffer;
+  buffer.open(QIODevice::WriteOnly);
+  image.save(&buffer, "JPEG", 95);
+  if (!orientation) {
+    return buffer.data();
+  }
+  auto exif = QByteArray::fromHex("45786966000049492a0008000000010012010300010000000100000000000000");
+  exif[24] = static_cast<char>(*orientation);
+  return spliceJpegExif(buffer.data(), exif);
+}
+
 // Inserts a PNG eXIf chunk (raw EXIF/TIFF blob, no "Exif\0\0" prefix — that's JPEG-only) right
 // after IHDR, the position ExifReader::read()'s PNG chunk scanner expects to find it in.
 inline QByteArray splicePngExifChunk(const QByteArray& png, const QByteArray& exifBlobWithJpegPrefix) {

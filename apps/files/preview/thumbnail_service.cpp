@@ -55,7 +55,7 @@ void ensureCacheDir(const QString& dir) {
 // sees the chunks correctly; validation therefore loads the candidate image fully rather than
 // peeking its header, at the cost of one bounded cache-image decode per candidate.
 bool cacheEntryValid(const QImage& cached, const QString& uri, const QFileInfo& sourceInfo) {
-  if (cached.isNull()) {
+  if (cached.isNull() || cached.text(QStringLiteral("Files::OrientationPolicy")) != QStringLiteral("applied-v1")) {
     return false;
   }
   if (cached.text(QStringLiteral("Thumb::URI")) != uri) {
@@ -74,11 +74,10 @@ bool cacheEntryValid(const QImage& cached, const QString& uri, const QFileInfo& 
 // Shared by both the cache tier and the full-resolution tier: setScaledSize() before read() lets
 // format plugins with scaled-decode support (JPEG, PNG) avoid allocating a full-resolution bitmap
 // just to downscale it (REQ-NF-003).
-QImage decodeBounded(QFile& file, QSize bound, QString* errorOut) {
+QImage decodeBounded(QFile& file, QSize bound, HolonightImages::OrientationPolicy orientation, QString* errorOut) {
   const std::atomic_bool cancelled{false};
   auto result = HolonightImages::decode(
-      file, {.limits = kPreviewImageLimits, .bound = bound, .orientation = HolonightImages::OrientationPolicy::Ignore},
-      cancelled);
+      file, {.limits = kPreviewImageLimits, .bound = bound, .orientation = orientation}, cancelled);
   if (result.outcome != HolonightImages::Outcome::Success && errorOut != nullptr) {
     *errorOut = result.outcome == HolonightImages::Outcome::ResourceLimit
                     ? QObject::tr("Image exceeds the decode memory limit.")
@@ -91,6 +90,7 @@ void writeCacheEntry(const QString& cachePath, const QImage& image, const QStrin
                      const QString& revision) {
   QImage tagged = image;
   tagged.setText(QStringLiteral("Files::Revision"), revision);
+  tagged.setText(QStringLiteral("Files::OrientationPolicy"), QStringLiteral("applied-v1"));
   tagged.setText(QStringLiteral("Thumb::URI"), uri);
   tagged.setText(QStringLiteral("Thumb::MTime"), QString::number(sourceInfo.lastModified().toSecsSinceEpoch()));
   tagged.setText(QStringLiteral("Thumb::Size"), QString::number(sourceInfo.size()));
@@ -166,7 +166,7 @@ QImage lookup(QFile& file, const QString& path, const QString& revision, Tier se
         size.height() > limit) {
       continue;
     }
-    auto cached = decodeBounded(cachedFile, {limit, limit}, nullptr);
+    auto cached = decodeBounded(cachedFile, {limit, limit}, HolonightImages::OrientationPolicy::Ignore, nullptr);
     if (cacheEntryValid(cached, uri, sourceInfo) && cached.width() >= required.width() &&
         cached.height() >= required.height() &&
         (revision.isEmpty() || cached.text(QStringLiteral("Files::Revision")) == revision)) {
@@ -183,7 +183,7 @@ QImage lookupOrDecode(QFile& file, const QString& path, const QString& revision,
     return cached;
   }
   const auto extent = static_cast<int>(tier);
-  auto decoded = decodeBounded(file, {extent, extent}, errorOut);
+  auto decoded = decodeBounded(file, {extent, extent}, HolonightImages::OrientationPolicy::Apply, errorOut);
   if (decoded.isNull()) {
     return {};
   }
@@ -200,9 +200,9 @@ QImage lookupOrDecode(QFile& file, const QString& path, const QString& revision,
   QSize source;
   {
     const std::atomic_bool cancelled{false};
-    source = HolonightImages::inspect(file, kPreviewImageLimits, cancelled, HolonightImages::OrientationPolicy::Ignore,
-                                      false)
-                 .sourceSize;
+    source =
+        HolonightImages::inspect(file, kPreviewImageLimits, cancelled, HolonightImages::OrientationPolicy::Apply, false)
+            .orientedSize;
   }
   if (!source.isValid() || source.isEmpty()) {
     return decodeScaled(file, {128, 128}, errorOut);
@@ -223,7 +223,7 @@ QImage decodeScaled(const QString& path, QSize targetSize, QString* errorOut) {
 
 QImage decodeScaled(QFile& file, QSize targetSize, QString* errorOut) {
   const auto bound = (targetSize.isValid() && !targetSize.isEmpty()) ? targetSize : QSize(1024, 1024);
-  return decodeBounded(file, bound, errorOut);
+  return decodeBounded(file, bound, HolonightImages::OrientationPolicy::Apply, errorOut);
 }
 
 }  // namespace ThumbnailService

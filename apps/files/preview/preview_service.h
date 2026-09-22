@@ -56,6 +56,7 @@ class PreviewService : public QObject {
   Q_PROPERTY(bool busy READ busy NOTIFY changed)
   Q_PROPERTY(bool hasImage READ hasImage NOTIFY changed)
   Q_PROPERTY(QImage image READ image NOTIFY changed)
+  // Full-resolution pixel dimensions after intrinsic image orientation.
   Q_PROPERTY(QSize sourcePixelSize READ sourcePixelSize NOTIFY changed)
   Q_PROPERTY(bool exifPresent READ exifPresent NOTIFY changed)
   Q_PROPERTY(QString exifMake READ exifMake NOTIFY changed)

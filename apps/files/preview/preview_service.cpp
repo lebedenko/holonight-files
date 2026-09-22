@@ -128,8 +128,8 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
   file.seek(0);
   {
     result.source_pixel_size =
-        HolonightImages::inspect(file, kPreviewImageLimits, *cancel, HolonightImages::OrientationPolicy::Ignore, false)
-            .sourceSize;
+        HolonightImages::inspect(file, kPreviewImageLimits, *cancel, HolonightImages::OrientationPolicy::Apply, false)
+            .orientedSize;
   }
   const auto needed = ThumbnailService::requiredSize(result.source_pixel_size, requestedSize);
   const auto tier = result.source_pixel_size.isValid() && !result.source_pixel_size.isEmpty()

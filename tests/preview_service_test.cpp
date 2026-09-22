@@ -508,17 +508,36 @@ TEST(PreviewService, RegularSymlinkAndPermissionDeniedRecovery) {
   EXPECT_TRUE(service.hasText());
 }
 
-TEST(PreviewService, WarmDiskAndMemoryReuseAvoidSourceDecodeAndUpgradeRetainsPixels) {
+class PreviewOrientation : public testing::TestWithParam<int> {};
+
+TEST_P(PreviewOrientation, WarmDiskAndMemoryReuseAvoidSourceDecodeAndUpgradeRetainsPixels) {
+  QTemporaryDir cacheHome(fixturePattern("orientation-preview-cache"));
+  const auto previousCache = qgetenv("XDG_CACHE_HOME");
+  const auto restoreCache = qScopeGuard([&] {
+    if (previousCache.isNull()) {
+      qunsetenv("XDG_CACHE_HOME");
+    } else {
+      qputenv("XDG_CACHE_HOME", previousCache);
+    }
+  });
+  qputenv("XDG_CACHE_HOME", cacheHome.path().toLocal8Bit());
   QTemporaryDir dir(fixturePattern("warm-tier"));
-  const auto path = writeFile(dir, "image.jpg", files_test::renderJpegBytes({2400, 1600}));
+  const auto path = writeFile(dir, "image.jpg", files_test::orientationJpeg({2400, 1600}, GetParam()));
+  const QSize oriented = GetParam() >= 5 ? QSize(1600, 2400) : QSize(2400, 1600);
   std::atomic_int decodes = 0;
   const auto start = [&](PreviewService& service) {
     PreviewServiceTestAccess::beforeFullDecode(service, [&] { ++decodes; });
     service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {300, 200});
     QElapsedTimer timer;
     timer.start();
+    QObject::connect(&service, &PreviewService::changed, &service, [&service, oriented] {
+      if (service.hasImage()) {
+        EXPECT_EQ(service.sourcePixelSize(), oriented);
+      }
+    });
     setTargetFromFile(service, path);
     EXPECT_TRUE(settled(service));
+    EXPECT_EQ(service.sourcePixelSize(), oriented);
     std::cout << "Preview latency ms: " << timer.elapsed() << "; source decodes: " << decodes.load() << '\n';
   };
   {
@@ -539,16 +558,18 @@ TEST(PreviewService, WarmDiskAndMemoryReuseAvoidSourceDecodeAndUpgradeRetainsPix
     ++decodes;
     QThread::msleep(300);
   });
-  service.setRequestedSize(PreviewService::PreviewConsumer::QuickLook, {1500, 1000});
+  service.setRequestedSize(PreviewService::PreviewConsumer::QuickLook, {1500, 1800});
   service.setQuickLookActive(true);
   ASSERT_TRUE(QTest::qWaitFor([&] { return decodes.load() == 2; }));
   EXPECT_EQ(service.image().cacheKey(), retained);
   ASSERT_TRUE(settled(service));
-  EXPECT_EQ(service.image().size(), QSize(1500, 1000));
+  EXPECT_EQ(service.image().size(), (GetParam() >= 5 ? QSize(1200, 1800) : QSize(1500, 1000)));
   service.setQuickLookActive(false);
   QTest::qWait(200);
-  EXPECT_EQ(service.image().size(), QSize(1500, 1000));
+  EXPECT_EQ(service.image().size(), (GetParam() >= 5 ? QSize(1200, 1800) : QSize(1500, 1000)));
 }
+
+INSTANTIATE_TEST_SUITE_P(ExifValues, PreviewOrientation, testing::Values(2, 6, 7));
 
 namespace {
 bool canReadDespiteNoPermissions(const QString& path) {
