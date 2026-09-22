@@ -37,6 +37,9 @@ jobs:
           mkdir -p files/build
           docker run --rm -v "$GITHUB_WORKSPACE:/work" files-ci \
             bash -euc 'trap "chown -R $(stat -c %u:%g /work/files) /work/files/build" EXIT;
+            for source in /work/files /work/holonight-config /work/holonight-qt /work/holonight-images; do
+              git config --system --add safe.directory "$source";
+            done;
             task deps;
             chown -R files-test:files-test /work/files/build;
             runuser -u files-test -- env LC_ALL=C.UTF-8 task check;
