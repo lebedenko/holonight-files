@@ -17,3 +17,8 @@ memory selections. The parser requires this exact sequence and fixed pane bounds
 All raw evidence and failures survive; aggregation requires all five pairs.
 Visual sessions are separate and retain unrestricted navigation/resize evidence.
 Manual annotations remain mandatory for orientation, detail and compositor output.
+
+For the approved monitor constraint, the runner additionally permits actual 1.6×.
+Report `--scales` selects four distinct supported required scales and records them
+in the result; its default preserves the historical 1/1.25/1.5/2 matrix. Evidence
+with 1.6× cannot satisfy a requested 1.5× row. Measurement calculations are unchanged.

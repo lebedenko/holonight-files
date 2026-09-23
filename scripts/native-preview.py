@@ -14,6 +14,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 PHOTOS = ('Colosseum.jpg', 'Fronalpstock.jpg')
 SCALES = (1.0, 1.25, 1.5, 2.0)
+SUPPORTED_SCALES = (1.0, 1.25, 1.5, 1.6, 2.0)
 
 
 def require(condition, message):
@@ -374,6 +375,9 @@ def resume_disk(args):
 
 
 def report(args):
+    scales = tuple(args.scales)
+    require(len(scales) == 4 and len(set(scales)) == 4 and
+            all(scale in SUPPORTED_SCALES for scale in scales), 'Require four distinct supported scales')
     manifests = sorted(args.output.rglob('manifest.json'))
     groups, failures, seen, startup_seen = {}, [], set(), set()
     signatures = set()
@@ -385,7 +389,7 @@ def report(args):
             require(entry['status'] == 'validated', 'Failed or incomplete trial')
             samples = json.loads((path.parent / 'samples.json').read_text())
             key = (entry['scale'], entry['trial'])
-            require(entry['scale'] in SCALES and entry['trial'] in range(1, 6), 'Invalid scale/trial')
+            require(entry['scale'] in scales and entry['trial'] in range(1, 6), 'Invalid scale/trial')
             if entry['mode'] == 'pair':
                 require(key not in seen, 'Duplicate timing pair')
                 validate_pair(samples)
@@ -416,9 +420,9 @@ def report(args):
                 groups.setdefault(group, []).append(dict(sample, trial=entry['trial'], evidence=str(path.parent)))
         except (ValueError, KeyError, OSError, TypeError) as error:
             failures.append({'path': str(path), 'error': str(error)})
-    expected = {(s, t) for s in SCALES for t in range(1, 6)}
+    expected = {(s, t) for s in scales for t in range(1, 6)}
     expected_startup = {(s, t, photo) for s, t in expected for photo in PHOTOS}
-    result = {'failures': failures, 'missing_trials': sorted(expected - seen),
+    result = {'required_scales': scales, 'failures': failures, 'missing_trials': sorted(expected - seen),
               'missing_startup_trials': sorted(expected_startup - startup_seen), 'groups': {},
               'binary_provider_combinations': len(signatures), 'manual_acceptance': 'pending'}
     for key, samples in groups.items():
@@ -440,12 +444,14 @@ def main():
     run = sub.add_parser('run')
     for name in ('binary', 'provider-prefix', 'output', 'fixtures'):
         run.add_argument('--' + name, type=lambda s: Path(s).resolve(), required=True)
-    run.add_argument('--expected-scale', type=float, choices=SCALES, required=True)
+    run.add_argument('--expected-scale', type=float, choices=SUPPORTED_SCALES, required=True)
     run.add_argument('--trial', type=int, required=True)
     run.add_argument('--resume-disk', action='store_true', help='Revalidate complete cold evidence after a parser correction; preserve failure history')
     run.add_argument('--mode', choices=('pair', 'visual', 'startup'), default='pair')
     aggregate = sub.add_parser('report')
     aggregate.add_argument('--output', type=Path, required=True)
+    aggregate.add_argument('--scales', type=float, nargs=4, choices=SUPPORTED_SCALES, default=SCALES,
+                           help='Four required actual compositor scales; defaults preserve the original matrix')
     args = parser.parse_args()
     try:
         if args.action == 'run':

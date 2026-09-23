@@ -64,3 +64,8 @@ passive evidence, the demonstrated fractional screen/window DPR mismatch and its
 Files-local correction. The new matrix includes the original 1.25× scale as well
 as 1×/1.5×/2×. T5 remains open; this continuation does not replace historical
 records or close the unknown-dimension runtime fixture.
+
+Current closure — 2026-09-23: [single-monitor acceptance](../native-preview-acceptance/SINGLE-MONITOR.md)
+passes the approved 1/1.25/1.6/2 matrix and closes T5 locally. Historical evidence
+above is unchanged. Unknown-dimension runtime and second-monitor hardware work
+remain deferred, not passed.

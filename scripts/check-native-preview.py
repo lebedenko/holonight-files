@@ -194,9 +194,15 @@ class EvidenceTests(unittest.TestCase):
         self.assertFalse(result['usable_threshold_miss'])
 
     def test_complete_matrix_and_corrupted_raw_evidence(self):
+        self.check_complete_matrix(native.SCALES)
+
+    def test_explicit_supported_matrix_does_not_count_as_default_matrix(self):
+        self.check_complete_matrix((1.0, 1.25, 1.6, 2.0))
+
+    def check_complete_matrix(self, scales):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for scale in native.SCALES:
+            for scale in scales:
                 monitors = [{'name': 'eDP-1', 'scale': scale}]
                 for trial in range(1, 6):
                     for mode, fixture in [('pair', '')] + [('startup', photo) for photo in native.PHOTOS]:
@@ -229,11 +235,21 @@ class EvidenceTests(unittest.TestCase):
                             'mode': mode, 'scale': scale, 'trial': trial, 'status': 'validated',
                             'fixture_directory': str(DIRECTORY), 'binary_sha256': 'same-binary',
                             'providers': 'same-providers', 'provider_artifacts': {}})
-            args = type('Args', (), {'output': root})()
+            args = type('Args', (), {'output': root, 'scales': scales})()
             native.report(args)
             result = json.loads((root / 'report.json').read_text())
             self.assertEqual(len(result['groups']), 32)
             self.assertFalse(result['failures'])
+            self.assertEqual(result['required_scales'], list(scales))
+            if scales != native.SCALES:
+                args.scales = native.SCALES
+                with self.assertRaises(ValueError):
+                    native.report(args)
+                mismatch = json.loads((root / 'report.json').read_text())
+                self.assertEqual(len(mismatch['missing_trials']), 5)
+                self.assertEqual(len(mismatch['missing_startup_trials']), 10)
+                self.assertTrue(mismatch['failures'])
+                args.scales = scales
             path = root / '1.0-1-pair-' / 'cold' / 'events.jsonl'
             path.write_text(path.read_text().rsplit('\n', 2)[0] + '\n')
             with self.assertRaises(ValueError):
@@ -245,7 +261,7 @@ class EvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             native.save(path / 'manifest.json', {'mode': 'pair', 'scale': 1, 'trial': 1, 'status': 'failed'})
-            args = type('Args', (), {'output': path})()
+            args = type('Args', (), {'output': path, 'scales': native.SCALES})()
             with self.assertRaises(ValueError):
                 native.report(args)
             result = json.loads((path / 'report.json').read_text())

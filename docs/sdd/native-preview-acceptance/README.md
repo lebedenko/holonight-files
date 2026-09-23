@@ -1,9 +1,12 @@
 # Native preview acceptance lab
 
-Status: tooling verified; 1.25× timing/startup measurements passed. Remaining
-native checks are pending at the user’s request; **sharp-previews T5 remains open**.
-See [requirements](SPEC.md), [design](DESIGN.md), [tasks](TASKS.md) and
-[verification](VERIFICATION.md). Baseline Files `06c42f03534cdf57b2fb09f73bbfa69f029d0f9c`.
+Status: **current single-monitor matrix passed locally; sharp-previews T5 is complete.**
+See the [current acceptance report](SINGLE-MONITOR.md) for the user-approved
+1/1.25/1.6/2 matrix and exact candidate. Historical 1.25× measurements remain
+separate in [verification](VERIFICATION.md). The protocol below retains the original
+1/1.25/1.5/2 default; use `--scales 1 1.25 1.6 2` when reporting this candidate.
+See also [requirements](SPEC.md), [design](DESIGN.md), and [tasks](TASKS.md).
+Original tooling baseline: `06c42f03534cdf57b2fb09f73bbfa69f029d0f9c`.
 
 The user performs all scale, activation, navigation, resize, fullscreen and visual
 inspection actions. Do not run historical native tests that drive focus/input.

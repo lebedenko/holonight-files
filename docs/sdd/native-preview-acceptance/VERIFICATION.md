@@ -163,3 +163,16 @@ claiming the aggregate invocation itself succeeded. Installed-runtime acceptance
 passed separately. No application/provider/umbrella publication, CI query,
 submodule pin update or commit was performed. T5 and unrelated pending tasks
 remain open.
+
+## Current-build continuation — 2026-09-23
+
+The new approved single-monitor plan resumes qualification at Files `e8efed1`.
+See [current candidate and protocol](SINGLE-MONITOR.md). All four scales require
+new measurements of one frozen binary; historical 1.25× results above are preserved
+and do not fill the new matrix. Physical second-monitor testing awaits hardware,
+does not block N5/N6 or T5, and is not passed. The subsequent user request
+authorizes publication and pinning; the umbrella ledger owns that checkpoint.
+
+Current closure — 2026-09-23: the [new candidate](SINGLE-MONITOR.md) passes the
+approved 1/1.25/1.6/2 matrix; N5/N6 and sharp-preview T5 are complete locally.
+The historical pending rows above are preserved and do not describe current status.

@@ -411,5 +411,6 @@ The [native preview acceptance lab](docs/sdd/native-preview-acceptance/README.md
 reuses Files with passive, testing-only diagnostics and pinned photographic
 fixtures. The user performs every native interaction; the runner validates
 cold/disk/memory evidence without generating input. Fractional preview requests
-now follow the window DPR on Wayland. [Native acceptance](docs/sdd/native-preview-acceptance/VERIFICATION.md)
-remains open until the four-scale manual matrix passes.
+now follow the window DPR on Wayland. The [current single-monitor candidate](docs/sdd/native-preview-acceptance/SINGLE-MONITOR.md)
+tracks the four-scale manual matrix separately from [historical evidence](docs/sdd/native-preview-acceptance/VERIFICATION.md).
+Physical second-monitor qualification awaits hardware and does not block this iteration.

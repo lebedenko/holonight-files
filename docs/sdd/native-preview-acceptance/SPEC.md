@@ -26,3 +26,17 @@ Approved by the supplied implementation plan, 2026-09-23. Baseline:
 - REQ-N-006: Missing or malformed evidence, failed processes, identity/bounds
   mismatches and incomplete trials shall fail validation. Offscreen observer
   checks shall never count as native acceptance. Unresolved rows keep T5 open.
+
+## Current-build continuation — 2026-09-23
+
+The new approved single-monitor plan resumes qualification at Files `e8efed1`.
+See [current candidate and protocol](SINGLE-MONITOR.md). All four scales require
+new measurements of one frozen binary; historical 1.25× results above are preserved
+and do not fill the new matrix. Physical second-monitor testing awaits hardware,
+does not block N5/N6 or T5, and is not passed. The subsequent user request
+authorizes publication and pinning; the umbrella ledger owns that checkpoint.
+
+REQ-N-003 amendment, approved by the user on 2026-09-23: this current monitor
+requires 1/1.25/1.6/2 at unchanged 2560×1600/240Hz. Hyprland rejects 1.5×; it is
+not passed. The original scale matrix remains the default for historical reports.
+The explicit scale amendment does not change binary/providers, measurement or thresholds.

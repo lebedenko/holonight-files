@@ -2,7 +2,8 @@
 
 The [shared image outcomes cycle](sdd/shared-image-outcomes/SPEC.md) preserves raster categories
 and quiet metadata status. Local automated verification is recorded in its
-[verification report](sdd/shared-image-outcomes/VERIFICATION.md); publication/pinning are tracked by the umbrella ledger; native gates remain open.
+[verification report](sdd/shared-image-outcomes/VERIFICATION.md); local automated/native acceptance passed, including T5. The umbrella ledger
+records the authorized publication and integration checkpoint for the runner extension and records.
 
 Each numbered stage is a separate SDD cycle: approve requirements, approve
 design/tasks, implement, verify, document. Do not mark a stage complete while
@@ -180,13 +181,15 @@ migration. Acceptance and manual comparison status: [verification](sdd/image-ori
 The [preview performance cycle](sdd/preview-performance/README.md) adds reproducible,
 opt-in offscreen cache/resize/selection measurements. Its
 [verification record](sdd/preview-performance/VERIFICATION.md) tracks acceptance and
-findings. Native sharp-preview acceptance remains open and separate.
+findings. Native sharp-preview acceptance is separately recorded in the [completed current matrix](sdd/native-preview-acceptance/SINGLE-MONITOR.md).
 
 Native sharp-preview T5 now has a [passive acceptance lab](sdd/native-preview-acceptance/README.md)
 and [dated results](sdd/native-preview-acceptance/VERIFICATION.md). Native 1.25×
 diagnostics demonstrated screen/window DPR mismatch; Files consumers now use
-window DPR, protected by an offscreen binding regression. The required four-scale
-manual matrix and photographic timing distributions remain open.
+window DPR, protected by an offscreen binding regression. The [current single-monitor candidate](sdd/native-preview-acceptance/SINGLE-MONITOR.md)
+tracks a new coherent four-scale matrix; historical measurements are not mixed
+with current-build results. Physical second-monitor testing awaits hardware and
+does not block this iteration.
 
 ## Preview cancellation
 
@@ -195,5 +198,11 @@ inspection, decoding and cache publication. Deterministic regressions cover cach
 boundaries, request replacement, resize and shutdown; cancelled writes preserve
 existing entries. Automated acceptance and the five-process baseline/candidate
 comparison are recorded in [verification](sdd/preview-cancellation/VERIFICATION.md).
-Cancellation remains cooperative; native sharp-preview T5, mixed-monitor
+Cancellation remains cooperative. Native sharp-preview T5 is complete in the
+[current matrix](sdd/native-preview-acceptance/SINGLE-MONITOR.md); physical second-monitor
 qualification and other deferred gates remain open.
+
+Current single-monitor qualification is complete: T5 passed at actual
+1/1.25/1.6/2 with 20 pairs, 40 startups and 72 accepted reference comparisons.
+1.5× was unavailable at the preserved mode; the user approved actual 1.6×.
+The user authorized publication and pinning; the umbrella ledger records the final checkpoint.

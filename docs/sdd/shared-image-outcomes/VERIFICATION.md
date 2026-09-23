@@ -32,3 +32,26 @@ Complete local logs are retained under `build/verification/shared-image-outcomes
 ## Limitations
 
 Automated checks only. Native sharp-preview T5, mixed-monitor qualification and other previously deferred gates remain open. No performance claims. Commit and pinning are now authorized; umbrella integration remains deferred.
+
+## Current qualification continuation — 2026-09-23
+
+The original implementation evidence above is historical. The approved single-monitor
+plan resumes umbrella integration and Files T5 against current published pins;
+physical second-monitor qualification remains deferred until hardware arrives and
+is not a closure gate for this iteration. Clipboard-service, unrelated release and
+unknown-dimension fixture deferrals remain unchanged. Qualification initially
+left new changes local; the subsequent **“publish and pin”** request authorizes
+publication and the umbrella checkpoint.
+
+Current acceptance complete — 2026-09-23: [umbrella evidence](../../../../docs/initiatives/shared-image-outcomes/SINGLE-MONITOR.md)
+records passing provider/consumer/installer checks and the user report
+**“walkthrough passed”**. Files T5 is complete on the approved actual 1/1.25/1.6/2
+matrix, with original scale restored. The user subsequently authorized publication
+and pinning; the umbrella ledger records exact published revisions, its final
+integration decision and the single CI snapshot. Existing second-monitor,
+clipboard-service, release and unknown-dimension deferrals remain unchanged.
+
+Publication acceptance: the final single-monitor runner extension also passed a
+complete `CMAKE_BUILD_PARALLEL_LEVEL=4 task check` before publication. See
+[the current native report](../native-preview-acceptance/SINGLE-MONITOR.md) for
+that log and unchanged clean-build/isolated-runtime evidence reuse.
