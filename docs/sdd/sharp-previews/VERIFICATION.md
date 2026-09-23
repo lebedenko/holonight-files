@@ -69,3 +69,13 @@ Current closure — 2026-09-23: [single-monitor acceptance](../native-preview-ac
 passes the approved 1/1.25/1.6/2 matrix and closes T5 locally. Historical evidence
 above is unchanged. Unknown-dimension runtime and second-monitor hardware work
 remain deferred, not passed.
+
+### Unknown-dimension follow-up — 2026-09-23
+
+The runtime-fixture deferral is now closed by
+[synthetic runtime acceptance](../unknown-dimension-acceptance/VERIFICATION.md).
+The installed shared provider rejects unavailable dimensions as Damaged before
+codec pixel decoding, with no cache publication; cancellation and valid-selection
+recovery pass. This supersedes earlier unknown-size bounded-decode expectations,
+not historical test results, and adds no format support. Native single-monitor
+acceptance stays complete; physical mixed-monitor qualification stays deferred.

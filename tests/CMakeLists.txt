@@ -106,3 +106,17 @@ add_test(NAME files-native-preview-observer COMMAND ${Python3_EXECUTABLE}
   "${CMAKE_SOURCE_DIR}/scripts/check-native-observer.py" $<TARGET_FILE:files-native-preview-lab>)
 set_tests_properties(files-native-preview-observer PROPERTIES TIMEOUT 15 ENVIRONMENT
   "QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
+
+# Synthetic codec visible only to this isolated process; never installed or put on QT_PLUGIN_PATH.
+add_library(files-unknown-size-handler MODULE unknown_dimensions/handler.cpp)
+target_link_libraries(files-unknown-size-handler PRIVATE Qt6::Gui)
+set_target_properties(files-unknown-size-handler PROPERTIES
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/unknown-size-plugins/imageformats")
+add_files_application(files-unknown-dimensions unknown_dimensions_test.cpp)
+target_link_libraries(files-unknown-dimensions PRIVATE files-private Qt6::Test GTest::gtest)
+target_compile_definitions(files-unknown-dimensions PRIVATE
+  FILES_UNKNOWN_PLUGIN_PATH="${CMAKE_CURRENT_BINARY_DIR}/unknown-size-plugins")
+add_dependencies(files-unknown-dimensions files-unknown-size-handler)
+set_target_properties(files-unknown-dimensions PROPERTIES QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
+add_test(NAME files-unknown-dimensions COMMAND files-unknown-dimensions)
+set_tests_properties(files-unknown-dimensions PROPERTIES TIMEOUT 15)

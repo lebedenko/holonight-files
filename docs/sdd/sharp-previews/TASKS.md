@@ -25,3 +25,13 @@ including all timing/startup thresholds, visual checks and 72 matched-reference
 comparisons. Original 1.25× restored. See the current candidate report above.
 The historical comments describe earlier handoffs; the unknown-dimension runtime
 fixture and physical second-monitor qualification remain deferred.
+
+### Unknown-dimension follow-up — 2026-09-23
+
+The runtime-fixture deferral is now closed by
+[synthetic runtime acceptance](../unknown-dimension-acceptance/VERIFICATION.md).
+The installed shared provider rejects unavailable dimensions as Damaged before
+codec pixel decoding, with no cache publication; cancellation and valid-selection
+recovery pass. This supersedes earlier unknown-size bounded-decode expectations,
+not historical test results, and adds no format support. Native single-monitor
+acceptance stays complete; physical mixed-monitor qualification stays deferred.
