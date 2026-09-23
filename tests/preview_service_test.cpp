@@ -910,3 +910,37 @@ INSTANTIATE_TEST_SUITE_P(ThumbnailBoundaries, PreviewThumbnailCancellation,
                          testing::Combine(testing::Values(ThumbnailService::Stage::OriginalDecoded,
                                                           ThumbnailService::Stage::BeforeCommit),
                                           testing::Values(0, 1, 2, 3)));
+
+TEST(PreviewService, RasterOutcomesHaveDistinctPresentationAndSilentCancellation) {
+  using HolonightImages::Outcome;
+  using Kind = PreviewService::PreviewErrorKind;
+  const std::array cases = {
+      std::pair{Outcome::Success, Kind::None},         std::pair{Outcome::Unsupported, Kind::Unsupported},
+      std::pair{Outcome::Damaged, Kind::DecodeFailed}, std::pair{Outcome::ResourceLimit, Kind::ResourceLimit},
+      std::pair{Outcome::IoFailure, Kind::IoFailure},  std::pair{Outcome::Cancelled, Kind::None}};
+  QStringList messages;
+  for (const auto& [outcome, kind] : cases) {
+    const auto error = PreviewServiceTestAccess::rasterError(outcome);
+    EXPECT_EQ(error.kind, kind);
+    EXPECT_EQ(error.message.isEmpty(), kind == Kind::None);
+    if (kind != Kind::None) {
+      EXPECT_FALSE(messages.contains(error.message));
+      messages.append(error.message);
+    }
+  }
+}
+
+TEST(PreviewService, MetadataLimitDoesNotFailPixelsAndSelectionResetsStatus) {
+  QTemporaryDir dir(fixturePattern("preview-metadata-outcomes"));
+  const auto bytes = files_test::splicePngExifChunk(files_test::renderPngBytes(),
+                                                    QByteArray("Exif\0\0", 6) + QByteArray(2 * 1024 * 1024, 'x'));
+  const auto path = files_test::writeFile(dir, "limited.png", bytes);
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_TRUE(service.hasImage());
+  EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::None);
+  EXPECT_EQ(PreviewServiceTestAccess::exif(service).outcome, HolonightImages::Outcome::ResourceLimit);
+  service.clear();
+  EXPECT_FALSE(PreviewServiceTestAccess::exif(service).outcome);
+}

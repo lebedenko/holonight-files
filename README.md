@@ -391,6 +391,8 @@ Build and install `holonight-images` before configuring, or use `task deps` with
 provides `HolonightImages::Images`; custom builds pass its prefix through `CMAKE_PREFIX_PATH`.
 The provider owns raster decoding and structured EXIF extraction; presentation and scheduling remain here.
 See [migration SDD](docs/sdd/shared-image-architecture/DESIGN.md).
+Raster outcomes retain distinct translated errors, while metadata status remains internal and quiet.
+See the [shared image outcomes cycle](docs/sdd/shared-image-outcomes/SPEC.md).
 
 Image previews and thumbnails apply intrinsic EXIF orientation, including mirrors.
 The pane and Quick Look show oriented full-resolution dimensions. Legacy disk

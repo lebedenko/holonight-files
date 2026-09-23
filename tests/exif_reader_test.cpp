@@ -3,6 +3,7 @@
 #include "directory_fixtures.h"
 #include "preview_fixtures.h"
 
+#include <QBuffer>
 #include <QFileInfo>
 #include <QImage>
 #include <QTemporaryDir>
@@ -363,4 +364,34 @@ TEST(ExifReader, LargeImagePayloadIsSkippedAndRecordCountIsBounded) {
   ASSERT_TRUE(bounded.open(QIODevice::ReadOnly | QIODevice::Unbuffered));
   EXPECT_FALSE(ExifReader::read(bounded, "image/png").present);
   EXPECT_LE(bounded.bytesRead(), 8 + (4096 * 8));
+}
+
+namespace {
+class FailedMetadataDevice : public QBuffer {
+ protected:
+  qint64 readData([[maybe_unused]] char* data, [[maybe_unused]] qint64 maxSize) override { return -1; }
+};
+}  // namespace
+
+TEST(ExifReader, PreservesDeviceIoFailure) {
+  FailedMetadataDevice device;
+  device.setData(QByteArray(64, 'x'));
+  ASSERT_TRUE(device.open(QIODevice::ReadOnly | QIODevice::Unbuffered));
+  const auto result = ExifReader::read(device, "image/jpeg");
+  EXPECT_EQ(result.outcome, HolonightImages::Outcome::IoFailure);
+}
+
+TEST(ExifReader, DistinguishesSkippedCompletedLimitedAndMalformedOptionalTags) {
+  QTemporaryDir dir(fixturePattern("metadata-outcomes"));
+  const auto plain = writeJpegWithoutExif(dir);
+  EXPECT_FALSE(ExifReader::read(plain, "image/gif").outcome);
+  const auto empty = ExifReader::read(plain, "image/jpeg");
+  EXPECT_EQ(empty.outcome, HolonightImages::Outcome::Success);
+  EXPECT_FALSE(empty.present);
+  EXPECT_EQ(ExifReader::read(writePngWithOversizedExif(dir), "image/png").outcome,
+            HolonightImages::Outcome::ResourceLimit);
+  const auto malformed = writeJpegWithExifBlob(dir, "malformed.jpg", QByteArray("Exif\0\0bad optional tags", 23));
+  const auto optional = ExifReader::read(malformed, "image/jpeg");
+  EXPECT_EQ(optional.outcome, HolonightImages::Outcome::Success);
+  EXPECT_FALSE(optional.present);
 }

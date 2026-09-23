@@ -34,7 +34,16 @@ class PreviewService : public QObject {
   // Nested (rather than a free-standing enum merely Q_ENUM'd from inside the class) so QML's
   // type resolver associates PreviewErrorKind with PreviewService's meta-object correctly —
   // referenced from QML as `PreviewService.None`, `PreviewService.DecodeTimeout`, etc.
-  enum class PreviewErrorKind { None, PermissionDenied, BrokenSymlink, DecodeFailed, DecodeTimeout, Unsupported };
+  enum class PreviewErrorKind {
+    None,
+    PermissionDenied,
+    BrokenSymlink,
+    DecodeFailed,
+    DecodeTimeout,
+    Unsupported,
+    ResourceLimit,
+    IoFailure
+  };
   Q_ENUM(PreviewErrorKind)
 
   enum class PreviewConsumer { Pane, QuickLook };
@@ -138,6 +147,7 @@ class PreviewService : public QObject {
 
  private:
   friend struct PreviewServiceTestAccess;
+  static PreviewError rasterError(HolonightImages::Outcome outcome);
   void dispatch();
   void startJob();
   void updateRequestedSize();

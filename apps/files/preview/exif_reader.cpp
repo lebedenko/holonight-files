@@ -21,6 +21,7 @@ ExifSummary read(QIODevice& source, const QByteArray& mimeType, const std::share
   const auto result = HolonightImages::readMetadata(source, kPreviewImageLimits, cancel ? *cancel : running);
   const auto& facts = result.facts;
   ExifSummary summary;
+  summary.outcome = result.outcome;
   summary.make = facts.make;
   summary.model = facts.model;
   summary.lensModel = facts.lens;

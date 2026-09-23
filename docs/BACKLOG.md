@@ -1,5 +1,9 @@
 # Backlog
 
+The [shared image outcomes cycle](sdd/shared-image-outcomes/SPEC.md) preserves raster categories
+and quiet metadata status. Local automated verification is recorded in its
+[verification report](sdd/shared-image-outcomes/VERIFICATION.md); publication/pinning are tracked by the umbrella ledger; native gates remain open.
+
 Each numbered stage is a separate SDD cycle: approve requirements, approve
 design/tasks, implement, verify, document. Do not mark a stage complete while
 acceptance checks remain pending.

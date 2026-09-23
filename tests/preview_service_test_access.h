@@ -5,6 +5,8 @@
 // Internal synchronization seam, configured before a target dispatches its worker job. Mirrors
 // DirectoryModelTestAccess: a test-only hook, not part of the production API surface.
 struct PreviewServiceTestAccess {
+  static auto rasterError(HolonightImages::Outcome outcome) { return PreviewService::rasterError(outcome); }
+  static auto exif(const PreviewService& service) { return service.exif_; }
   static void thumbnailStage(PreviewService& service, ThumbnailService::StageCallback callback) {
     service.thumbnail_stage_for_test_ = std::move(callback);
   }

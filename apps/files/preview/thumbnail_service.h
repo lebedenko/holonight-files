@@ -7,24 +7,30 @@
 
 #include <atomic>
 #include <functional>
+#include <holonight_images/image.h>
 #include <optional>
+#include <utility>
 
 // Synchronous helpers used on PreviewService's verified source descriptor.
 namespace ThumbnailService {
 // Internal per-request synchronization seam; never exposed to QML or stored globally.
 enum class Stage { CacheInspect, CacheInspected, CacheDecode, OriginalDecode, OriginalDecoded, BeforeCommit };
 using StageCallback = std::function<void(Stage)>;
+struct Result {
+  QImage image;
+  HolonightImages::Outcome outcome;
+  Result(QImage pixels, HolonightImages::Outcome status) : image(std::move(pixels)), outcome(status) {}
+};
+
 enum class Tier { Normal = 128, Large = 256, XLarge = 512, XXLarge = 1024 };
 QSize requiredSize(QSize source, QSize bound);
 std::optional<Tier> tierForSize(QSize required);
-QImage lookup(QFile& file, const QString& path, const QString& revision, Tier selected, QSize required,
-              const std::atomic_bool& cancelled, const StageCallback& stage = {});
-QImage lookupOrDecode(QFile& file, const QString& path, const QString& revision, Tier tier, QSize required,
-                      const std::atomic_bool& cancelled, QString* errorOut, const StageCallback& stage = {});
-QImage lookupOrDecode(const QString& path, QString* errorOut);
-QImage lookupOrDecode(QFile& file, const QString& path, const QString& revision, const std::atomic_bool& cancelled,
-                      QString* errorOut);
-QImage decodeScaled(const QString& path, QSize targetSize, QString* errorOut);
-QImage decodeScaled(QFile& file, QSize targetSize, const std::atomic_bool& cancelled, QString* errorOut,
-                    const StageCallback& stage = {});
+std::optional<Result> lookup(QFile& file, const QString& path, const QString& revision, Tier selected, QSize required,
+                             const std::atomic_bool& cancelled, const StageCallback& stage = {});
+Result lookupOrDecode(QFile& file, const QString& path, const QString& revision, Tier tier, QSize required,
+                      const std::atomic_bool& cancelled, const StageCallback& stage = {});
+Result lookupOrDecode(const QString& path);
+Result lookupOrDecode(QFile& file, const QString& path, const QString& revision, const std::atomic_bool& cancelled);
+Result decodeScaled(const QString& path, QSize targetSize);
+Result decodeScaled(QFile& file, QSize targetSize, const std::atomic_bool& cancelled, const StageCallback& stage = {});
 }  // namespace ThumbnailService

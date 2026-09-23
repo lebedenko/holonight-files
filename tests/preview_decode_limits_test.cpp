@@ -1,6 +1,7 @@
 #include "directory_fixtures.h"
 #include "thumbnail_service.h"
 
+#include <QDataStream>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QImage>
@@ -11,10 +12,8 @@
 using files_test::fixturePattern;
 
 namespace {
-// A PNG whose IHDR declares an enormous frame but carries no real pixel data — libpng/Qt can read
-// the header (width/height) without ever decompressing a payload that doesn't exist. Exercises
-// the same "reject before an expensive read()" path a real decompression bomb would hit, without
-// needing to hand-roll a valid multi-megabyte deflate stream.
+// An enormous declared PNG frame with invalid CRCs and no pixel payload must fail fast.
+// The provider classifies this malformed header as Damaged; the valid BMP below covers ResourceLimit.
 QString writePathologicalPng(const QTemporaryDir& dir) {
   QByteArray png;
   png.append("\x89PNG\r\n\x1a\n", 8);
@@ -36,7 +35,7 @@ QString writePathologicalPng(const QTemporaryDir& dir) {
     appendU32(png, static_cast<quint32>(data.size()));
     png.append(type);
     png.append(data);
-    appendU32(png, 0);  // CRC is not validated by the size()-only header read this test relies on
+    appendU32(png, 0);  // Deliberately invalid CRC.
   };
   appendChunk("IHDR", ihdrData);
   appendChunk("IEND", {});
@@ -56,10 +55,9 @@ TEST(PreviewDecodeLimits, PathologicallyLargeDeclaredDimensionsFailFastRatherTha
   const auto path = writePathologicalPng(dir);
   QElapsedTimer elapsed;
   elapsed.start();
-  QString error;
-  const auto image = ThumbnailService::decodeScaled(path, QSize(1024, 1024), &error);
-  EXPECT_TRUE(image.isNull());
-  EXPECT_FALSE(error.isEmpty());
+  const auto result = ThumbnailService::decodeScaled(path, QSize(1024, 1024));
+  EXPECT_TRUE(result.image.isNull());
+  EXPECT_EQ(result.outcome, HolonightImages::Outcome::Damaged);
   // "Fails fast" per REQ-NF-001/REQ-NF-003 — well under the 3-second decode timeout budget.
   EXPECT_LT(elapsed.elapsed(), 3000);
 }
@@ -71,7 +69,21 @@ TEST(PreviewDecodeLimits, ALegitimateLargeImageStillDecodesWithinTheAllocationBu
   large.fill(Qt::gray);
   const auto path = dir.filePath("legit-large.png");
   ASSERT_TRUE(large.save(path, "PNG"));
-  QString error;
-  const auto image = ThumbnailService::decodeScaled(path, QSize(1024, 1024), &error);
-  EXPECT_FALSE(image.isNull()) << error.toStdString();
+  const auto image = ThumbnailService::decodeScaled(path, QSize(1024, 1024)).image;
+  EXPECT_FALSE(image.isNull());
+}
+
+TEST(PreviewDecodeLimits, ValidOversizedHeaderPreservesResourceLimit) {
+  QTemporaryDir dir(fixturePattern("decode-limit-bmp"));
+  QByteArray bitmap;
+  QDataStream header(&bitmap, QIODevice::WriteOnly);
+  header.setByteOrder(QDataStream::LittleEndian);
+  header << quint16{0x4d42} << quint32{54} << quint32{0} << quint32{54} << quint32{40} << qint32{9000} << qint32{9000}
+         << quint16{1} << quint16{24} << quint32{0} << quint32{0} << qint32{0} << qint32{0} << quint32{0} << quint32{0};
+  const auto path = dir.filePath("limited.bmp");
+  QFile file(path);
+  ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+  ASSERT_EQ(file.write(bitmap), bitmap.size());
+  file.close();
+  EXPECT_EQ(ThumbnailService::decodeScaled(path, {1024, 1024}).outcome, HolonightImages::Outcome::ResourceLimit);
 }

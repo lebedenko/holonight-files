@@ -27,6 +27,7 @@ struct PreviewResult {
   // its error.
   QString gate_mime;
   QImage image;
+  std::optional<HolonightImages::Outcome> raster_outcome;
   QSize source_pixel_size;
   ExifReader::ExifSummary exif;
   bool has_text = false;
@@ -137,12 +138,21 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
                         : std::nullopt;
   result.image = cache.lookup(identity, needed);
   if (result.image.isNull() && tier) {
-    result.image = ThumbnailService::lookup(file, path, identity, *tier, needed, *cancel, stage);
+    const auto cached = ThumbnailService::lookup(file, path, identity, *tier, needed, *cancel, stage);
+    if (cached) {
+      result.image = cached->image;
+      result.raster_outcome = cached->outcome;
+    }
   }
   if (cancel->load()) {
     return result;
   }
-  QString error;
+  if (result.raster_outcome == HolonightImages::Outcome::Cancelled) {
+    return result;
+  }
+  if (!result.image.isNull()) {
+    result.raster_outcome = HolonightImages::Outcome::Success;
+  }
   if (result.image.isNull()) {
     if (beforeFullDecode) {
       beforeFullDecode();
@@ -152,14 +162,15 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
     }
     // The provider fits the source to this bound. Fitting an already rounded
     // `needed` size again can lose a pixel and cause endless adequacy upgrades.
-    result.image = tier ? ThumbnailService::lookupOrDecode(file, path, identity, *tier, needed, *cancel, &error, stage)
-                        : ThumbnailService::decodeScaled(file, requestedSize, *cancel, &error, stage);
+    auto decoded = tier ? ThumbnailService::lookupOrDecode(file, path, identity, *tier, needed, *cancel, stage)
+                        : ThumbnailService::decodeScaled(file, requestedSize, *cancel, stage);
+    result.image = std::move(decoded.image);
+    result.raster_outcome = decoded.outcome;
   }
   if (cancel->load()) {
     return result;
   }
   if (result.image.isNull()) {
-    result.error = {.kind = PreviewService::PreviewErrorKind::DecodeFailed, .message = error};
     return result;
   }
   if (cancel->load()) {
@@ -456,6 +467,13 @@ void PreviewService::startJob() {
 }
 
 void PreviewService::applyResult(const PreviewResult& result) {
+  if (result.raster_outcome == HolonightImages::Outcome::Cancelled) {
+    if (result.generation == generation_ && !timed_out_) {
+      timeout_timer_.stop();
+      busy_ = false;
+    }
+    return;
+  }
   if (result.generation != generation_) {
     return;  // Stale: the target (or its requested size) has moved on.
   }
@@ -486,7 +504,7 @@ void PreviewService::applyResult(const PreviewResult& result) {
     text_lines_.clear();
     current_line_ = -1;
   }
-  error_ = result.error;
+  error_ = result.raster_outcome ? rasterError(*result.raster_outcome) : result.error;
   notifyChanged();
   if (result.final && mime_type_.startsWith(QStringLiteral("image/")) && !display_image_.isNull()) {
     resize_debounce_timer_.start(kResizeDebounceMs);
@@ -550,4 +568,22 @@ void PreviewService::moveCurrentLine(int delta) {
   current_line_ = target;
   retained_line_ = target;
   notifyCurrentLine();
+}
+
+PreviewService::PreviewError PreviewService::rasterError(HolonightImages::Outcome outcome) {
+  using HolonightImages::Outcome;
+  switch (outcome) {
+    case Outcome::Success:
+    case Outcome::Cancelled:
+      return {};
+    case Outcome::Unsupported:
+      return {.kind = PreviewErrorKind::Unsupported, .message = tr("The image format is not recognized.")};
+    case Outcome::Damaged:
+      return {.kind = PreviewErrorKind::DecodeFailed, .message = tr("The image is damaged or could not be decoded.")};
+    case Outcome::ResourceLimit:
+      return {.kind = PreviewErrorKind::ResourceLimit, .message = tr("Image exceeds the decode memory limit.")};
+    case Outcome::IoFailure:
+      return {.kind = PreviewErrorKind::IoFailure, .message = tr("The image could not be read.")};
+  }
+  Q_UNREACHABLE();
 }
