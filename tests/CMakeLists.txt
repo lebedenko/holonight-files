@@ -1,7 +1,7 @@
 add_files_application(files-smoke smoke.cpp separator_window_test.cpp size_format_test.cpp inspection_helpers_test.cpp directory_model_test.cpp directory_proxy_model_test.cpp
   directory_controller_test.cpp directory_performance_test.cpp initial_directory_test.cpp
   thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp text_lines_test.cpp text_line_model_test.cpp preview_service_test.cpp
-  quick_look_presentation_model_test.cpp preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp preview_performance_test.cpp
+  preview_consumer_dpr_test.cpp quick_look_presentation_model_test.cpp preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp preview_performance_test.cpp
   name_validator_test.cpp fuzzy_matcher_test.cpp vim_mode_controller_test.cpp
   clipboard_register_test.cpp file_operation_service_test.cpp trash_service_test.cpp
   task_manager_test.cpp directory_controller_file_ops_test.cpp icon_name_resolver_test.cpp icon_image_provider_test.cpp
@@ -93,3 +93,16 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME files-preview-runner COMMAND ${Python3_EXECUTABLE}
   "${CMAKE_SOURCE_DIR}/scripts/check-measure-preview.py")
 set_tests_properties(files-preview-runner PROPERTIES TIMEOUT 30)
+
+# Passive native acceptance: shares main/QML, never installed and never drives input.
+add_files_application(files-native-preview-lab ../apps/files/main.cpp native_preview_observer.cpp)
+target_include_directories(files-native-preview-lab PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(files-native-preview-lab PRIVATE FILES_NATIVE_PREVIEW_LAB)
+set_target_properties(files-native-preview-lab PROPERTIES QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
+add_test(NAME files-native-preview-runner COMMAND ${Python3_EXECUTABLE}
+  "${CMAKE_SOURCE_DIR}/scripts/check-native-preview.py")
+set_tests_properties(files-native-preview-runner PROPERTIES TIMEOUT 30)
+add_test(NAME files-native-preview-observer COMMAND ${Python3_EXECUTABLE}
+  "${CMAKE_SOURCE_DIR}/scripts/check-native-observer.py" $<TARGET_FILE:files-native-preview-lab>)
+set_tests_properties(files-native-preview-observer PROPERTIES TIMEOUT 15 ENVIRONMENT
+  "QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")

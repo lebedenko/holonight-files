@@ -1,0 +1,24 @@
+[
+  {
+    "name": "Fronalpstock.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Fronalpstock_big.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/3f/Fronalpstock_big.jpg",
+    "file_version_utc": "2010-08-26T20:25Z",
+    "sha256": "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+    "source_dimensions": [10109, 4542],
+    "author": "Hannes Röst",
+    "license": "CC-BY-SA-3.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/3.0/"
+  },
+  {
+    "name": "Colosseum.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:Colosseum_in_Rome,_Italy_-_April_2007.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/53/Colosseum_in_Rome%2C_Italy_-_April_2007.jpg",
+    "file_version_utc": "2007-05-06T20:29Z",
+    "sha256": "26a01fe516963531c5d57390b55bbef1ebda82e0a53d3ed583eaab35d1850f92",
+    "source_dimensions": [4827, 2833],
+    "author": "DAVID ILIFF",
+    "license": "CC-BY-SA-3.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/3.0/"
+  }
+]

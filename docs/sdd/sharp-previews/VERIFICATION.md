@@ -56,3 +56,11 @@ loop naming/parentheses cleanup. That last cleanup preserves the fixture pixels.
 All required check stages have passing evidence; the aggregate command itself
 retains its earlier lint failure in check-final.log rather than being relabeled
 as a successful run. T5 and the unknown-dimension runtime fixture remain open.
+
+## Native continuation — 2026-09-23
+
+See [native-preview-acceptance](../native-preview-acceptance/VERIFICATION.md) for
+passive evidence, the demonstrated fractional screen/window DPR mismatch and its
+Files-local correction. The new matrix includes the original 1.25× scale as well
+as 1×/1.5×/2×. T5 remains open; this continuation does not replace historical
+records or close the unknown-dimension runtime fixture.

@@ -16,7 +16,15 @@
 
 #include <cstdlib>
 
+#ifdef FILES_NATIVE_PREVIEW_LAB
+#include "native_preview_observer.h"
+#endif
+
 int main(int argc, char* argv[]) {
+#ifdef FILES_NATIVE_PREVIEW_LAB
+  QElapsedTimer labClock;
+  labClock.start();
+#endif
   configurePreviewImageLimits();
   QGuiApplication app(argc, argv);
   QGuiApplication::setApplicationName(QStringLiteral("holonight-files"));
@@ -50,6 +58,9 @@ int main(int argc, char* argv[]) {
   QGuiApplication::setQuitOnLastWindowClosed(false);
   DirectoryController controller;
   controller.configureRestore(restoreEnabled);
+#ifdef FILES_NATIVE_PREVIEW_LAB
+  NativePreviewObserver observer(controller, labClock);
+#endif
   QObject::connect(&app, &QGuiApplication::lastWindowClosed, &controller, &DirectoryController::shutdown);
   QObject::connect(&controller, &DirectoryController::shutdownFinished, &app, &QCoreApplication::quit);
   QQmlApplicationEngine engine;
@@ -62,6 +73,9 @@ int main(int argc, char* argv[]) {
   if (engine.rootObjects().isEmpty()) {
     return EXIT_FAILURE;
   }
+#ifdef FILES_NATIVE_PREVIEW_LAB
+  observer.attach(engine.rootObjects().first());
+#endif
   // Deferred so QML bindings to controller's properties are connected before the first load
   // fires changed(), matching how holonight-viewer sequences ImageDocument::open().
   QTimer::singleShot(0, &controller, [&controller, plan] {

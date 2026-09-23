@@ -20,13 +20,15 @@ Item {
     // Height comes from the frame's own width and the source aspect ratio, never read back from
     // imageArea.height: that feedback edge is what would turn the aspect-ratio frame into a
     // binding loop (DESIGN.md §5.1).
+    readonly property real previewDevicePixelRatio: root.Window.window ? root.Window.window.devicePixelRatio : 1
+
     function reportImageAreaSize(): void {
-        const ratio = Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1;
+        const ratio = root.previewDevicePixelRatio;
         root.preview.setRequestedSize(PreviewService.Pane, Qt.size(imageArea.width * ratio, imageArea.frameHeight * ratio));
     }
 
     Component.onCompleted: root.reportImageAreaSize()
-    Screen.onDevicePixelRatioChanged: root.reportImageAreaSize()
+    onPreviewDevicePixelRatioChanged: root.reportImageAreaSize()
 
     function formatModified(value): string {
         if (!value || isNaN(value.getTime()))

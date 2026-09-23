@@ -404,3 +404,10 @@ Release processes per workload. It generates public synthetic PNG/JPEG fixtures,
 validates oriented pixels, isolates caches and preserves timing, decode-attempt and
 RSS evidence. See [findings and verification](docs/sdd/preview-performance/VERIFICATION.md).
 These offscreen measurements do not close native sharp-preview acceptance.
+
+The [native preview acceptance lab](docs/sdd/native-preview-acceptance/README.md)
+reuses Files with passive, testing-only diagnostics and pinned photographic
+fixtures. The user performs every native interaction; the runner validates
+cold/disk/memory evidence without generating input. Fractional preview requests
+now follow the window DPR on Wayland. [Native acceptance](docs/sdd/native-preview-acceptance/VERIFICATION.md)
+remains open until the four-scale manual matrix passes.

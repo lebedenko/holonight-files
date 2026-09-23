@@ -177,3 +177,9 @@ The [preview performance cycle](sdd/preview-performance/README.md) adds reproduc
 opt-in offscreen cache/resize/selection measurements. Its
 [verification record](sdd/preview-performance/VERIFICATION.md) tracks acceptance and
 findings. Native sharp-preview acceptance remains open and separate.
+
+Native sharp-preview T5 now has a [passive acceptance lab](sdd/native-preview-acceptance/README.md)
+and [dated results](sdd/native-preview-acceptance/VERIFICATION.md). Native 1.25×
+diagnostics demonstrated screen/window DPR mismatch; Files consumers now use
+window DPR, protected by an offscreen binding regression. The required four-scale
+manual matrix and photographic timing distributions remain open.

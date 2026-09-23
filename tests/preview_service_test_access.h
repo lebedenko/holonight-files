@@ -11,6 +11,9 @@ struct PreviewServiceTestAccess {
   static void beforeDispatch(PreviewService& service, std::function<void()> callback) {
     service.before_dispatch_for_test_ = std::move(callback);
   }
+  static QString path(const PreviewService& service) { return service.path_; }
+  static QSize requestedSize(const PreviewService& service) { return service.requested_size_; }
+  static QSize paneSize(const PreviewService& service) { return service.pane_size_; }
   static bool resizePending(const PreviewService& service) { return service.resize_debounce_timer_.isActive(); }
   // The size last passed to setRequestedSize(QuickLook, ...), whether or not it is the active one.
   static QSize quickLookRequestedSize(const PreviewService& service) { return service.quick_look_size_; }

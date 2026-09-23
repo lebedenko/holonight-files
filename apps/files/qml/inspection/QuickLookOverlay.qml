@@ -32,7 +32,7 @@ Controls.Popup {
         objectName: "quickLookPresentation"
         preview: root.preview
         windowSize: root.parent ? Qt.size(root.parent.width, root.parent.height) : Qt.size(0, 0)
-        devicePixelRatio: root.Screen.devicePixelRatio
+        devicePixelRatio: root.parent && root.parent.Window.window ? root.parent.Window.window.devicePixelRatio : 1
         cardPadding: root.cardPadding
         captionReserve: root.captionReserve
         frameCaptionGap: root.frameCaptionGap
