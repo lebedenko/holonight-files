@@ -183,3 +183,13 @@ and [dated results](sdd/native-preview-acceptance/VERIFICATION.md). Native 1.25Ã
 diagnostics demonstrated screen/window DPR mismatch; Files consumers now use
 window DPR, protected by an offscreen binding regression. The required four-scale
 manual matrix and photographic timing distributions remain open.
+
+## Preview cancellation
+
+Files now propagates each preview request's cancellation token through thumbnail
+inspection, decoding and cache publication. Deterministic regressions cover cache
+boundaries, request replacement, resize and shutdown; cancelled writes preserve
+existing entries. Automated acceptance and the five-process baseline/candidate
+comparison are recorded in [verification](sdd/preview-cancellation/VERIFICATION.md).
+Cancellation remains cooperative; native sharp-preview T5, mixed-monitor
+qualification and other deferred gates remain open.

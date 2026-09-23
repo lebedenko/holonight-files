@@ -5,6 +5,11 @@
 // Internal synchronization seam, configured before a target dispatches its worker job. Mirrors
 // DirectoryModelTestAccess: a test-only hook, not part of the production API surface.
 struct PreviewServiceTestAccess {
+  static void thumbnailStage(PreviewService& service, ThumbnailService::StageCallback callback) {
+    service.thumbnail_stage_for_test_ = std::move(callback);
+  }
+  static bool activeJob(const PreviewService& service) { return service.active_job_; }
+
   static void beforeFullDecode(PreviewService& service, std::function<void()> callback) {
     service.before_full_decode_for_test_ = std::move(callback);
   }

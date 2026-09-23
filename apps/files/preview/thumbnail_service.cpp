@@ -74,10 +74,13 @@ bool cacheEntryValid(const QImage& cached, const QString& uri, const QFileInfo& 
 // Shared by both the cache tier and the full-resolution tier: setScaledSize() before read() lets
 // format plugins with scaled-decode support (JPEG, PNG) avoid allocating a full-resolution bitmap
 // just to downscale it (REQ-NF-003).
-QImage decodeBounded(QFile& file, QSize bound, HolonightImages::OrientationPolicy orientation, QString* errorOut) {
-  const std::atomic_bool cancelled{false};
+QImage decodeBounded(QFile& file, QSize bound, HolonightImages::OrientationPolicy orientation,
+                     const std::atomic_bool& cancelled, QString* errorOut) {
   auto result = HolonightImages::decode(
       file, {.limits = kPreviewImageLimits, .bound = bound, .orientation = orientation}, cancelled);
+  if (result.outcome == HolonightImages::Outcome::Cancelled || cancelled.load()) {
+    return {};
+  }
   if (result.outcome != HolonightImages::Outcome::Success && errorOut != nullptr) {
     *errorOut = result.outcome == HolonightImages::Outcome::ResourceLimit
                     ? QObject::tr("Image exceeds the decode memory limit.")
@@ -86,8 +89,42 @@ QImage decodeBounded(QFile& file, QSize bound, HolonightImages::OrientationPolic
   return result.image;
 }
 
+QImage readCacheEntry(QFile& cachedFile, Tier tier, QSize required, const std::atomic_bool& cancelled,
+                      const StageCallback& stage) {
+  if (stage) {
+    stage(Stage::CacheInspect);
+  }
+  const auto inspection = HolonightImages::inspect(cachedFile, kPreviewImageLimits, cancelled,
+                                                   HolonightImages::OrientationPolicy::Ignore, false);
+  if (inspection.outcome == HolonightImages::Outcome::Cancelled || cancelled.load()) {
+    return {};
+  }
+  if (stage) {
+    stage(Stage::CacheInspected);
+  }
+  if (cancelled.load()) {
+    return {};
+  }
+  if (inspection.outcome != HolonightImages::Outcome::Success) {
+    return {};
+  }
+  const auto size = inspection.sourceSize;
+  const auto limit = static_cast<int>(tier);
+  if (size.width() < required.width() || size.height() < required.height() || size.width() > limit ||
+      size.height() > limit) {
+    return {};
+  }
+  if (stage) {
+    stage(Stage::CacheDecode);
+  }
+  return decodeBounded(cachedFile, {limit, limit}, HolonightImages::OrientationPolicy::Ignore, cancelled, nullptr);
+}
+
 void writeCacheEntry(const QString& cachePath, const QImage& image, const QString& uri, const QFileInfo& sourceInfo,
-                     const QString& revision) {
+                     const QString& revision, const std::atomic_bool& cancelled, const StageCallback& stage) {
+  if (cancelled.load()) {
+    return;
+  }
   QImage tagged = image;
   tagged.setText(QStringLiteral("Files::Revision"), revision);
   tagged.setText(QStringLiteral("Files::OrientationPolicy"), QStringLiteral("applied-v1"));
@@ -99,7 +136,14 @@ void writeCacheEntry(const QString& cachePath, const QImage& image, const QStrin
     return;
   }
   file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-  if (!tagged.save(&file, "PNG")) {
+  if (cancelled.load() || !tagged.save(&file, "PNG")) {
+    file.cancelWriting();
+    return;
+  }
+  if (stage) {
+    stage(Stage::BeforeCommit);
+  }
+  if (cancelled.load()) {
     file.cancelWriting();
     return;
   }
@@ -118,7 +162,8 @@ QImage lookupOrDecode(const QString& path, QString* errorOut) {
     }
     return {};
   }
-  return lookupOrDecode(file, path, {}, errorOut);
+  const std::atomic_bool cancelled{false};
+  return lookupOrDecode(file, path, {}, cancelled, errorOut);
 }
 
 QSize requiredSize(QSize source, QSize bound) {
@@ -143,10 +188,17 @@ std::optional<Tier> tierForSize(QSize required) {
   return std::nullopt;
 }
 
-QImage lookup(QFile& file, const QString& path, const QString& revision, Tier selected, QSize required) {
+QImage lookup(QFile& file, const QString& path, const QString& revision, Tier selected, QSize required,
+              const std::atomic_bool& cancelled, const StageCallback& stage) {
+  if (cancelled.load()) {
+    return {};
+  }
   const QFileInfo sourceInfo(file);
   const auto uri = QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded);
   for (const auto tier : kTiers) {
+    if (cancelled.load()) {
+      return {};
+    }
     if (static_cast<int>(tier) < static_cast<int>(selected)) {
       continue;
     }
@@ -154,60 +206,68 @@ QImage lookup(QFile& file, const QString& path, const QString& revision, Tier se
     if (!cachedFile.open(QIODevice::ReadOnly)) {
       continue;
     }
-    const std::atomic_bool cancelled{false};
-    const auto inspection = HolonightImages::inspect(cachedFile, kPreviewImageLimits, cancelled,
-                                                     HolonightImages::OrientationPolicy::Ignore, false);
-    if (inspection.outcome != HolonightImages::Outcome::Success) {
-      continue;
+    auto cached = readCacheEntry(cachedFile, tier, required, cancelled, stage);
+    if (cancelled.load()) {
+      return {};
     }
-    const auto size = inspection.sourceSize;
-    const auto limit = static_cast<int>(tier);
-    if (size.width() < required.width() || size.height() < required.height() || size.width() > limit ||
-        size.height() > limit) {
-      continue;
-    }
-    auto cached = decodeBounded(cachedFile, {limit, limit}, HolonightImages::OrientationPolicy::Ignore, nullptr);
     if (cacheEntryValid(cached, uri, sourceInfo) && cached.width() >= required.width() &&
         cached.height() >= required.height() &&
         (revision.isEmpty() || cached.text(QStringLiteral("Files::Revision")) == revision)) {
-      return cached;
+      return cancelled.load() ? QImage{} : cached;
     }
   }
   return {};
 }
 
 QImage lookupOrDecode(QFile& file, const QString& path, const QString& revision, Tier tier, QSize required,
-                      QString* errorOut) {
-  auto cached = lookup(file, path, revision, tier, required);
+                      const std::atomic_bool& cancelled, QString* errorOut, const StageCallback& stage) {
+  auto cached = lookup(file, path, revision, tier, required, cancelled, stage);
+  if (cancelled.load()) {
+    return {};
+  }
   if (!cached.isNull()) {
     return cached;
   }
   const auto extent = static_cast<int>(tier);
-  auto decoded = decodeBounded(file, {extent, extent}, HolonightImages::OrientationPolicy::Apply, errorOut);
-  if (decoded.isNull()) {
+  if (stage) {
+    stage(Stage::OriginalDecode);
+  }
+  auto decoded = decodeBounded(file, {extent, extent}, HolonightImages::OrientationPolicy::Apply, cancelled, errorOut);
+  if (cancelled.load()) {
+    return {};
+  }
+  if (stage) {
+    stage(Stage::OriginalDecoded);
+  }
+  if (cancelled.load() || decoded.isNull()) {
     return {};
   }
   const auto uri = QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded);
   const auto dir = cacheDir(tier);
+  if (cancelled.load()) {
+    return {};
+  }
   ensureCacheDir(dir);
   writeCacheEntry(dir + QLatin1Char('/') + cacheKeyFor(uri) + QStringLiteral(".png"), decoded, uri, QFileInfo(file),
-                  revision);
-  return decoded;
+                  revision, cancelled, stage);
+  return cancelled.load() ? QImage{} : decoded;
 }
 
-QImage lookupOrDecode(QFile& file, const QString& path, const QString& revision, QString* errorOut) {
-  file.seek(0);
-  QSize source;
-  {
-    const std::atomic_bool cancelled{false};
-    source =
-        HolonightImages::inspect(file, kPreviewImageLimits, cancelled, HolonightImages::OrientationPolicy::Apply, false)
-            .orientedSize;
+QImage lookupOrDecode(QFile& file, const QString& path, const QString& revision, const std::atomic_bool& cancelled,
+                      QString* errorOut) {
+  if (cancelled.load()) {
+    return {};
   }
+  const auto inspection =
+      HolonightImages::inspect(file, kPreviewImageLimits, cancelled, HolonightImages::OrientationPolicy::Apply, false);
+  if (inspection.outcome == HolonightImages::Outcome::Cancelled || cancelled.load()) {
+    return {};
+  }
+  const auto source = inspection.orientedSize;
   if (!source.isValid() || source.isEmpty()) {
-    return decodeScaled(file, {128, 128}, errorOut);
+    return decodeScaled(file, {128, 128}, cancelled, errorOut);
   }
-  return lookupOrDecode(file, path, revision, Tier::Normal, requiredSize(source, {128, 128}), errorOut);
+  return lookupOrDecode(file, path, revision, Tier::Normal, requiredSize(source, {128, 128}), cancelled, errorOut);
 }
 
 QImage decodeScaled(const QString& path, QSize targetSize, QString* errorOut) {
@@ -218,12 +278,27 @@ QImage decodeScaled(const QString& path, QSize targetSize, QString* errorOut) {
     }
     return {};
   }
-  return decodeScaled(file, targetSize, errorOut);
+  const std::atomic_bool cancelled{false};
+  return decodeScaled(file, targetSize, cancelled, errorOut);
 }
 
-QImage decodeScaled(QFile& file, QSize targetSize, QString* errorOut) {
+QImage decodeScaled(QFile& file, QSize targetSize, const std::atomic_bool& cancelled, QString* errorOut,
+                    const StageCallback& stage) {
+  if (cancelled.load()) {
+    return {};
+  }
   const auto bound = (targetSize.isValid() && !targetSize.isEmpty()) ? targetSize : QSize(1024, 1024);
-  return decodeBounded(file, bound, HolonightImages::OrientationPolicy::Apply, errorOut);
+  if (stage) {
+    stage(Stage::OriginalDecode);
+  }
+  auto image = decodeBounded(file, bound, HolonightImages::OrientationPolicy::Apply, cancelled, errorOut);
+  if (cancelled.load()) {
+    return {};
+  }
+  if (stage) {
+    stage(Stage::OriginalDecoded);
+  }
+  return cancelled.load() ? QImage{} : image;
 }
 
 }  // namespace ThumbnailService

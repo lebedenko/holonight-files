@@ -124,20 +124,23 @@ QString formatPermissions(quint32 rawMode) {
 PreviewResult decodeImage(QFile& file, const QString& path, const QString& identity, PreviewResult result,
                           const std::shared_ptr<std::atomic_bool>& cancel, QSize requestedSize,
                           PreviewWorkerCache& cache, const std::function<void(const PreviewResult&)>& publish,
-                          const std::function<void()>& beforeFullDecode) {
-  file.seek(0);
-  {
-    result.source_pixel_size =
-        HolonightImages::inspect(file, kPreviewImageLimits, *cancel, HolonightImages::OrientationPolicy::Apply, false)
-            .orientedSize;
+                          const std::function<void()>& beforeFullDecode, const ThumbnailService::StageCallback& stage) {
+  const auto inspection =
+      HolonightImages::inspect(file, kPreviewImageLimits, *cancel, HolonightImages::OrientationPolicy::Apply, false);
+  if (inspection.outcome == HolonightImages::Outcome::Cancelled || cancel->load()) {
+    return result;
   }
+  result.source_pixel_size = inspection.orientedSize;
   const auto needed = ThumbnailService::requiredSize(result.source_pixel_size, requestedSize);
   const auto tier = result.source_pixel_size.isValid() && !result.source_pixel_size.isEmpty()
                         ? ThumbnailService::tierForSize(needed)
                         : std::nullopt;
   result.image = cache.lookup(identity, needed);
   if (result.image.isNull() && tier) {
-    result.image = ThumbnailService::lookup(file, path, identity, *tier, needed);
+    result.image = ThumbnailService::lookup(file, path, identity, *tier, needed, *cancel, stage);
+  }
+  if (cancel->load()) {
+    return result;
   }
   QString error;
   if (result.image.isNull()) {
@@ -149,8 +152,8 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
     }
     // The provider fits the source to this bound. Fitting an already rounded
     // `needed` size again can lose a pixel and cause endless adequacy upgrades.
-    result.image = tier ? ThumbnailService::lookupOrDecode(file, path, identity, *tier, needed, &error)
-                        : ThumbnailService::decodeScaled(file, requestedSize, &error);
+    result.image = tier ? ThumbnailService::lookupOrDecode(file, path, identity, *tier, needed, *cancel, &error, stage)
+                        : ThumbnailService::decodeScaled(file, requestedSize, *cancel, &error, stage);
   }
   if (cancel->load()) {
     return result;
@@ -159,11 +162,20 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
     result.error = {.kind = PreviewService::PreviewErrorKind::DecodeFailed, .message = error};
     return result;
   }
+  if (cancel->load()) {
+    return result;
+  }
   cache.insert(identity, result.image);
   result.final = false;
+  if (cancel->load()) {
+    return result;
+  }
   publish(result);
   result.final = true;
   result.image = {};  // EXIF completion updates metadata without replacing pixels.
+  if (cancel->load()) {
+    return result;
+  }
   result.exif = ExifReader::read(file, result.mime_type.toUtf8(), cancel);
   return result;
 }
@@ -173,7 +185,8 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
 PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::shared_ptr<std::atomic_bool>& cancel,
                             QSize requestedSize, PreviewWorkerCache& cache,
                             const std::function<void(const PreviewResult&)>& publish,
-                            const std::function<void()>& beforeFullDecode) {
+                            const std::function<void()>& beforeFullDecode,
+                            const ThumbnailService::StageCallback& stage) {
   PreviewResult result;
   result.generation = generation;
   if (cancel->load()) {
@@ -223,7 +236,7 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
   result.gate_mime = mime.name();
   result.mime_type_description = mime.comment();
   if (mime.name().startsWith(QStringLiteral("image/"))) {
-    return decodeImage(file, path, identity, result, cancel, requestedSize, cache, publish, beforeFullDecode);
+    return decodeImage(file, path, identity, result, cancel, requestedSize, cache, publish, beforeFullDecode, stage);
   }
   if (!TextPreviewService::looksBinary(sniff)) {
     result.text = TextPreviewService::readHead(file, kTextViewerMaxBytes);
@@ -416,17 +429,18 @@ void PreviewService::startJob() {
   const auto size = requested_size_.isValid() && !requested_size_.isEmpty() ? requested_size_ : QSize(1024, 1024);
   dispatched_size_ = ThumbnailService::requiredSize(source_pixel_size_, size);
   const auto beforeDispatch = before_dispatch_for_test_;
+  const auto stage = thumbnail_stage_for_test_;
   const auto beforeFull = before_full_decode_for_test_;
   QMetaObject::invokeMethod(
       worker_,
-      [this, path, generation, cancel, size, beforeDispatch, beforeFull] {
+      [this, path, generation, cancel, size, beforeDispatch, beforeFull, stage] {
         const auto publish = [this](const PreviewResult& result) {
           QMetaObject::invokeMethod(this, [this, result] { applyResult(result); }, Qt::QueuedConnection);
         };
         if (!cancel->load() && beforeDispatch) {
           beforeDispatch();
         }
-        auto result = runPreviewJob(path, generation, cancel, size, *cache_, publish, beforeFull);
+        auto result = runPreviewJob(path, generation, cancel, size, *cache_, publish, beforeFull, stage);
         if (!cancel->load()) {
           publish(result);
         }

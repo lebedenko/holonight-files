@@ -12,6 +12,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QScopeGuard>
+#include <QSemaphore>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -813,3 +814,99 @@ TEST_P(PreviewRoundedBounds, FullDecodeFitsOriginalBoundsOnceAndReusesAdequatePi
 }
 
 INSTANTIATE_TEST_SUITE_P(PngAndExif, PreviewRoundedBounds, testing::Values(0, 2, 6, 7));
+
+namespace {
+class PreviewThumbnailCancellation : public testing::TestWithParam<std::tuple<ThumbnailService::Stage, int>> {};
+}  // namespace
+
+TEST_P(PreviewThumbnailCancellation, StopsObsoleteWorkAndCompletesNewestRequest) {
+  QTemporaryDir dir(fixturePattern("preview-cancellation"));
+  QTemporaryDir cacheHome(fixturePattern("preview-cancellation-cache"));
+  const auto previous = qgetenv("XDG_CACHE_HOME");
+  qputenv("XDG_CACHE_HOME", cacheHome.path().toUtf8());
+  const auto restoreCache = qScopeGuard([&] {
+    if (previous.isNull()) {
+      qunsetenv("XDG_CACHE_HOME");
+    } else {
+      qputenv("XDG_CACHE_HOME", previous);
+    }
+  });
+  const auto path = writeFile(dir, "obsolete.jpg", files_test::renderJpegBytes({1200, 600}));
+  const auto latest = writeFile(dir, "latest.jpg", files_test::renderJpegBytes({800, 400}));
+  const auto [boundary, action] = GetParam();
+  QSemaphore entered;
+  QSemaphore release;
+  std::atomic_int laterStages = 0;
+  std::atomic_bool reached = false;
+  std::atomic_bool waitExpired = false;
+  PreviewService service;
+  // Establish MIME for the real resize debounce path, then request a larger uncached tier.
+  service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {64, 64});
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  PreviewServiceTestAccess::thumbnailStage(service, [&](ThumbnailService::Stage stage) {
+    if (reached.load()) {
+      ++laterStages;
+    } else if (stage == boundary) {
+      reached = true;
+      entered.release();
+      waitExpired = !release.tryAcquire(1, 5000);
+    }
+  });
+  // Release before service destruction even when an ASSERT aborts the test.
+  const auto unblock = qScopeGuard([&] { release.release(); });
+  service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {256, 256});
+  ASSERT_TRUE(QTest::qWaitFor([&] { return entered.tryAcquire(); }, 2000));
+  PreviewServiceTestAccess::thumbnailStage(service, {});  // next job gets a fresh callback snapshot
+  QSignalSpy stopped(&service, &PreviewService::shutdownFinished);
+  int obsoletePublications = 0;
+  const auto observer = QObject::connect(&service, &PreviewService::changed, &service, [&] {
+    if (service.image().width() == 256 || service.previewErrorKind() != PreviewService::PreviewErrorKind::None) {
+      ++obsoletePublications;
+    }
+  });
+  if (action == 0) {
+    service.clear();
+  } else if (action == 1) {
+    for (int i = 0; i < 8; ++i) {
+      setTargetFromFile(service, i % 2 == 0 ? latest : path);
+    }
+    service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {512, 512});
+    setTargetFromFile(service, latest);
+  } else if (action == 2) {
+    service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {512, 512});
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !PreviewServiceTestAccess::resizePending(service); }, 1000));
+  } else {
+    service.shutdown();
+  }
+  release.release();
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !PreviewServiceTestAccess::activeJob(service); }, 5000));
+  EXPECT_FALSE(waitExpired.load());
+  EXPECT_EQ(laterStages.load(), 0);
+  EXPECT_EQ(obsoletePublications, 0);
+  QObject::disconnect(observer);
+  EXPECT_TRUE(QDir(cacheHome.path() + "/thumbnails/large").entryList({"*.png"}, QDir::Files).isEmpty());
+  EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::None);
+  if (action == 1 || action == 2) {
+    ASSERT_TRUE(settled(service));
+    EXPECT_TRUE(service.hasImage());
+    EXPECT_EQ(service.name(), action == 1 ? "latest.jpg" : "obsolete.jpg");
+    EXPECT_GE(service.image().width(), action == 1 ? 256 : 512);
+  } else if (action == 0) {
+    EXPECT_FALSE(service.hasImage());
+    // Revisiting must decode: cancelled work must not have entered the memory cache.
+    std::atomic_int decodes = 0;
+    PreviewServiceTestAccess::beforeFullDecode(service, [&] { ++decodes; });
+    setTargetFromFile(service, path);
+    ASSERT_TRUE(settled(service));
+    EXPECT_EQ(decodes.load(), 1);
+  } else {
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !stopped.isEmpty(); }, 2000));
+    EXPECT_EQ(service.image().width(), 128);  // only the original successful preview remains
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(ThumbnailBoundaries, PreviewThumbnailCancellation,
+                         testing::Combine(testing::Values(ThumbnailService::Stage::OriginalDecoded,
+                                                          ThumbnailService::Stage::BeforeCommit),
+                                          testing::Values(0, 1, 2, 3)));

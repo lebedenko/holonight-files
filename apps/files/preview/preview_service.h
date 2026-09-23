@@ -3,6 +3,7 @@
 #include "exif_reader.h"
 #include "text_line_model.h"
 #include "text_preview_service.h"
+#include "thumbnail_service.h"
 
 #include <QAbstractItemModel>
 #include <QDateTime>
@@ -150,6 +151,7 @@ class PreviewService : public QObject {
   // Snapshotted on the UI thread before dispatch; lets tests deterministically exercise the
   // 3-second decode timeout without a pathological fixture (see DirectoryModel's analogous
   // before_open_for_test_ seam).
+  ThumbnailService::StageCallback thumbnail_stage_for_test_;
   std::function<void()> before_dispatch_for_test_;
   std::function<void()> before_full_decode_for_test_;
   std::shared_ptr<PreviewWorkerCache> cache_;
