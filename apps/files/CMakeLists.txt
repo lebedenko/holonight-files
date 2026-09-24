@@ -1,4 +1,7 @@
 add_library(files-private STATIC
+  storage/devices_model.cpp
+  storage/devices_model.h
+  storage/storage_filter.h
   application/directory_controller.cpp
   application/directory_controller.h
   application/editing_session.cpp
@@ -75,6 +78,7 @@ add_library(files-private STATIC
   state/state_store.h
 )
 target_include_directories(files-private PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/storage"
   "${CMAKE_CURRENT_SOURCE_DIR}/application"
   "${CMAKE_CURRENT_SOURCE_DIR}/browsing"
   "${CMAKE_CURRENT_SOURCE_DIR}/operations"
@@ -84,7 +88,7 @@ target_include_directories(files-private PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/state"
   "${CMAKE_CURRENT_SOURCE_DIR}/places"
 )
-target_link_libraries(files-private PUBLIC Qt6::Quick Qt6::Svg HolonightImages::Images PRIVATE tomlplusplus::tomlplusplus)
+target_link_libraries(files-private PUBLIC HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images PRIVATE tomlplusplus::tomlplusplus)
 
 qt_extract_metatypes(files-private)
 
@@ -96,6 +100,7 @@ function(add_files_application target)
     qml/AppHeaderBar.qml
     qml/listing/DirectoryListing.qml
     qml/places/PlacesPanel.qml
+    qml/places/DevicesPanel.qml
     qml/inspection/PreviewPane.qml
     qml/inspection/QuickLookOverlay.qml
     qml/status/ModeStatusBar.qml

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "devices_model.h"
 #include "directory_controller.h"
 #include "directory_proxy_model.h"
 #include "places_model.h"
@@ -48,5 +49,12 @@ struct PreviewServiceRegistration {
   Q_GADGET
   QML_FOREIGN(PreviewService)
   QML_NAMED_ELEMENT(PreviewService)
+  QML_UNCREATABLE("Created by the application")
+};
+
+struct DevicesModelRegistration {
+  Q_GADGET
+  QML_FOREIGN(DevicesModel)
+  QML_NAMED_ELEMENT(DevicesModel)
   QML_UNCREATABLE("Created by the application")
 };

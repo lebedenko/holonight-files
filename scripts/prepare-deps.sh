@@ -7,7 +7,7 @@ parallel_args=()
 if [[ -n ${JOBS:-} ]]; then
   parallel_args=(--parallel "$JOBS")
 fi
-providers=(holonight-config holonight-qt holonight-images)
+providers=(holonight-config holonight-qt holonight-images holonight-system-services)
 declare -A source_dirs revisions
 
 for provider in "${providers[@]}"; do
@@ -16,8 +16,10 @@ for provider in "${providers[@]}"; do
     source_dir=${HOLONIGHT_CONFIG_SOURCE:-$source_dir}
   elif [[ $provider == holonight-qt ]]; then
     source_dir=${HOLONIGHT_QT_SOURCE:-$source_dir}
-  else
+  elif [[ $provider == holonight-images ]]; then
     source_dir=${HOLONIGHT_IMAGES_SOURCE:-$source_dir}
+  else
+    source_dir=${HOLONIGHT_SYSTEM_SERVICES_SOURCE:-$source_dir}
   fi
 
   source_dir=$(cd "$source_dir" && pwd -P)
@@ -41,10 +43,14 @@ fi
 
 for provider in "${needs_refresh[@]}"; do
   source_dir=${source_dirs[$provider]}
+  component_args=()
+  if [[ $provider == holonight-system-services ]]; then
+    component_args=(-DBUILD_AUDIO=OFF -DBUILD_STORAGE=ON)
+  fi
   cmake -S "$source_dir" -B "$root/build/deps/$provider" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" \
     -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_PREFIX_PATH="$prefix" \
-    -DBUILD_TESTING=OFF -DBUILD_TESTS=OFF -DBUILD_WAYLAND=OFF
+    -DBUILD_TESTING=OFF -DBUILD_TESTS=OFF -DBUILD_WAYLAND=OFF "${component_args[@]}"
   cmake --build "$root/build/deps/$provider" "${parallel_args[@]}"
   cmake --install "$root/build/deps/$provider"
 done

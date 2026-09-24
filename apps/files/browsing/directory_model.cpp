@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QSemaphore>
 
 #include <cerrno>
@@ -283,6 +284,18 @@ void DirectoryModel::validateForRestore(const QString& path) {
       },
       Qt::QueuedConnection);
 }
+void DirectoryModel::resolveLocation(const QString& path, quint64 generation) {
+  // Runs on the existing filesystem worker, never on the GUI thread.
+  const auto canonicalPath = QFileInfo(path).canonicalFilePath();
+  QMetaObject::invokeMethod(
+      this,
+      [this, path, canonicalPath, generation] {
+        if (generation == generation_ && !stopping_ && !updates_suspended_) {
+          emit locationResolved(path, canonicalPath);
+        }
+      },
+      Qt::QueuedConnection);
+}
 void DirectoryModel::startWalk(const QString& path, bool diff) {
   const auto generation = generation_;
   cancellation_ = std::make_shared<std::atomic_bool>(false);
@@ -299,6 +312,9 @@ void DirectoryModel::startWalk(const QString& path, bool diff) {
   QMetaObject::invokeMethod(
       worker_,
       [this, path, generation, diff, cancel, beforeOpen, readErrorAfter, deliverySlots, classifier, acceptedLoad] {
+        if (!cancel->load()) {
+          resolveLocation(path, generation);
+        }
         walkDirectory(path, cancel, beforeOpen, readErrorAfter,
                       [this, path, generation, diff, cancel, deliverySlots, classifier, acceptedLoad](
                           QList<DirectoryEntry> entries, bool finished, QString error) {

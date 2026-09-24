@@ -3,14 +3,16 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 context=$(mktemp -d "$root/build/runtime-check.XXXXXX")
-for provider in holonight-config holonight-qt holonight-images; do
+for provider in holonight-config holonight-qt holonight-images holonight-system-services; do
   provider_build="$root/build/deps/$provider"
   if [[ "$provider" == holonight-config ]]; then
     provider_build=${HOLONIGHT_CONFIG_BUILD:-$provider_build}
   elif [[ "$provider" == holonight-qt ]]; then
     provider_build=${HOLONIGHT_QT_BUILD:-$provider_build}
-  else
+  elif [[ "$provider" == holonight-images ]]; then
     provider_build=${HOLONIGHT_IMAGES_BUILD:-$provider_build}
+  else
+    provider_build=${HOLONIGHT_SYSTEM_SERVICES_BUILD:-$provider_build}
   fi
   DESTDIR="$context/payload" cmake --install "$provider_build" --prefix /usr
 done

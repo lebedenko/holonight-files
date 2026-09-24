@@ -24,6 +24,7 @@ void NavigationSession::openInternal(const QString& requestedPath, const QString
   ++navigation_serial_;
   controller_.resetForNavigation();
   current_path_ = path;
+  controller_.devices_->navigationChanged(path);
   controller_.status_message_ = fallbackReason;
   cursor_row_ = 0;
   // Every navigation replaces whatever restore a superseded one was still waiting on (REQ-F-016).

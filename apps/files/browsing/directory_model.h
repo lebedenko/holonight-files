@@ -85,6 +85,7 @@ class DirectoryModel : public QAbstractListModel {
   void restoreValidated(const QString& path, RestoreOutcome outcome);
   // A load() (never a refresh()) whose successful final batch was accepted by the UI;
   // classification may arrive after refresh, navigation or shutdown begins (REQ-F-019).
+  void locationResolved(const QString& path, const QString& canonicalPath);
   void loadSucceeded(const QString& path, LocationClassifier::Classification classification);
 
  private:
@@ -101,6 +102,7 @@ class DirectoryModel : public QAbstractListModel {
     bool finished = false;
     QString directory_error;
   };
+  void resolveLocation(const QString& path, quint64 generation);
   void startWalk(const QString& path, bool diff);
   void applyBatch(const Batch& batch);
   void appendEntries(const QList<DirectoryEntry>& entries);

@@ -451,3 +451,15 @@ The existing PNG thumbnail tiers carry a versioned SVG rendering-policy marker, 
 resources before memory/disk cache lookup. Local linked images and other external-resource SVGs show an unsupported
 preview explanation; ordinary opening in Viewer remains available. SVGZ previews are unsupported. See the
 [specification](docs/sdd/shared-svg-support/SPEC.md) and [acceptance tasks](docs/sdd/shared-svg-support/TASKS.md).
+
+## Storage devices
+
+Storage uses the independently instantiated `HoloNightSystem::Storage` component and UDisks2 on the system bus.
+Install the `udisks2` runtime package and retain an existing polkit agent for authorization prompts.
+Operations are manual: no automatic mounting, encrypted-volume unlocking or disk administration is provided.
+Eject and power-off are distinct actions; power-off first presents all affected drives and volumes, including
+siblings. Busy devices and authorization failures are reported without forced unmounts or automatic retries.
+
+The Devices sidebar includes removable media, empty readers and mounted fixed data volumes. Activating an unmounted removable volume mounts it before opening; later navigation cancels that activation. If the displayed filesystem is unmounted or removed, Files returns Home with an explanation.
+
+Development builds also require the sibling `holonight-system-services` repository; `task deps` installs its Storage component without Audio/libpulse.

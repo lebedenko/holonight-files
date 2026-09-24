@@ -1,8 +1,18 @@
 #include "directory_controller.h"
 
 #include <QCoreApplication>
+#include <QDir>
 
-DirectoryController::DirectoryController(QObject* parent) : QObject(parent) {
+DirectoryController::DirectoryController(QObject* parent) : DirectoryController(nullptr, parent) {}
+DirectoryController::DirectoryController(HoloNight::System::StorageController* storage, QObject* parent)
+    : QObject(parent), devices_(storage != nullptr ? new DevicesModel(storage, this) : new DevicesModel(this)) {
+  connect(devices_, &DevicesModel::openRequested, this, [this](const QString& path) { open(path); });
+  connect(devices_, &DevicesModel::recoveryRequested, this,
+          [this] { open(QDir::homePath(), tr("Storage was unmounted or disconnected. Returned to Home.")); });
+  connect(this, &DirectoryController::changed, this, [this] {
+    devices_->setInteractionEnabled(vim_.currentMode() == VimModeController::Mode::Normal && !tasks_.hasPrompt() &&
+                                    !quickLookOpen());
+  });
   QCoreApplication::instance()->installEventFilter(&window_events_);
   navigation_.proxy_.setSourceModel(&navigation_.model_);
   // Ahead of the forwarding connection, so observers never see a settled listing whose cursor has
@@ -11,6 +21,7 @@ DirectoryController::DirectoryController(QObject* parent) : QObject(parent) {
   connect(&navigation_.model_, &DirectoryModel::changed, this, &DirectoryController::changed);
   connect(&navigation_.model_, &DirectoryModel::shutdownFinished, this,
           [this] { lifecycle_.workerFinished(&navigation_.model_); });
+  connect(&navigation_.model_, &DirectoryModel::locationResolved, devices_, &DevicesModel::resolvedLocation);
   connect(&navigation_.model_, &DirectoryModel::restoreValidated, this, &DirectoryController::handleRestoreValidated);
   connect(&places_, &PlacesModel::bookmarkRecheckResolved, this, &DirectoryController::handleBookmarkRecheckResolved);
   connect(&navigation_.model_, &DirectoryModel::loadSucceeded, this,

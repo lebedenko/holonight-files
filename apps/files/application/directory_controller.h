@@ -1,5 +1,6 @@
 #pragma once
 #include "clipboard_register.h"
+#include "devices_model.h"
 #include "directory_model.h"
 #include "directory_proxy_model.h"
 #include "editing_session.h"
@@ -35,6 +36,7 @@ class DirectoryController : public QObject {
   Q_PROPERTY(int cursorRow READ cursorRow NOTIFY changed)
   Q_PROPERTY(DirectoryProxyModel* listing READ listing CONSTANT)
   Q_PROPERTY(PlacesModel* places READ places CONSTANT)
+  Q_PROPERTY(DevicesModel* devices READ devices CONSTANT)
   Q_PROPERTY(PreviewService* preview READ preview CONSTANT)
   Q_PROPERTY(VimModeController* vim READ vim CONSTANT)
   Q_PROPERTY(TaskManager* tasks READ tasks CONSTANT)
@@ -43,6 +45,7 @@ class DirectoryController : public QObject {
   Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
  public:
   explicit DirectoryController(QObject* parent = nullptr);
+  DirectoryController(HoloNight::System::StorageController* storage, QObject* parent);
   QString currentPath() const { return navigation_.current_path_; }
   QString statusMessage() const { return status_message_; }
   QString directoryError() const { return navigation_.model_.directoryError(); }
@@ -50,6 +53,7 @@ class DirectoryController : public QObject {
   int cursorRow() const { return navigation_.cursor_row_; }
   DirectoryProxyModel* listing() { return &navigation_.proxy_; }
   PlacesModel* places() { return &places_; }
+  DevicesModel* devices() { return devices_; }
   PreviewService* preview() { return &preview_; }
   VimModeController* vim() { return &vim_; }
   TaskManager* tasks() { return &tasks_; }
@@ -137,6 +141,7 @@ class DirectoryController : public QObject {
   void requestTrash(bool wholeVisualSelection);
 
   PlacesModel places_;
+  DevicesModel* devices_;
   PreviewService preview_;
   VimModeController vim_;
   TaskManager tasks_;
