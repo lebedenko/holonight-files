@@ -9,4 +9,10 @@ Extend thumbnail_service to use a versioned SVG policy marker and existing tiers
 SVG resources before both worker memory lookup and disk lookup. Keep source geometry out of rendered-pixel adequacy.
 Use explicit Disabled animation, output-byte policy and translated unsupported-resource errors. Skip the EXIF stage.
 
-Implementation may begin only after SVG-001 is published and pinned. No consumer implementation has started.
+Implementation uses published/pinned provider 3da5f4e51fe2eed9a1bd9f72c0ab523aa57a5ceb.
+
+## Implementation files
+
+`preview/image_policy.h`, `preview/preview_service.{h,cpp}`, `preview/thumbnail_service.{h,cpp}`,
+`presentation/quick_look_presentation_model.{h,cpp}` and preview/Quick Look QML; regressions in
+`preview_service_test.cpp`, `thumbnail_service_test.cpp` and `quick_look_presentation_model_test.cpp`.

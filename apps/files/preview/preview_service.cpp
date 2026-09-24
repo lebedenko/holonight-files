@@ -11,6 +11,7 @@
 
 #include <cstring>
 #include <fcntl.h>
+#include <holonight_images/svg.h>
 #include <list>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -29,6 +30,8 @@ struct PreviewResult {
   QImage image;
   std::optional<HolonightImages::Outcome> raster_outcome;
   QSize source_pixel_size;
+  QSizeF document_size;
+  ThumbnailService::ImageKind image_kind = ThumbnailService::ImageKind::Raster;
   ExifReader::ExifSummary exif;
   bool has_text = false;
   TextPreviewService::TextPreviewResult text;
@@ -132,6 +135,7 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
     return result;
   }
   result.source_pixel_size = inspection.orientedSize;
+  result.document_size = inspection.orientedSize;
   const auto needed = ThumbnailService::requiredSize(result.source_pixel_size, requestedSize);
   const auto tier = result.source_pixel_size.isValid() && !result.source_pixel_size.isEmpty()
                         ? ThumbnailService::tierForSize(needed)
@@ -191,6 +195,65 @@ PreviewResult decodeImage(QFile& file, const QString& path, const QString& ident
   return result;
 }
 
+PreviewResult decodeSvg(QFile& file, const QString& path, const QString& identity, PreviewResult result,
+                        const std::shared_ptr<std::atomic_bool>& cancel, QSize requestedSize, PreviewWorkerCache& cache,
+                        const std::function<void()>& beforeFullDecode, const ThumbnailService::StageCallback& stage) {
+  if (!requestedSize.isValid() || requestedSize.isEmpty()) {
+    requestedSize = QSize(1024, 1024);
+  }
+  result.image_kind = ThumbnailService::ImageKind::Svg;
+  result.mime_type = QStringLiteral("image/svg+xml");
+  result.gate_mime = result.mime_type;
+  const auto source = HolonightImages::loadSvg(file, kPreviewSvgInputBytes, *cancel);
+  result.raster_outcome = source.outcome;
+  if (source.outcome != HolonightImages::Outcome::Success) {
+    return result;
+  }
+  const auto inspection = HolonightImages::inspectSvg(source.bytes, *cancel);
+  result.raster_outcome = inspection.outcome;
+  if (inspection.outcome == HolonightImages::Outcome::Unsupported) {
+    result.raster_outcome.reset();
+    result.error = {.kind = PreviewService::PreviewErrorKind::Unsupported,
+                    .message = QObject::tr("This SVG cannot be previewed because it contains unsupported resource "
+                                           "references. Open it in Viewer to view local linked images.")};
+    return result;
+  }
+  if (inspection.outcome != HolonightImages::Outcome::Success || cancel->load()) {
+    return result;
+  }
+  result.document_size = inspection.facts.documentSize;
+  result.source_pixel_size = result.document_size.toSize().expandedTo(QSize(1, 1));
+  const auto needed = ThumbnailService::requiredSize(result.document_size, requestedSize, result.image_kind);
+  const auto tier = ThumbnailService::tierForSize(needed);
+  // Resource validation precedes both memory and disk lookup, on every request.
+  const auto cacheIdentity = identity + QStringLiteral(":svg-self-contained-static-v1");
+  result.image = cache.lookup(cacheIdentity, needed);
+  if (result.image.isNull() && tier) {
+    const auto cached =
+        ThumbnailService::lookup(file, path, identity, *tier, needed, *cancel, stage, result.image_kind);
+    if (cached) {
+      result.image = cached->image;
+      result.raster_outcome = cached->outcome;
+    }
+  }
+  if (cancel->load() || result.raster_outcome == HolonightImages::Outcome::Cancelled) {
+    return result;
+  }
+  if (result.image.isNull()) {
+    if (beforeFullDecode) {
+      beforeFullDecode();
+    }
+    auto rendered =
+        ThumbnailService::renderSvg(file, path, identity, source.bytes, requestedSize, tier, *cancel, stage);
+    result.image = std::move(rendered.image);
+    result.raster_outcome = rendered.outcome;
+  }
+  if (!cancel->load() && !result.image.isNull()) {
+    cache.insert(cacheIdentity, result.image);
+  }
+  return result;
+}
+
 // Runs entirely on PreviewService's worker thread. Mirrors DirectoryModel's walkDirectory: a free
 // function with no Qt object identity, cooperatively cancellable at each stage boundary.
 PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::shared_ptr<std::atomic_bool>& cancel,
@@ -246,6 +309,15 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
   result.mime_type = mime.name();
   result.gate_mime = mime.name();
   result.mime_type_description = mime.comment();
+  if (mime.name() == QLatin1String("image/svg+xml") ||
+      QFileInfo(path).suffix().compare(QLatin1String("svg"), Qt::CaseInsensitive) == 0) {
+    return decodeSvg(file, path, identity, result, cancel, requestedSize, cache, beforeFullDecode, stage);
+  }
+  if (mime.name() == QLatin1String("image/svg+xml-compressed")) {
+    result.error = {.kind = PreviewService::PreviewErrorKind::Unsupported,
+                    .message = QObject::tr("Compressed SVG previews are not supported.")};
+    return result;
+  }
   if (mime.name().startsWith(QStringLiteral("image/"))) {
     return decodeImage(file, path, identity, result, cancel, requestedSize, cache, publish, beforeFullDecode, stage);
   }
@@ -283,7 +355,7 @@ PreviewService::PreviewService(QObject* parent)
   resize_debounce_timer_.setSingleShot(true);
   connect(&resize_debounce_timer_, &QTimer::timeout, this, [this] {
     if (has_entry_ && !is_dir_ && !timed_out_) {
-      const auto needed = ThumbnailService::requiredSize(source_pixel_size_, requested_size_);
+      const auto needed = ThumbnailService::requiredSize(document_size_, requested_size_, image_kind_);
       const auto available = busy_ ? dispatched_size_ : display_image_.size();
       if (needed.width() > available.width() || needed.height() > available.height()) {
         dispatch();
@@ -438,7 +510,7 @@ void PreviewService::startJob() {
   const auto cancel = cancellation_;
   const auto path = path_;
   const auto size = requested_size_.isValid() && !requested_size_.isEmpty() ? requested_size_ : QSize(1024, 1024);
-  dispatched_size_ = ThumbnailService::requiredSize(source_pixel_size_, size);
+  dispatched_size_ = ThumbnailService::requiredSize(document_size_, size, image_kind_);
   const auto beforeDispatch = before_dispatch_for_test_;
   const auto stage = thumbnail_stage_for_test_;
   const auto beforeFull = before_full_decode_for_test_;
@@ -494,6 +566,8 @@ void PreviewService::applyResult(const PreviewResult& result) {
     display_image_ = result.image;
   }
   source_pixel_size_ = result.source_pixel_size;
+  document_size_ = result.document_size;
+  image_kind_ = result.image_kind;
   exif_ = result.exif;
   has_text_ = result.has_text;
   text_ = result.text;
@@ -526,6 +600,8 @@ void PreviewService::cancelInFlight() {
 void PreviewService::resetDisplayState() {
   display_image_ = QImage();
   source_pixel_size_ = QSize();
+  document_size_ = {};
+  image_kind_ = ThumbnailService::ImageKind::Raster;
   exif_ = ExifReader::ExifSummary();
   mime_type_description_.clear();
   gate_mime_.clear();

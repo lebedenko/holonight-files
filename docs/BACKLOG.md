@@ -206,3 +206,9 @@ Current single-monitor qualification is complete: T5 passed at actual
 1/1.25/1.6/2 with 20 pairs, 40 startups and 72 accepted reference comparisons.
 1.5× was unavailable at the preserved mode; the user approved actual 1.6×.
 The user authorized publication and pinning; the umbrella ledger records the final checkpoint.
+
+## Shared SVG previews
+
+Implementation and focused coverage are in place for explicit self-contained SVG previews, vector-aware DPR sizing,
+resource validation and policy-marked thumbnails. Full and native acceptance status is tracked in
+[shared SVG tasks](sdd/shared-svg-support/TASKS.md).

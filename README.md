@@ -438,3 +438,16 @@ provenance is retained. Intentional provenance differences require one exact
 No timing gate or statistical significance is inferred. Old datasets without the
 versioned contract must be recollected. See the
 [maintenance SDD](docs/sdd/shared-image-maintenance/SPEC.md).
+
+## SVG previews
+
+Preview pane and Quick Look explicitly inspect uncompressed SVG with HoloNight Images, independently of the Qt SVG
+image-reader plugin. Source reads use the verified descriptor and a 10 MiB limit. Self-contained SVGs render as
+static transparent images at the viewport's requested physical pixel size, including enlargement and fractional DPR.
+Document dimensions remain separate from rendered pixels and SVG skips EXIF. Default dimensions take precedence
+over viewBox geometry, with positive finite viewBox fallback.
+
+The existing PNG thumbnail tiers carry a versioned SVG rendering-policy marker, and every request validates source
+resources before memory/disk cache lookup. Local linked images and other external-resource SVGs show an unsupported
+preview explanation; ordinary opening in Viewer remains available. SVGZ previews are unsupported. See the
+[specification](docs/sdd/shared-svg-support/SPEC.md) and [acceptance tasks](docs/sdd/shared-svg-support/TASKS.md).

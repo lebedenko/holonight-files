@@ -271,3 +271,20 @@ TEST_F(QuickLookPresentationTest, ObserversSeeConsistentOutputs) {
   ASSERT_TRUE(waitForPreview());
   EXPECT_TRUE(sawImage);
 }
+
+TEST_F(QuickLookPresentationTest, SvgFractionalGeometryAndDprDriveSharpPreview) {
+  const auto path = files_test::writeFile(directory(), "fractional.svg",
+                                          "<svg xmlns='http://www.w3.org/2000/svg' width='0.25' height='0.5'/>");
+  model().setDevicePixelRatio(1.25);
+  service().setQuickLookActive(true);
+  selectFile(service(), path);
+  ASSERT_TRUE(waitForPreview());
+  EXPECT_EQ(model().kind(), Kind::Image);
+  EXPECT_EQ(model().frameSize(), QSizeF(333, 666));
+  EXPECT_EQ(service().documentSize(), QSizeF(0.25, 0.5));
+  EXPECT_GE(service().image().height(), 833);
+  const auto requests = Access::requestedSizeCallCount(model());
+  ASSERT_TRUE(
+      QTest::qWaitFor([&] { return !PreviewServiceTestAccess::resizePending(service()) && !service().busy(); }));
+  EXPECT_EQ(Access::requestedSizeCallCount(model()), requests);
+}

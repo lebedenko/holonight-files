@@ -84,7 +84,7 @@ class QuickLookPresentationModel : public QObject, public QQmlParserStatus {
   qreal hint_implicit_width_ = 0;
   Kind kind_ = Kind::None;
   Kind retained_kind_ = Kind::Compact;
-  QSize retained_source_size_;
+  QSizeF retained_source_size_;
   QSizeF card_size_ = QSizeF(0, 0);
   QSizeF frame_size_ = QSizeF(0, 0);
   QSize last_requested_size_;

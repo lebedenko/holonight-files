@@ -12,6 +12,7 @@
 #include <QUrl>
 
 #include <array>
+#include <holonight_images/svg.h>
 
 namespace ThumbnailService {
 namespace {
@@ -56,8 +57,13 @@ void ensureCacheDir(const QString& dir) {
 // silently truncated at the first colon). QImage's own constructor performs a full decode, so it
 // sees the chunks correctly; validation therefore loads the candidate image fully rather than
 // peeking its header, at the cost of one bounded cache-image decode per candidate.
-bool cacheEntryValid(const QImage& cached, const QString& uri, const QFileInfo& sourceInfo) {
+bool cacheEntryValid(const QImage& cached, const QString& uri, const QFileInfo& sourceInfo, ImageKind kind) {
   if (cached.isNull() || cached.text(QStringLiteral("Files::OrientationPolicy")) != QStringLiteral("applied-v1")) {
+    return false;
+  }
+  const auto svgPolicy = cached.text(QStringLiteral("Files::SvgPolicy"));
+  if ((kind == ImageKind::Svg && svgPolicy != QStringLiteral("self-contained-static-v1")) ||
+      (kind == ImageKind::Raster && !svgPolicy.isEmpty())) {
     return false;
   }
   if (cached.text(QStringLiteral("Thumb::URI")) != uri) {
@@ -122,12 +128,16 @@ std::optional<Result> readCacheEntry(QFile& cachedFile, Tier tier, QSize require
 }
 
 void writeCacheEntry(const QString& cachePath, const QImage& image, const QString& uri, const QFileInfo& sourceInfo,
-                     const QString& revision, const std::atomic_bool& cancelled, const StageCallback& stage) {
+                     const QString& revision, const std::atomic_bool& cancelled, const StageCallback& stage,
+                     ImageKind kind = ImageKind::Raster) {
   if (cancelled.load()) {
     return;
   }
   QImage tagged = image;
   tagged.setText(QStringLiteral("Files::Revision"), revision);
+  if (kind == ImageKind::Svg) {
+    tagged.setText(QStringLiteral("Files::SvgPolicy"), QStringLiteral("self-contained-static-v1"));
+  }
   tagged.setText(QStringLiteral("Files::OrientationPolicy"), QStringLiteral("applied-v1"));
   tagged.setText(QStringLiteral("Thumb::URI"), uri);
   tagged.setText(QStringLiteral("Thumb::MTime"), QString::number(sourceInfo.lastModified().toSecsSinceEpoch()));
@@ -164,14 +174,17 @@ Result lookupOrDecode(const QString& path) {
   return lookupOrDecode(file, path, {}, cancelled);
 }
 
-QSize requiredSize(QSize source, QSize bound) {
+QSize requiredSize(QSizeF source, QSize bound, ImageKind kind) {
   if (!bound.isValid() || bound.isEmpty()) {
     bound = QSize(1024, 1024);
   }
   if (!source.isValid() || source.isEmpty()) {
     return bound;
   }
-  return source.scaled(bound.boundedTo(source), Qt::KeepAspectRatio).expandedTo(QSize(1, 1));
+  if (kind == ImageKind::Svg) {
+    return HolonightImages::svgPixelSize(source, bound);
+  }
+  return source.toSize().scaled(bound.boundedTo(source.toSize()), Qt::KeepAspectRatio).expandedTo(QSize(1, 1));
 }
 
 std::optional<Tier> tierForSize(QSize required) {
@@ -187,7 +200,7 @@ std::optional<Tier> tierForSize(QSize required) {
 }
 
 std::optional<Result> lookup(QFile& file, const QString& path, const QString& revision, Tier selected, QSize required,
-                             const std::atomic_bool& cancelled, const StageCallback& stage) {
+                             const std::atomic_bool& cancelled, const StageCallback& stage, ImageKind kind) {
   if (cancelled.load()) {
     return Result{{}, Outcome::Cancelled};
   }
@@ -208,13 +221,46 @@ std::optional<Result> lookup(QFile& file, const QString& path, const QString& re
     if (cancelled.load() || (cached && cached->outcome == Outcome::Cancelled)) {
       return Result{{}, Outcome::Cancelled};
     }
-    if (cached && cacheEntryValid(cached->image, uri, sourceInfo) && cached->image.width() >= required.width() &&
+    if (cached && cacheEntryValid(cached->image, uri, sourceInfo, kind) && cached->image.width() >= required.width() &&
         cached->image.height() >= required.height() &&
         (revision.isEmpty() || cached->image.text(QStringLiteral("Files::Revision")) == revision)) {
       return cancelled.load() ? Result{{}, Outcome::Cancelled} : *cached;
     }
   }
   return std::nullopt;
+}
+
+Result renderSvg(QFile& file, const QString& path, const QString& revision, const QByteArray& bytes, QSize bound,
+                 std::optional<Tier> tier, const std::atomic_bool& cancelled, const StageCallback& stage) {
+  if (cancelled.load()) {
+    return {{}, Outcome::Cancelled};
+  }
+  if (tier) {
+    bound = QSize(static_cast<int>(*tier), static_cast<int>(*tier));
+  }
+  if (stage) {
+    stage(Stage::OriginalDecode);
+  }
+  auto decoded = HolonightImages::rasterizeSvg(bytes, {.bound = bound, .outputBytes = kPreviewImageLimits.decodedBytes},
+                                               cancelled);
+  if (cancelled.load()) {
+    return {{}, Outcome::Cancelled};
+  }
+  if (stage) {
+    stage(Stage::OriginalDecoded);
+  }
+  if (cancelled.load()) {
+    return {{}, Outcome::Cancelled};
+  }
+  if (decoded.inspection.outcome == Outcome::Success && tier) {
+    const auto uri = QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded);
+    const auto dir = cacheDir(*tier);
+    ensureCacheDir(dir);
+    writeCacheEntry(dir + QLatin1Char('/') + cacheKeyFor(uri) + QStringLiteral(".png"), decoded.image, uri,
+                    QFileInfo(file), revision, cancelled, stage, ImageKind::Svg);
+  }
+  return cancelled.load() ? Result{{}, Outcome::Cancelled}
+                          : Result{std::move(decoded.image), decoded.inspection.outcome};
 }
 
 Result lookupOrDecode(QFile& file, const QString& path, const QString& revision, Tier tier, QSize required,

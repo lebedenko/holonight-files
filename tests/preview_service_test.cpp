@@ -944,3 +944,153 @@ TEST(PreviewService, MetadataLimitDoesNotFailPixelsAndSelectionResetsStatus) {
   service.clear();
   EXPECT_FALSE(PreviewServiceTestAccess::exif(service).outcome);
 }
+
+namespace {
+QByteArray smallSvg(const QByteArray& body = "<rect width='12' height='12' fill='red'/>") {
+  return "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'>" + body + "</svg>";
+}
+}  // namespace
+TEST(PreviewService, SvgEnlargesForPaneAndQuickLookAndStopsRedispatching) {
+  QTemporaryDir dir(fixturePattern("svg-preview"));
+  const auto path = writeFile(dir, "small.svg", smallSvg());
+  PreviewService service;
+  std::atomic_int starts = 0;
+  PreviewServiceTestAccess::beforeDispatch(service, [&] { ++starts; });
+  service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {300, 300});
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_TRUE(service.vectorImage());
+  EXPECT_EQ(service.documentSize(), QSizeF(24, 24));
+  EXPECT_EQ(service.image().size(), QSize(512, 512));
+  EXPECT_EQ(service.image().pixelColor(20, 20), QColor(Qt::red));
+  EXPECT_EQ(service.image().pixelColor(400, 400).alpha(), 0);
+  EXPECT_FALSE(service.exifPresent());
+  EXPECT_TRUE(service.quickLookEligible());
+  service.setRequestedSize(PreviewService::PreviewConsumer::QuickLook, {1401, 1401});
+  service.setQuickLookActive(true);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return service.image().width() == 1401; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !PreviewServiceTestAccess::resizePending(service) && !service.busy(); }));
+  EXPECT_EQ(starts.load(), 2);
+}
+TEST(PreviewService, SvgFractionalGeometryUsesOriginalPixelBoundExactlyOnce) {
+  QTemporaryDir dir(fixturePattern("svg-fractional"));
+  const auto path =
+      writeFile(dir, "fraction.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='7.5' height='3.5'/>");
+  PreviewService service;
+  std::atomic_int starts = 0;
+  PreviewServiceTestAccess::beforeDispatch(service, [&] { ++starts; });
+  service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {1375, 1375});
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.documentSize(), QSizeF(7.5, 3.5));
+  EXPECT_EQ(service.image().size(), QSize(1375, 642));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !PreviewServiceTestAccess::resizePending(service) && !service.busy(); }));
+  EXPECT_EQ(starts.load(), 1);
+}
+TEST(PreviewService, SvgDispatchUsesMimeOrSuffixAndValidatesContent) {
+  QTemporaryDir dir(fixturePattern("svg-dispatch"));
+  PreviewService service;
+  const auto extensionless = writeFile(dir, "vector", smallSvg());
+  setTargetFromFile(service, extensionless);
+  ASSERT_TRUE(settled(service));
+  EXPECT_TRUE(service.vectorImage());
+  EXPECT_TRUE(service.hasImage());
+  const auto invalid = writeFile(dir, "invalid.SVG", "<not-svg/>");
+  setTargetFromFile(service, invalid);
+  ASSERT_TRUE(settled(service));
+  EXPECT_FALSE(service.hasImage());
+  EXPECT_FALSE(service.hasText());
+  EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::DecodeFailed);
+}
+TEST(PreviewService, SvgPolicyValidationPrecedesThumbnailLookup) {
+  QTemporaryDir dir(fixturePattern("svg-policy"));
+  const auto path = writeFile(dir, "external.svg", smallSvg("<image href='linked.png'/>"));
+  QFile source(path);
+  ASSERT_TRUE(source.open(QIODevice::ReadOnly));
+  const std::atomic_bool running{false};
+  ASSERT_EQ(
+      ThumbnailService::renderSvg(source, path, {}, smallSvg(), {128, 128}, ThumbnailService::Tier::Normal, running)
+          .outcome,
+      HolonightImages::Outcome::Success);
+  PreviewService service;
+  service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {128, 128});
+  std::atomic_int cacheInspections = 0;
+  PreviewServiceTestAccess::thumbnailStage(service, [&](ThumbnailService::Stage stage) {
+    if (stage == ThumbnailService::Stage::CacheInspect) {
+      ++cacheInspections;
+    }
+  });
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_FALSE(service.hasImage());
+  EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::Unsupported);
+  EXPECT_TRUE(service.previewErrorMessage().contains("resource"));
+  EXPECT_TRUE(service.quickLookEligible());
+  EXPECT_EQ(cacheInspections.load(), 0);
+}
+TEST(PreviewService, SvgDiskAndMemoryCachesReuseValidatedPixels) {
+  QTemporaryDir dir(fixturePattern("svg-reuse"));
+  const auto path = writeFile(dir, "small.svg", smallSvg());
+  std::atomic_int decodes = 0;
+  {
+    PreviewService service;
+    PreviewServiceTestAccess::beforeFullDecode(service, [&] { ++decodes; });
+    service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {200, 200});
+    setTargetFromFile(service, path);
+    ASSERT_TRUE(settled(service));
+    ASSERT_TRUE(service.hasImage());
+    service.clear();
+    setTargetFromFile(service, path);
+    ASSERT_TRUE(settled(service));
+    EXPECT_EQ(decodes.load(), 1);
+  }
+  PreviewService second;
+  PreviewServiceTestAccess::beforeFullDecode(second, [&] { ++decodes; });
+  second.setRequestedSize(PreviewService::PreviewConsumer::Pane, {200, 200});
+  setTargetFromFile(second, path);
+  ASSERT_TRUE(settled(second));
+  EXPECT_TRUE(second.hasImage());
+  EXPECT_EQ(decodes.load(), 1);
+}
+TEST(PreviewService, SvgRetargetDuringRenderSuppressesStalePixelsAndCacheWrite) {
+  QTemporaryDir dir(fixturePattern("svg-stale"));
+  const auto path = writeFile(dir, "small.svg", smallSvg());
+  const auto text = writeSmallText(dir);
+  QSemaphore entered;
+  QSemaphore release;
+  std::atomic_int commits = 0;
+  PreviewService service;
+  const auto unblock = qScopeGuard([&] { release.release(); });
+  PreviewServiceTestAccess::thumbnailStage(service, [&](ThumbnailService::Stage stage) {
+    if (stage == ThumbnailService::Stage::BeforeCommit) {
+      ++commits;
+    }
+    if (stage == ThumbnailService::Stage::OriginalDecoded) {
+      entered.release();
+      release.acquire();
+    }
+  });
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return entered.available() > 0; }));
+  setTargetFromFile(service, text);
+  release.release();
+  ASSERT_TRUE(settled(service));
+  EXPECT_TRUE(service.hasText());
+  EXPECT_FALSE(service.hasImage());
+  EXPECT_FALSE(service.vectorImage());
+  EXPECT_EQ(commits.load(), 0);
+}
+
+TEST(PreviewService, SvgInputBudgetRejectsOversizedSource) {
+  QTemporaryDir dir(fixturePattern("svg-budget"));
+  const auto path = dir.filePath("oversized.svg");
+  QFile file(path);
+  ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+  ASSERT_TRUE(file.resize((10 * 1024 * 1024) + 1));
+  file.close();
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  EXPECT_FALSE(service.hasImage());
+  EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::ResourceLimit);
+}

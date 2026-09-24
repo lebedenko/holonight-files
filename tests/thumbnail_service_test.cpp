@@ -427,3 +427,29 @@ TEST(ThumbnailService, CacheMissAndSourceFailuresPreserveOutcomes) {
   const auto damaged = files_test::writeFile(dir, "damaged.png", files_test::renderPngBytes().first(45));
   EXPECT_EQ(decodeScaled(damaged, {100, 50}).outcome, Outcome::Damaged);
 }
+
+TEST(ThumbnailService, SvgPolicyMarkerRejectsLegacyThumbnailsAndRevisionMismatch) {
+  FakeCacheHome cacheHome;
+  QTemporaryDir dir(fixturePattern("svg-thumbnail"));
+  const QByteArray bytes("<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'/>");
+  const auto path = files_test::writeFile(dir, "small.svg", bytes);
+  QFile file(path);
+  ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+  const std::atomic_bool running{false};
+  auto rendered =
+      ThumbnailService::renderSvg(file, path, "revision", bytes, {100, 100}, ThumbnailService::Tier::Normal, running);
+  ASSERT_EQ(rendered.outcome, HolonightImages::Outcome::Success);
+  const auto lookup = [&](const QString& revision) {
+    return ThumbnailService::lookup(file, path, revision, ThumbnailService::Tier::Normal, {100, 100}, running, {},
+                                    ThumbnailService::ImageKind::Svg);
+  };
+  EXPECT_TRUE(lookup("revision").has_value());
+  EXPECT_FALSE(lookup("changed").has_value());
+  const auto cachePath = cachePathFor(cacheHome.dir.path(), path);
+  QImage legacy(cachePath);
+  ASSERT_FALSE(legacy.isNull());
+  EXPECT_EQ(legacy.text("Files::SvgPolicy"), "self-contained-static-v1");
+  legacy.setText("Files::SvgPolicy", {});
+  ASSERT_TRUE(legacy.save(cachePath, "PNG"));
+  EXPECT_FALSE(lookup("revision").has_value());
+}

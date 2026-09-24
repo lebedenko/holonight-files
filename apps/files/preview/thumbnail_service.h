@@ -22,11 +22,16 @@ struct Result {
   Result(QImage pixels, HolonightImages::Outcome status) : image(std::move(pixels)), outcome(status) {}
 };
 
+enum class ImageKind { Raster, Svg };
+
 enum class Tier { Normal = 128, Large = 256, XLarge = 512, XXLarge = 1024 };
-QSize requiredSize(QSize source, QSize bound);
+QSize requiredSize(QSizeF source, QSize bound, ImageKind kind = ImageKind::Raster);
 std::optional<Tier> tierForSize(QSize required);
 std::optional<Result> lookup(QFile& file, const QString& path, const QString& revision, Tier selected, QSize required,
-                             const std::atomic_bool& cancelled, const StageCallback& stage = {});
+                             const std::atomic_bool& cancelled, const StageCallback& stage = {},
+                             ImageKind kind = ImageKind::Raster);
+Result renderSvg(QFile& file, const QString& path, const QString& revision, const QByteArray& bytes, QSize bound,
+                 std::optional<Tier> tier, const std::atomic_bool& cancelled, const StageCallback& stage = {});
 Result lookupOrDecode(QFile& file, const QString& path, const QString& revision, Tier tier, QSize required,
                       const std::atomic_bool& cancelled, const StageCallback& stage = {});
 Result lookupOrDecode(const QString& path);

@@ -38,7 +38,7 @@ Item {
 
     // Row values; an empty string hides the row entirely (SPEC.md REQ-F-008/012).
     readonly property string sizeText: root.preview.mimeType === "inode/directory" ? qsTr("Dir") : SizeFormat.formatSize(root.preview.size)
-    readonly property string dimensionsText: root.preview.sourcePixelSize.width > 0 && root.preview.sourcePixelSize.height > 0 ? qsTr("%1 \u00d7 %2").arg(root.preview.sourcePixelSize.width).arg(root.preview.sourcePixelSize.height) : ""
+    readonly property string dimensionsText: root.preview.documentSize.width > 0 && root.preview.documentSize.height > 0 ? qsTr("%1 \u00d7 %2").arg(root.preview.documentSize.width).arg(root.preview.documentSize.height) : ""
     // formatModified()'s "Unavailable" sentinel hides the row rather than rendering (DESIGN.md
     // conflict item 1).
     readonly property string modifiedText: {
@@ -151,7 +151,7 @@ Item {
                 objectName: "previewImageArea"
                 // Source metadata, fixed per file and independent of the requested decode size; square
                 // until known, and always square for entries that are not images.
-                readonly property real aspectRatio: root.preview.sourcePixelSize.width > 0 && root.preview.sourcePixelSize.height > 0 ? root.preview.sourcePixelSize.height / root.preview.sourcePixelSize.width : 1
+                readonly property real aspectRatio: root.preview.documentSize.width > 0 && root.preview.documentSize.height > 0 ? root.preview.documentSize.height / root.preview.documentSize.width : 1
                 readonly property real frameHeight: Math.min(240, Math.round(width * aspectRatio))
 
                 Layout.fillWidth: true

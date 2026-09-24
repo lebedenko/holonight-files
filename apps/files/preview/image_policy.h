@@ -12,6 +12,8 @@ inline constexpr HolonightImages::Limits kPreviewImageLimits{.inputBytes = std::
                                                              .tiffMetadataBytes = 64 * 1024 * 1024,
                                                              .metadataRecords = 4096};
 
+inline constexpr qint64 kPreviewSvgInputBytes = 10 * 1024 * 1024;
+
 inline void configurePreviewImageLimits() {
   qputenv("QT_IMAGEIO_MAXALLOC", "256");
   QImageReader::setAllocationLimit(256);

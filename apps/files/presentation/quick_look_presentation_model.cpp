@@ -157,7 +157,7 @@ void QuickLookPresentationModel::updateGeometry() {
                         : Kind::None;
   if (kind != Kind::Pending && kind != Kind::None) {
     retained_kind_ = kind;
-    retained_source_size_ = preview_->sourcePixelSize();
+    retained_source_size_ = preview_->documentSize();
   }
   const auto bounds = window_size_ * 0.92;
   QSizeF card;
@@ -173,7 +173,7 @@ void QuickLookPresentationModel::updateGeometry() {
     frame = previewBounds();
     if (retained_kind_ == Kind::Image && retained_source_size_.width() > 0 && retained_source_size_.height() > 0) {
       // Preserve the previous zero-bounds result and allow small images to upscale.
-      frame = frame.isEmpty() ? QSizeF(0, 0) : QSizeF(retained_source_size_).scaled(frame, Qt::KeepAspectRatio);
+      frame = frame.isEmpty() ? QSizeF(0, 0) : retained_source_size_.scaled(frame, Qt::KeepAspectRatio);
     }
     frame = QSizeF(std::floor(frame.width()), std::floor(frame.height()));
     card =

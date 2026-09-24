@@ -68,6 +68,8 @@ class PreviewService : public QObject {
   Q_PROPERTY(QImage image READ image NOTIFY changed)
   // Full-resolution pixel dimensions after intrinsic image orientation.
   Q_PROPERTY(QSize sourcePixelSize READ sourcePixelSize NOTIFY changed)
+  Q_PROPERTY(bool vectorImage READ vectorImage NOTIFY changed)
+  Q_PROPERTY(QSizeF documentSize READ documentSize NOTIFY changed)
   Q_PROPERTY(bool exifPresent READ exifPresent NOTIFY changed)
   Q_PROPERTY(QString exifMake READ exifMake NOTIFY changed)
   Q_PROPERTY(QString exifModel READ exifModel NOTIFY changed)
@@ -104,6 +106,8 @@ class PreviewService : public QObject {
   bool hasImage() const { return !display_image_.isNull(); }
   QImage image() const { return display_image_; }
   QSize sourcePixelSize() const { return source_pixel_size_; }
+  bool vectorImage() const { return image_kind_ == ThumbnailService::ImageKind::Svg; }
+  QSizeF documentSize() const { return document_size_; }
   bool exifPresent() const { return exif_.present; }
   QString exifMake() const { return exif_.make; }
   QString exifModel() const { return exif_.model; }
@@ -191,6 +195,8 @@ class PreviewService : public QObject {
   bool timed_out_ = false;
   QImage display_image_;
   QSize source_pixel_size_;
+  QSizeF document_size_;
+  ThumbnailService::ImageKind image_kind_ = ThumbnailService::ImageKind::Raster;
   ExifReader::ExifSummary exif_;
   bool has_text_ = false;
   TextPreviewService::TextPreviewResult text_;

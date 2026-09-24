@@ -51,8 +51,8 @@ Controls.Popup {
         if (root.preview.mimeType.length === 0)
             return SizeFormat.formatSize(root.preview.size);
         if (root.preview.mimeType.indexOf("image/") === 0) {
-            if (root.preview.sourcePixelSize.width > 0 && root.preview.sourcePixelSize.height > 0)
-                return qsTr("%1 × %2 · %3").arg(root.preview.sourcePixelSize.width).arg(root.preview.sourcePixelSize.height).arg(SizeFormat.formatSize(root.preview.size));
+            if (root.preview.documentSize.width > 0 && root.preview.documentSize.height > 0)
+                return qsTr("%1 × %2 · %3").arg(root.preview.documentSize.width).arg(root.preview.documentSize.height).arg(SizeFormat.formatSize(root.preview.size));
             return SizeFormat.formatSize(root.preview.size);
         }
         if (root.preview.hasText)
