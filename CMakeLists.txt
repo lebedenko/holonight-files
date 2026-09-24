@@ -34,6 +34,6 @@ add_custom_target(format-check COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_D
 add_custom_target(qml-import-check COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check-qml-import-policy.py" VERBATIM)
 add_custom_target(qmltypes-check COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/check-qmltypes.sh" "${CMAKE_BINARY_DIR}" DEPENDS hn-files VERBATIM)
 if(RUN_CLANG_TIDY)
-  add_custom_target(tidy COMMAND ${RUN_CLANG_TIDY} -p ${CMAKE_BINARY_DIR} -removed-arg=-mno-direct-extern-access -config-file=${CMAKE_SOURCE_DIR}/.clang-tidy -j 2 ${FILES_CXX})
+  add_custom_target(tidy COMMAND ${RUN_CLANG_TIDY} -p ${CMAKE_BINARY_DIR} -removed-arg=-mno-direct-extern-access -config-file=${CMAKE_SOURCE_DIR}/.clang-tidy ${FILES_CXX})
 endif()
 add_custom_target(qml-lint DEPENDS hn-files_qmllint)
