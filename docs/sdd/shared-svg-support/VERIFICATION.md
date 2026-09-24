@@ -39,6 +39,7 @@ cmake --build build/svg-clean-acceptance --parallel 2
 
 ## Native acceptance and publication
 
-User will check native SVG rendering and report results. This is pending, not a visual pass.
+Native visual acceptance passed, reported by the user on 2026-09-24 after the requested application checks:
+"I've done manual check, SVGs rendered correctly in both applications."
 No pointer/focus automation was used. The umbrella remains Accepted until published exact-revision
 integration and manual ecosystem verification are complete.
