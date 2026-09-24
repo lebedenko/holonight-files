@@ -45,12 +45,12 @@ TEST(DirectoryProxyModel, SortsDirectoriesBeforeFilesWithNaturalCaseInsensitiveO
   proxy.setSourceModel(&model);
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
-  const QStringList expected{"aaa-folder", "zzz-folder", "Banana.txt", "File1.txt", "file2.txt", "File10.txt"};
+  const QStringList expected{"..", "aaa-folder", "zzz-folder", "Banana.txt", "File1.txt", "file2.txt", "File10.txt"};
   EXPECT_EQ(proxyNames(proxy), expected);
   proxy.setSortDescending(true);
-  auto reversed = expected;
-  std::ranges::reverse(reversed);
-  EXPECT_EQ(proxyNames(proxy), reversed);
+  const QStringList reversedExpected{"..",         "File10.txt", "file2.txt", "File1.txt",
+                                     "Banana.txt", "zzz-folder", "aaa-folder"};
+  EXPECT_EQ(proxyNames(proxy), reversedExpected);
 }
 
 TEST(DirectoryProxyModel, HiddenFilesAreExcludedByDefaultAndToggleImmediately) {
@@ -64,11 +64,11 @@ TEST(DirectoryProxyModel, HiddenFilesAreExcludedByDefaultAndToggleImmediately) {
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
   EXPECT_FALSE(proxy.hiddenVisible());
-  EXPECT_EQ(proxyNames(proxy), (QStringList{"visible.txt"}));
+  EXPECT_EQ(proxyNames(proxy), (QStringList{"..", "visible.txt"}));
   proxy.setHiddenVisible(true);
-  EXPECT_EQ(proxyNames(proxy), (QStringList{".hidden.txt", "visible.txt"}));
+  EXPECT_EQ(proxyNames(proxy), (QStringList{"..", ".hidden.txt", "visible.txt"}));
   proxy.setHiddenVisible(false);
-  EXPECT_EQ(proxyNames(proxy), (QStringList{"visible.txt"}));
+  EXPECT_EQ(proxyNames(proxy), (QStringList{"..", "visible.txt"}));
 }
 
 TEST(DirectoryProxyModel, SortDirectionTogglesWithoutFullModelReset) {
@@ -83,14 +83,14 @@ TEST(DirectoryProxyModel, SortDirectionTogglesWithoutFullModelReset) {
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
   EXPECT_FALSE(proxy.sortDescending());
-  EXPECT_EQ(proxyNames(proxy), (QStringList{"a.txt", "b.txt", "c.txt"}));
+  EXPECT_EQ(proxyNames(proxy), (QStringList{"..", "a.txt", "b.txt", "c.txt"}));
   QSignalSpy reset(&proxy, &QAbstractItemModel::modelReset);
   proxy.setSortDescending(true);
   EXPECT_TRUE(proxy.sortDescending());
-  EXPECT_EQ(proxyNames(proxy), (QStringList{"c.txt", "b.txt", "a.txt"}));
+  EXPECT_EQ(proxyNames(proxy), (QStringList{"..", "c.txt", "b.txt", "a.txt"}));
   EXPECT_EQ(reset.count(), 0);
   proxy.setSortDescending(false);
-  EXPECT_EQ(proxyNames(proxy), (QStringList{"a.txt", "b.txt", "c.txt"}));
+  EXPECT_EQ(proxyNames(proxy), (QStringList{"..", "a.txt", "b.txt", "c.txt"}));
 }
 
 TEST(DirectoryProxyModel, PlaceholderAdjacentToExactAnchorAcrossDirectionsGroupsAndTies) {
@@ -114,7 +114,9 @@ TEST(DirectoryProxyModel, PlaceholderAdjacentToExactAnchorAcrossDirectionsGroups
         proxy.setPlaceholder(sourceRow, original[anchor], isDir, below);
         model.insertPlaceholderRow();
         auto expected = original;
-        expected.insert(anchor + (below ? 1 : 0), QString{});
+        // The parent row ".." must always remain at row 0 independently of sorting/placeholder.
+        const int insertPos = (anchor == 0 && !below) ? 1 : anchor + (below ? 1 : 0);
+        expected.insert(insertPos, QString{});
         EXPECT_EQ(proxyNames(proxy), expected);
         model.removePlaceholderRow(sourceRow);
         proxy.setPlaceholder(-1, {}, false, false);
@@ -140,4 +142,43 @@ TEST(DirectoryProxyModel, EmptyPlaceholderAndEditingLocks) {
   proxy.setHiddenVisible(true);
   EXPECT_TRUE(proxy.sortDescending());
   EXPECT_FALSE(proxy.hiddenVisible());
+}
+
+TEST(DirectoryProxyModel, ParentRowAlwaysIndexZeroAcrossSortOrders) {
+  QTemporaryDir dir(fixturePattern("proxy-parent-sort"));
+  ASSERT_TRUE(dir.isValid());
+  writeFile(dir, "file.txt");
+  ASSERT_TRUE(QDir(dir.path()).mkdir("dir"));
+  DirectoryModel model;
+  DirectoryProxyModel proxy;
+  proxy.setSourceModel(&model);
+  model.load(dir.path());
+  ASSERT_TRUE(settled(model));
+  ASSERT_GE(proxy.rowCount(), 1);
+  EXPECT_EQ(proxy.data(proxy.index(0, 0), DirectoryModel::NameRole).toString(), "..");
+  EXPECT_TRUE(proxy.data(proxy.index(0, 0), DirectoryModel::IsParentRole).toBool());
+  proxy.setSortDescending(true);
+  EXPECT_EQ(proxy.data(proxy.index(0, 0), DirectoryModel::NameRole).toString(), "..");
+  EXPECT_TRUE(proxy.data(proxy.index(0, 0), DirectoryModel::IsParentRole).toBool());
+  proxy.setSortDescending(false);
+  EXPECT_EQ(proxy.data(proxy.index(0, 0), DirectoryModel::NameRole).toString(), "..");
+}
+
+TEST(DirectoryProxyModel, ParentRowAlwaysVisibleAcrossHiddenToggle) {
+  QTemporaryDir dir(fixturePattern("proxy-parent-hidden"));
+  ASSERT_TRUE(dir.isValid());
+  DirectoryModel model;
+  DirectoryProxyModel proxy;
+  proxy.setSourceModel(&model);
+  model.load(dir.path());
+  ASSERT_TRUE(settled(model));
+  EXPECT_FALSE(proxy.hiddenVisible());
+  EXPECT_EQ(proxy.rowCount(), 1);
+  EXPECT_EQ(proxy.data(proxy.index(0, 0), DirectoryModel::NameRole).toString(), "..");
+  proxy.setHiddenVisible(true);
+  EXPECT_EQ(proxy.rowCount(), 1);
+  EXPECT_EQ(proxy.data(proxy.index(0, 0), DirectoryModel::NameRole).toString(), "..");
+  proxy.setHiddenVisible(false);
+  EXPECT_EQ(proxy.rowCount(), 1);
+  EXPECT_EQ(proxy.data(proxy.index(0, 0), DirectoryModel::NameRole).toString(), "..");
 }

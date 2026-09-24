@@ -40,10 +40,20 @@ void DirectoryProxyModel::setPlaceholder(int sourceRow, const QString& anchorNam
 // Qt's descending mode reverses whatever lessThan() decides, including the directories-first
 // grouping below; REQ-F-003 only mandates dirs-first "by default" (ascending), so this is accepted.
 bool DirectoryProxyModel::lessThan(const QModelIndex& left, const QModelIndex& right) const {
+  const bool leftIsParent = sourceModel()->data(left, DirectoryModel::IsParentRole).toBool();
+  const bool rightIsParent = sourceModel()->data(right, DirectoryModel::IsParentRole).toBool();
+  if (leftIsParent != rightIsParent) {
+    return leftIsParent ? (sort_order_ == Qt::AscendingOrder) : (sort_order_ == Qt::DescendingOrder);
+  }
   // The placeholder row borrows its anchor's (isDir, name) sort key instead of its own (it has no
   // real name yet) — see setPlaceholder().
   const bool leftIsPlaceholder = placeholder_source_row_ >= 0 && left.row() == placeholder_source_row_;
   const bool rightIsPlaceholder = placeholder_source_row_ >= 0 && right.row() == placeholder_source_row_;
+  const bool leftIsAnchorParent = leftIsPlaceholder && placeholder_anchor_name_ == QStringLiteral("..");
+  const bool rightIsAnchorParent = rightIsPlaceholder && placeholder_anchor_name_ == QStringLiteral("..");
+  if (leftIsAnchorParent != rightIsAnchorParent) {
+    return leftIsAnchorParent ? (sort_order_ == Qt::AscendingOrder) : (sort_order_ == Qt::DescendingOrder);
+  }
   const bool leftIsDir =
       leftIsPlaceholder ? placeholder_anchor_is_dir_ : sourceModel()->data(left, DirectoryModel::IsDirRole).toBool();
   const bool rightIsDir =
@@ -69,9 +79,12 @@ bool DirectoryProxyModel::lessThan(const QModelIndex& left, const QModelIndex& r
   return false;
 }
 bool DirectoryProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const {
+  const auto sourceIndex = sourceModel()->index(sourceRow, 0, sourceParent);
+  if (sourceModel()->data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+    return true;
+  }
   if (hidden_visible_) {
     return true;
   }
-  const auto sourceIndex = sourceModel()->index(sourceRow, 0, sourceParent);
   return !sourceModel()->data(sourceIndex, DirectoryModel::IsHiddenRole).toBool();
 }

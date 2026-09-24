@@ -126,6 +126,7 @@ TEST(WindowHistoryNavigation, ButtonsEnabledStateTracksCanGoBackForwardModeAndPr
   ASSERT_EQ(rendered.controller.vim()->currentMode(), VimModeController::Mode::Normal);
   EXPECT_TRUE(rendered.back->isEnabled());
 
+  QTest::keyClick(rendered.window, Qt::Key_J);
   QTest::keyClick(rendered.window, 'D', Qt::ShiftModifier);
   ASSERT_TRUE(rendered.controller.tasks()->hasPrompt());
   EXPECT_FALSE(rendered.back->isEnabled());
@@ -180,10 +181,10 @@ TEST(WindowHistoryNavigation, ClickingButtonLeavesFocusOnListingAndVimKeysStillW
   EXPECT_EQ(rendered.controller.cursorRow(), 1);
   rendered.click(rendered.forward);
   ASSERT_TRUE(settled(rendered.controller));
-  EXPECT_EQ(rendered.controller.cursorRow(), 2);  // "3.txt", restored from before the back click
+  EXPECT_EQ(rendered.controller.cursorRow(), 3);  // "3.txt", restored from before the back click
   EXPECT_TRUE(rendered.list->hasActiveFocus());
   QTest::keyClick(rendered.window, Qt::Key_K);
-  EXPECT_EQ(rendered.controller.cursorRow(), 1);
+  EXPECT_EQ(rendered.controller.cursorRow(), 2);
   QTest::keyClick(rendered.window, Qt::Key_H);
   ASSERT_TRUE(settled(rendered.controller));
   EXPECT_EQ(rendered.controller.currentPath(), rendered.dir.path());
@@ -288,6 +289,7 @@ TEST(WindowHistoryNavigation, CtrlIDoesNotMoveFocusOrNavigateInInsertMode) {
   rendered.controller.goBack();
   ASSERT_TRUE(settled(rendered.controller));
   ASSERT_TRUE(rendered.controller.canGoForward());
+  QTest::keyClick(rendered.window, Qt::Key_J);
   QTest::keyClick(rendered.window, Qt::Key_I);
   ASSERT_EQ(rendered.controller.vim()->currentMode(), VimModeController::Mode::Insert);
   // Delegates are not QObject children of the window, so reach the editor through focus.
@@ -337,6 +339,8 @@ TEST(WindowHistoryNavigation, QuickLookConsumesHistoryShortcutsUntilClosed) {
   auto* popup = rendered.window->findChild<QObject*>("quickLookOverlay");
   ASSERT_NE(popup, nullptr);
   ASSERT_TRUE(QTest::qWaitFor([&] { return !rendered.controller.preview()->busy(); }));
+  QTest::keyClick(rendered.window, Qt::Key_J);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return rendered.controller.preview()->quickLookEligible(); }, 5000));
   QTest::keyClick(rendered.window, Qt::Key_Space);
   ASSERT_TRUE(QTest::qWaitFor([&] { return popup->property("opened").toBool(); }));
   const auto row = rendered.controller.cursorRow();

@@ -30,6 +30,7 @@ struct DirectoryEntry {
   // (o/O) create-in-progress — never produced by the walker, never diffed against. See
   // insertPlaceholderRow()/removePlaceholderRow().
   bool is_placeholder = false;
+  bool is_parent = false;
   bool operator==(const DirectoryEntry&) const = default;
 };
 
@@ -52,6 +53,7 @@ class DirectoryModel : public QAbstractListModel {
     // SPEC.md REQ-C-001 (main-view-icons): the '/'-joined icon-name candidate chain, consumed from
     // QML only as "image://icon/" + iconName and split apart only by IconImageProvider.
     IconNameRole,
+    IsParentRole,
   };
   explicit DirectoryModel(QObject* parent = nullptr);
   ~DirectoryModel() override;

@@ -117,6 +117,9 @@ QStringList DirectoryController::collectVisualSelectionPaths() const {
       continue;
     }
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(row, 0));
+    if (navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+      continue;
+    }
     const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
     if (!path.isEmpty()) {
       paths.append(path);
@@ -131,9 +134,11 @@ void DirectoryController::yankOrCut(bool cut, bool wholeVisualSelection) {
     vim_.exitVisual();  // REQ-F-002/004: exits VISUAL immediately, regardless of what was selected
   } else if (navigation_.cursor_row_ >= 0 && navigation_.cursor_row_ < navigation_.proxy_.rowCount()) {
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(navigation_.cursor_row_, 0));
-    const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
-    if (!path.isEmpty()) {
-      paths = {path};
+    if (!navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+      const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+      if (!path.isEmpty()) {
+        paths = {path};
+      }
     }
   }
   if (paths.isEmpty()) {
@@ -162,9 +167,11 @@ void DirectoryController::requestTrash(bool wholeVisualSelection) {
     vim_.exitVisual();  // REQ-F-015: exits VISUAL immediately, prompt appears back in NORMAL
   } else if (navigation_.cursor_row_ >= 0 && navigation_.cursor_row_ < navigation_.proxy_.rowCount()) {
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(navigation_.cursor_row_, 0));
-    const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
-    if (!path.isEmpty()) {
-      paths = {path};
+    if (!navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+      const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+      if (!path.isEmpty()) {
+        paths = {path};
+      }
     }
   }
   if (paths.isEmpty()) {

@@ -152,13 +152,15 @@ QVariant DirectoryModel::data(const QModelIndex& index, int role) const {
     case ModeRole:
       return entry.mode;
     case IsHiddenRole:
-      return entry.name.startsWith(u'.');
+      return entry.is_parent ? false : entry.name.startsWith(u'.');
     case StatFailedRole:
       return entry.stat_failed;
     case StatErrorRole:
       return entry.stat_error;
     case IconNameRole:
       return entry.icon_name;
+    case IsParentRole:
+      return entry.is_parent;
     default:
       return {};
   }
@@ -170,6 +172,7 @@ QHash<int, QByteArray> DirectoryModel::roleNames() const {
       {ModifiedRole, "modified"},   {ModeRole, "mode"},
       {IsHiddenRole, "isHidden"},   {StatFailedRole, "statFailed"},
       {StatErrorRole, "statError"}, {IconNameRole, "iconName"},
+      {IsParentRole, "isParent"},
   };
 }
 void DirectoryModel::load(const QString& path) {
@@ -185,6 +188,18 @@ void DirectoryModel::load(const QString& path) {
   entries_.clear();
   name_to_row_.clear();
   seen_this_refresh_.clear();
+  if (!path.isEmpty() && !QDir(path).isRoot()) {
+    DirectoryEntry parent;
+    parent.name = QStringLiteral("..");
+    parent.absolute_path = QDir::cleanPath(QFileInfo(path).absolutePath());
+    parent.is_dir = true;
+    parent.is_parent = true;
+    parent.mode = S_IFDIR | 0755;
+    parent.icon_name =
+        IconNameResolver::candidateIconNames(parent.mode, parent.name).join(IconNameResolver::kChainSeparator);
+    entries_.append(parent);
+    name_to_row_.insert(parent.name, 0);
+  }
   endResetModel();
   directory_path_ = path;
   directory_error_.clear();
@@ -201,6 +216,9 @@ void DirectoryModel::refresh() {
     cancellation_->store(true);
   }
   seen_this_refresh_.clear();
+  if (!entries_.isEmpty() && entries_[0].is_parent) {
+    seen_this_refresh_.insert(QStringLiteral(".."));
+  }
   directory_error_.clear();
   scanning_ = true;
   emit changed();
@@ -373,6 +391,12 @@ void DirectoryModel::applyBatch(const Batch& batch) {
     appendEntries(batch.entries);
   }
   if (!batch.directory_error.isEmpty()) {
+    if (entries_.size() == 1 && entries_[0].is_parent) {
+      beginResetModel();
+      entries_.clear();
+      name_to_row_.clear();
+      endResetModel();
+    }
     directory_error_ = batch.directory_error;
     scanning_ = false;
     walk_in_flight_ = false;

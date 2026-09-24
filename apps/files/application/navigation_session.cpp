@@ -40,7 +40,14 @@ void NavigationSession::openInternal(const QString& requestedPath, const QString
 }
 QString NavigationSession::outgoingCursorName() const {
   // A listing that never settled has no trustworthy row to come back to (REQ-F-039).
-  return awaiting_initial_load_ ? QString{} : entryNameAt(cursor_row_);
+  if (awaiting_initial_load_ || cursor_row_ < 0 || cursor_row_ >= proxy_.rowCount()) {
+    return {};
+  }
+  const auto srcIndex = proxy_.mapToSource(proxy_.index(cursor_row_, 0));
+  if (model_.data(srcIndex, DirectoryModel::IsParentRole).toBool()) {
+    return {};
+  }
+  return entryNameAt(cursor_row_);
 }
 void NavigationSession::traverseHistory(int direction, int count) {
   // Rechecked here, not only in QML bindings, so direct callers get the same gating
@@ -87,14 +94,21 @@ void NavigationSession::maybeApplyPendingRestore() {
   setCursorRow(row);
 }
 void NavigationSession::navigateInto(int proxyRow) {
+  if (proxyRow < 0 || proxyRow >= proxy_.rowCount()) {
+    return;
+  }
   const auto sourceIndex = proxy_.mapToSource(proxy_.index(proxyRow, 0));
+  if (model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+    navigateParent();
+    return;
+  }
   const auto path = model_.data(sourceIndex, DirectoryModel::PathRole).toString();
   if (!path.isEmpty()) {
     controller_.open(path);
   }
 }
 void NavigationSession::navigateParent() {
-  if (current_path_.isEmpty()) {
+  if (current_path_.isEmpty() || QDir(current_path_).isRoot()) {
     return;
   }
   const QFileInfo exited(current_path_);
@@ -106,6 +120,10 @@ void NavigationSession::openEntry(int proxyRow) {
     return;
   }
   const auto sourceIndex = proxy_.mapToSource(proxy_.index(proxyRow, 0));
+  if (model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+    navigateParent();
+    return;
+  }
   const auto path = model_.data(sourceIndex, DirectoryModel::PathRole).toString();
   if (path.isEmpty()) {
     return;

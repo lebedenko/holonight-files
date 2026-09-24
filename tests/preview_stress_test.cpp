@@ -38,7 +38,7 @@ TEST(PreviewStress, RapidPagingThroughManyLargeImagesShowsOnlyTheFinalEntry) {
   DirectoryController controller;
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
-  ASSERT_EQ(controller.listing()->rowCount(), kEntryCount);
+  ASSERT_EQ(controller.listing()->rowCount(), kEntryCount + 1);
   ASSERT_TRUE(previewSettled(controller));
 
   QElapsedTimer elapsed;
@@ -46,14 +46,14 @@ TEST(PreviewStress, RapidPagingThroughManyLargeImagesShowsOnlyTheFinalEntry) {
   // Faster than any human keyboard-repeat rate: each handleKey("j") call dispatches (and, for
   // the ones already superseded, cancels) a worker job without waiting for the previous one to
   // finish decoding — exactly the "one-outstanding-job" discipline DESIGN.md calls for.
-  for (int i = 0; i < kEntryCount - 1; ++i) {
+  for (int i = 0; i < kEntryCount; ++i) {
     controller.handleKey("j");
   }
   ASSERT_TRUE(previewSettled(controller));
   // No backlog: settling after the burst takes a bounded amount of time proportional to one
   // decode, not kEntryCount decodes queued up behind each other.
   EXPECT_LT(elapsed.elapsed(), 5000);
-  EXPECT_EQ(controller.cursorRow(), kEntryCount - 1);
+  EXPECT_EQ(controller.cursorRow(), kEntryCount);
   EXPECT_EQ(controller.preview()->name(), QStringLiteral("img-%1.png").arg(kEntryCount - 1, 3, 10, QLatin1Char('0')));
   EXPECT_TRUE(controller.preview()->hasImage());
 }

@@ -39,6 +39,7 @@ void PreviewSelection::syncPreviewTarget() {
     controller_.navigation_.watcher_.addPath(path);
     emit controller_.navigated();
   }
+  const auto entryName = controller_.navigation_.model_.data(sourceIndex, DirectoryModel::NameRole).toString();
   preview_target_path_ = path;
   controller_.preview_.setTarget(
       path, controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IsDirRole).toBool(),
@@ -47,15 +48,19 @@ void PreviewSelection::syncPreviewTarget() {
       controller_.navigation_.model_.data(sourceIndex, DirectoryModel::ModeRole).toUInt(),
       controller_.navigation_.model_.data(sourceIndex, DirectoryModel::StatFailedRole).toBool(),
       controller_.navigation_.model_.data(sourceIndex, DirectoryModel::StatErrorRole).toString(),
-      controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IconNameRole).toString(), preview_revision_);
+      controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IconNameRole).toString(), preview_revision_,
+      entryName);
 }
 bool PreviewSelection::canPreviewSelection() const {
-  return controller_.navigation_.cursor_row_ >= 0 &&
-         controller_.navigation_.cursor_row_ < controller_.navigation_.proxy_.rowCount() &&
-         controller_.preview_.hasEntry() && controller_.preview_.quickLookEligible() &&
-         !controller_.navigation_.model_
-              .data(controller_.navigation_.proxy_.mapToSource(
-                        controller_.navigation_.proxy_.index(controller_.navigation_.cursor_row_, 0)),
-                    DirectoryModel::StatFailedRole)
-              .toBool();
+  if (controller_.navigation_.cursor_row_ < 0 ||
+      controller_.navigation_.cursor_row_ >= controller_.navigation_.proxy_.rowCount()) {
+    return false;
+  }
+  const auto sourceIndex = controller_.navigation_.proxy_.mapToSource(
+      controller_.navigation_.proxy_.index(controller_.navigation_.cursor_row_, 0));
+  if (controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+    return false;
+  }
+  return controller_.preview_.hasEntry() && controller_.preview_.quickLookEligible() &&
+         !controller_.navigation_.model_.data(sourceIndex, DirectoryModel::StatFailedRole).toBool();
 }

@@ -32,9 +32,9 @@ unset QML2_IMPORT_PATH QT_QUICK_CONTROLS_STYLE QT_QUICK_CONTROLS_CONF QT_QUICK_C
 cd "$stage"
 QT_QPA_PLATFORM=offscreen "$stage/usr/bin/hn-files" --version
 set +e
-# Isolated config/state, so a user's own config.toml can't add warnings to the log.
+# Isolated config/data/state, so user files can't add warnings to the log.
 mkdir -p "$stage/xdg/state"
-XDG_CONFIG_HOME="$stage/xdg/config" XDG_STATE_HOME="$stage/xdg/state" \
+XDG_CONFIG_HOME="$stage/xdg/config" XDG_DATA_HOME="$stage/xdg/data" XDG_STATE_HOME="$stage/xdg/state" \
   QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software timeout 3 "$stage/usr/bin/hn-files" > runtime.log 2>&1
 status=$?
 set -e

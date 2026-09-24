@@ -27,15 +27,29 @@ bool settled(const DirectoryModel& model) {
 }
 }  // namespace
 
-TEST(DirectoryModel, EmptyDirectoryLoadsWithNoRowsAndNoError) {
+TEST(DirectoryModel, EmptyDirectoryLoadsParentRowAndNoError) {
   QTemporaryDir dir(fixturePattern("empty"));
   ASSERT_TRUE(dir.isValid());
   DirectoryModel model;
   QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
-  EXPECT_EQ(model.rowCount(), 0);
+  EXPECT_EQ(model.rowCount(), 1);
+  EXPECT_EQ(model.data(model.index(0), DirectoryModel::NameRole).toString(), "..");
+  EXPECT_TRUE(model.data(model.index(0), DirectoryModel::IsParentRole).toBool());
+  EXPECT_FALSE(model.data(model.index(0), DirectoryModel::IsHiddenRole).toBool());
   EXPECT_TRUE(model.directoryError().isEmpty());
+}
+
+TEST(DirectoryModel, FsRootLoadsWithoutParentRow) {
+  DirectoryModel model;
+  model.load(QStringLiteral("/"));
+  ASSERT_TRUE(settled(model));
+  EXPECT_GT(model.rowCount(), 0);
+  for (int row = 0; row < model.rowCount(); ++row) {
+    EXPECT_NE(model.data(model.index(row), DirectoryModel::NameRole).toString(), "..");
+    EXPECT_FALSE(model.data(model.index(row), DirectoryModel::IsParentRole).toBool());
+  }
 }
 
 TEST(DirectoryModel, LoadIsAsyncAndDoesNotBlockCallingThread) {
@@ -45,10 +59,12 @@ TEST(DirectoryModel, LoadIsAsyncAndDoesNotBlockCallingThread) {
   DirectoryModel model;
   model.load(dir.path());
   // scanning() flips synchronously inside load(); the walk itself happens on the worker thread,
-  // so rowCount() being 0 right after the call is what proves the caller was never blocked.
+  // so rowCount() being 1 (the synthetic parent entry) right after the call is what proves the caller was never
+  // blocked.
   EXPECT_TRUE(model.scanning());
+  EXPECT_EQ(model.rowCount(), 1);
   ASSERT_TRUE(settled(model));
-  EXPECT_EQ(model.rowCount(), 500);
+  EXPECT_EQ(model.rowCount(), 501);
 }
 
 TEST(DirectoryModel, LargeDirectoryInsertsIncrementally) {
@@ -63,7 +79,7 @@ TEST(DirectoryModel, LargeDirectoryInsertsIncrementally) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return inserted.count() > 0; }, 5000));
   // Render timing belongs to the opt-in production-window benchmark.
   ASSERT_TRUE(settled(model));
-  EXPECT_EQ(model.rowCount(), 10000);
+  EXPECT_EQ(model.rowCount(), 10001);
   // Batching (kBatchEntryThreshold=250 / kBatchTimeThresholdMs=25) means 10,000 entries cannot
   // land in a single insert — proves incremental insertion rather than one big flush at the end.
   EXPECT_GT(inserted.count(), 1);
@@ -122,7 +138,7 @@ TEST(DirectoryModel, UnicodeNamedEntriesLoadCorrectly) {
   DirectoryModel model;
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
-  EXPECT_EQ(model.rowCount(), 5);
+  EXPECT_EQ(model.rowCount(), 6);
   QStringList names;
   for (int row = 0; row < model.rowCount(); ++row) {
     names.append(model.data(model.index(row), DirectoryModel::NameRole).toString());
@@ -141,7 +157,7 @@ TEST(DirectoryModel, RefreshDiffsInsteadOfResettingAndPicksUpFilesystemChanges) 
   DirectoryModel model;
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
-  ASSERT_EQ(model.rowCount(), 2);
+  ASSERT_EQ(model.rowCount(), 3);
   QSignalSpy reset(&model, &QAbstractItemModel::modelReset);
   QSignalSpy inserted(&model, &QAbstractItemModel::rowsInserted);
   QSignalSpy removed(&model, &QAbstractItemModel::rowsRemoved);
@@ -149,7 +165,7 @@ TEST(DirectoryModel, RefreshDiffsInsteadOfResettingAndPicksUpFilesystemChanges) 
   ASSERT_FALSE(writeFile(dir, "c.txt").isEmpty());
   model.refresh();
   ASSERT_TRUE(settled(model));
-  EXPECT_EQ(model.rowCount(), 2);
+  EXPECT_EQ(model.rowCount(), 3);
   EXPECT_EQ(reset.count(), 0);  // refresh() diffs; it must not trigger a full model reset
   EXPECT_GT(inserted.count(), 0);
   EXPECT_GT(removed.count(), 0);
@@ -174,8 +190,8 @@ TEST(DirectoryModel, StaleGenerationIsDiscardedWhenLoadIsCalledAgainBeforeSettli
   model.load(second.path());  // supersedes the first walk before it can finish
   ASSERT_TRUE(settled(model));
   EXPECT_EQ(model.directoryPath(), second.path());
-  ASSERT_EQ(model.rowCount(), 1);
-  EXPECT_EQ(model.data(model.index(0), DirectoryModel::NameRole).toString(), "from-b.txt");
+  ASSERT_EQ(model.rowCount(), 2);
+  EXPECT_EQ(model.data(model.index(1), DirectoryModel::NameRole).toString(), "from-b.txt");
 }
 
 TEST(DirectoryModel, ShutdownEmitsShutdownFinished) {
@@ -224,24 +240,24 @@ TEST(DirectoryModel, ReadFailurePreservesPartialResultsAndUnseenRefreshRows) {
   DirectoryModelTestAccess::failReadAfter(model, 275);
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
-  EXPECT_EQ(model.rowCount(), 275);
+  EXPECT_EQ(model.rowCount(), 276);
   EXPECT_FALSE(model.directoryError().isEmpty());
   DirectoryModelTestAccess::failReadAfter(model, -1);
   model.refresh();
   ASSERT_TRUE(settled(model));
-  ASSERT_EQ(model.rowCount(), 600);
+  ASSERT_EQ(model.rowCount(), 601);
   QSignalSpy removed(&model, &QAbstractItemModel::rowsRemoved);
   DirectoryModelTestAccess::failReadAfter(model, 10);
   model.refresh();
   ASSERT_TRUE(settled(model));
   EXPECT_FALSE(model.directoryError().isEmpty());
-  EXPECT_EQ(model.rowCount(), 600);
+  EXPECT_EQ(model.rowCount(), 601);
   EXPECT_TRUE(removed.isEmpty());
   DirectoryModelTestAccess::beforeOpen(model, [path = dir.path()] { QDir(path).removeRecursively(); });
   model.refresh();
   ASSERT_TRUE(settled(model));
   EXPECT_FALSE(model.directoryError().isEmpty());
-  EXPECT_EQ(model.rowCount(), 600);
+  EXPECT_EQ(model.rowCount(), 601);
   EXPECT_TRUE(removed.isEmpty());
 }
 
@@ -261,7 +277,7 @@ TEST(DirectoryModel, RefreshOnlySignalsChangedMetadataAndBatchesInsertionsAndRem
   EXPECT_TRUE(changed.isEmpty());
   EXPECT_TRUE(inserted.isEmpty());
   EXPECT_TRUE(removed.isEmpty());
-  const auto changedName = model.data(model.index(0), DirectoryModel::NameRole).toString();
+  const auto changedName = model.data(model.index(1), DirectoryModel::NameRole).toString();
   ASSERT_FALSE(writeFile(dir, changedName, "longer content").isEmpty());
   populateEntries(dir, 30, "new");
   model.refresh();
@@ -309,9 +325,12 @@ TEST(DirectoryModel, MetadataFollowsValidSymlinkTargetsAndCanStatUnreadableFile)
   DirectoryModel model;
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
-  ASSERT_EQ(model.rowCount(), 4);
+  ASSERT_EQ(model.rowCount(), 5);
   for (int row = 0; row < model.rowCount(); ++row) {
     const auto index = model.index(row);
+    if (model.data(index, DirectoryModel::IsParentRole).toBool()) {
+      continue;
+    }
     const auto name = model.data(index, DirectoryModel::NameRole).toString();
     const bool folder = name.startsWith("folder");
     EXPECT_FALSE(model.data(index, DirectoryModel::StatFailedRole).toBool());
@@ -351,7 +370,7 @@ TEST(DirectoryModel, SuspensionRejectsQueuedInitialAndRefreshDeliveriesThenRecon
     DirectoryModelTestAccess::beforeOpen(model, {});
     model.resumeUpdates();
     ASSERT_TRUE(settled(model));
-    EXPECT_EQ(model.rowCount(), 600);
+    EXPECT_EQ(model.rowCount(), 601);
   }
 }
 
@@ -365,7 +384,8 @@ TEST(DirectoryModel, ShutdownCompletesWhileSuspendedWithQueuedDeliveries) {
   model.suspendUpdates();
   model.shutdown();
   ASSERT_TRUE(QTest::qWaitFor([&] { return finished.count() == 1; }));
-  EXPECT_EQ(model.rowCount(), 0);
+  EXPECT_EQ(model.rowCount(), 1);
+  EXPECT_TRUE(model.data(model.index(0), DirectoryModel::IsParentRole).toBool());
 }
 
 TEST(DirectoryModel, IconNameRoleCarriesTheWorkerDerivedCandidateChain) {
@@ -379,7 +399,7 @@ TEST(DirectoryModel, IconNameRoleCarriesTheWorkerDerivedCandidateChain) {
   EXPECT_EQ(model.roleNames().value(DirectoryModel::IconNameRole), QByteArray("iconName"));
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
-  ASSERT_EQ(model.rowCount(), 4);
+  ASSERT_EQ(model.rowCount(), 5);
   QHash<QString, QString> iconNames;
   for (int row = 0; row < model.rowCount(); ++row) {
     const auto index = model.index(row);
@@ -402,15 +422,15 @@ TEST(DirectoryModel, RefreshEmitsDataChangedWhenAnEntrysIconChanges) {
   DirectoryModel model;
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
-  ASSERT_EQ(model.rowCount(), 1);
-  ASSERT_EQ(model.data(model.index(0), DirectoryModel::IconNameRole).toString(), "application-x-generic");
+  ASSERT_EQ(model.rowCount(), 2);
+  ASSERT_EQ(model.data(model.index(1), DirectoryModel::IconNameRole).toString(), "application-x-generic");
   ASSERT_TRUE(QFile::remove(dir.filePath("entry")));
   ASSERT_TRUE(QDir(dir.path()).mkdir("entry"));
   QSignalSpy changedRows(&model, &QAbstractItemModel::dataChanged);
   model.refresh();
   ASSERT_TRUE(settled(model));
   EXPECT_EQ(changedRows.count(), 1);
-  EXPECT_EQ(model.data(model.index(0), DirectoryModel::IconNameRole).toString(), "folder/inode-directory");
+  EXPECT_EQ(model.data(model.index(1), DirectoryModel::IconNameRole).toString(), "folder/inode-directory");
 }
 
 namespace {

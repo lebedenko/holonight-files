@@ -78,6 +78,7 @@ TEST(InspectionKeys, NormalizationPopupAllowlistRepeatsAndHistory) {
   auto settle = [&] { return QTest::qWaitFor([&] { return !controller.scanning(); }); };
   controller.open(dir.path());
   ASSERT_TRUE(settle());
+  ASSERT_TRUE(controller.handleKey("j"));  // from .. to child/
   for (int enter : {Qt::Key_Return, Qt::Key_Enter}) {
     EXPECT_TRUE(keys.press(enter, "wrong", 0, false, &controller, false));
     ASSERT_TRUE(settle());
@@ -98,7 +99,7 @@ TEST(InspectionKeys, NormalizationPopupAllowlistRepeatsAndHistory) {
   }
   EXPECT_TRUE(keys.press(Qt::Key_Escape, "wrong", 0, false, &controller, true));
   EXPECT_FALSE(controller.quickLookOpen());
-  controller.navigateInto(0);
+  controller.navigateInto(1);
   ASSERT_TRUE(settle());
   EXPECT_TRUE(keys.press(Qt::Key_J, "j", Qt::AltModifier | Qt::ShiftModifier, true, &controller, true));
   EXPECT_EQ(controller.cursorRow(), 1);
@@ -137,6 +138,7 @@ TEST(InspectionKeys, ArrowKeysReachTheQuickLookLineMoverOnlyInPopups) {
   const InspectionKeys keys;
   controller.open(dir.path());
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+  ASSERT_TRUE(controller.handleKey("j"));
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }, 5000));
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->currentLineIndex() == 0; }, 5000));
   EXPECT_FALSE(keys.press(Qt::Key_Down, "", 0, false, &controller, false));  // listing: not a bound key
@@ -148,5 +150,5 @@ TEST(InspectionKeys, ArrowKeysReachTheQuickLookLineMoverOnlyInPopups) {
   EXPECT_EQ(controller.preview()->currentLineIndex(), 2);
   EXPECT_TRUE(keys.press(Qt::Key_Up, "", 0, false, &controller, true));
   EXPECT_EQ(controller.preview()->currentLineIndex(), 1);
-  EXPECT_EQ(controller.cursorRow(), 0);
+  EXPECT_EQ(controller.cursorRow(), 1);
 }

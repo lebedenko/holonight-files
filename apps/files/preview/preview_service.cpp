@@ -374,13 +374,16 @@ PreviewService::~PreviewService() {
 }
 
 void PreviewService::setTarget(const QString& path, bool isDir, qint64 size, const QDateTime& modified, quint32 mode,
-                               bool statFailed, const QString& statError, const QString& iconName, quint64 revision) {
+                               bool statFailed, const QString& statError, const QString& iconName, quint64 revision,
+                               const QString& displayName) {
   if (path.isEmpty()) {
     clear();
     return;
   }
-  if (has_entry_ && path_ == path && size_ == size && modified_ == modified && mode_ == mode && is_dir_ == isDir &&
-      stat_failed_ == statFailed && stat_error_ == statError && icon_name_ == iconName && revision_ == revision) {
+  const auto effectiveName = displayName.isEmpty() ? QFileInfo(path).fileName() : displayName;
+  if (has_entry_ && path_ == path && name_ == effectiveName && size_ == size && modified_ == modified &&
+      mode_ == mode && is_dir_ == isDir && stat_failed_ == statFailed && stat_error_ == statError &&
+      icon_name_ == iconName && revision_ == revision) {
     return;
   }
   mode_ = mode;
@@ -390,11 +393,11 @@ void PreviewService::setTarget(const QString& path, bool isDir, qint64 size, con
   revision_ = revision;
   cancelInFlight();
   busy_ = false;
-  if (path_ != path) {
+  if (path_ != path || name_ != effectiveName) {
     retained_line_ = 0;
   }
   path_ = path;
-  name_ = QFileInfo(path).fileName();
+  name_ = effectiveName;
   size_ = size;
   modified_ = modified;
   permissions_ = formatPermissions(mode);

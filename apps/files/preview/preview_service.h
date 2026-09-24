@@ -129,7 +129,8 @@ class PreviewService : public QObject {
   // Called only by DirectoryController::syncPreviewTarget(). Formats generic metadata
   // synchronously on the UI thread with zero I/O and emits changed() before returning.
   void setTarget(const QString& path, bool isDir, qint64 size, const QDateTime& modified, quint32 mode, bool statFailed,
-                 const QString& statError, const QString& iconName = {}, quint64 revision = 0);
+                 const QString& statError, const QString& iconName = {}, quint64 revision = 0,
+                 const QString& displayName = {});
   void clear();  // REQ-F-009
   // Moves the current line by delta, clamped to the loaded lines. No-op (no signal) when there are no
   // lines or the index would not change.

@@ -29,6 +29,7 @@ TEST(DirectoryControllerFileOps, YyYanksCursorItemAndPPastesCopyIntoDestination)
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("y"));
   EXPECT_TRUE(controller.handleKey("y"));
   controller.open(dst.path());
@@ -47,6 +48,7 @@ TEST(DirectoryControllerFileOps, DdCutsCursorItemAndPPastesMoveRemovingOriginal)
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("d"));
   EXPECT_TRUE(controller.handleKey("d"));
   controller.open(dst.path());
@@ -69,6 +71,7 @@ TEST(DirectoryControllerFileOps, PastePlacesIntoCurrentDirectoryNotCursorSubdire
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("y"));
   EXPECT_TRUE(controller.handleKey("y"));
   controller.open(dst.path());
@@ -90,6 +93,7 @@ TEST(DirectoryControllerFileOps, VisualYCopiesSelectionAndExitsToNormal) {
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("v"));
   EXPECT_TRUE(controller.handleKey("j"));
   EXPECT_EQ(controller.vim()->selectedCount(), 2);
@@ -114,6 +118,7 @@ TEST(DirectoryControllerFileOps, VisualDCutsSelectionAndExitsToNormal) {
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("v"));
   EXPECT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("d"));
@@ -136,8 +141,9 @@ TEST(DirectoryControllerFileOps, RegisterOverwriteReplacesPreviousContents) {
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("y"));
-  EXPECT_TRUE(controller.handleKey("y"));  // yy on "a.txt" (first entry)
+  EXPECT_TRUE(controller.handleKey("y"));  // yy on "a.txt"
   EXPECT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("y"));
   EXPECT_TRUE(controller.handleKey("y"));  // yy on "b.txt", no paste in between
@@ -160,6 +166,7 @@ TEST(DirectoryControllerFileOps, RegisterPersistsAcrossNavigation) {
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("y"));
   EXPECT_TRUE(controller.handleKey("y"));
   controller.open(other.path());
@@ -181,8 +188,9 @@ TEST(DirectoryControllerFileOps, StrayKeyBetweenYPressesPreventsFalseChordMatch)
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
-  EXPECT_TRUE(controller.handleKey("y"));  // arms pending_y_ on "a.txt" (row 0)
-  EXPECT_TRUE(controller.handleKey("j"));  // unrelated key: must clear pending_y_, moves to row 1
+  ASSERT_TRUE(controller.handleKey("j"));
+  EXPECT_TRUE(controller.handleKey("y"));  // arms pending_y_ on "a.txt" (row 1)
+  EXPECT_TRUE(controller.handleKey("j"));  // unrelated key: must clear pending_y_, moves to row 2
   EXPECT_TRUE(controller.handleKey("y"));  // a fresh chord start, not a false match with the first "y"
   EXPECT_TRUE(controller.handleKey("y"));  // completes on the *current* cursor row: "b.txt"
   controller.open(dst.path());
@@ -202,6 +210,7 @@ TEST(DirectoryControllerFileOps, DInNormalRequestsTrashConfirmationForCursorItem
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("D"));
   ASSERT_TRUE(controller.tasks()->hasPrompt());
   EXPECT_EQ(controller.tasks()->promptKind(), TaskManager::PromptKind::TrashConfirm);
@@ -219,6 +228,7 @@ TEST(DirectoryControllerFileOps, DInNormalDeclineLeavesFileInPlace) {
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("D"));
   EXPECT_TRUE(controller.handleKey("n"));
   EXPECT_FALSE(controller.tasks()->hasPrompt());
@@ -236,6 +246,7 @@ TEST(DirectoryControllerFileOps, VisualDTrashesEntireSelectionAfterOneConfirmati
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("v"));
   EXPECT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("j"));
@@ -259,6 +270,7 @@ TEST(DirectoryControllerFileOps, PromptCapturesKeysExclusivelyUntilResolved) {
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("y"));
   EXPECT_TRUE(controller.handleKey("y"));
   controller.open(dst.path());
@@ -288,6 +300,7 @@ TEST(DirectoryControllerFileOps, EscapeDuringPromptDeclinesLikeAnyOtherKey) {
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("D"));
   ASSERT_TRUE(controller.tasks()->hasPrompt());
   EXPECT_TRUE(controller.handleKey("Escape"));  // REQ-C-008: not special-cased, declines like "n"

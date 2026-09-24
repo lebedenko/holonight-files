@@ -11,12 +11,25 @@
 #include <QScopeGuard>
 #include <QTest>
 
+#include <StorageBackend.h>
 #include <array>
 #include <gtest/gtest.h>
 
 using files_test::findPlaceRow;
 
 namespace {
+class FakeStorage : public HoloNight::System::StorageBackend {
+ public:
+  void start() override {}
+  void stop() override {}
+  void execute(const QString& requestId, HoloNight::System::StorageOperation operation,
+               const QString& target) override {
+    Q_UNUSED(requestId);
+    Q_UNUSED(operation);
+    Q_UNUSED(target);
+  }
+};
+
 // Without a seeded XDG_CONFIG_HOME the sidebar is built from whatever ~/.config/user-dirs.dirs the
 // machine happens to have -- a desktop has a full set, a freshly created CI account has no file at
 // all and so gets Home alone. Tests that move between rows or need the list to overflow must seed
@@ -44,8 +57,10 @@ struct SeededUserDirs {
 };
 
 struct PlacesWindow {
-  PlacesWindow() { initializeFilesEngine(engine); }
+  PlacesWindow() : controller(&storage, nullptr) { initializeFilesEngine(engine); }
   QTemporaryDir dir{files_test::fixturePattern("places-window")};
+  FakeStorage storage_backend;
+  HoloNight::System::StorageController storage{&storage_backend};
   DirectoryController controller;
   QQmlApplicationEngine engine;
   QQuickWindow* window = nullptr;
@@ -122,6 +137,7 @@ TEST(PlacesWindow, GuardsBlockActivation) {
   PlacesWindow view;
   ASSERT_TRUE(view.start());
   view.target();
+  view.controller.handleKey("j");  // Move from ".." to "target/"
   for (const auto* key : {"v", "/", "a"}) {
     view.controller.handleKey(key);
     EXPECT_FALSE(view.places->isEnabled()) << key;

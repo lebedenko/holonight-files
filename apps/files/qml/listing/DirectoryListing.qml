@@ -216,6 +216,7 @@ Item {
             required property bool statFailed
             required property string statError
             required property string iconName
+            required property bool isParent
 
             readonly property bool editingThis: root.controller.vim.currentMode === VimModeController.Insert && root.controller.vim.editingRow === delegate.index
 
@@ -226,7 +227,7 @@ Item {
             leftPadding: 0
             highlighted: ListView.isCurrentItem || (root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(delegate.index))
             title: name
-            subtitle: statFailed ? statError : (isDir ? qsTr("Folder") : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm"))
+            subtitle: statFailed ? statError : (isParent ? qsTr("Parent folder") : (isDir ? qsTr("Folder") : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm")))
             metadata: isDir ? "" : SizeFormat.formatSize(size)
             trailingContent: statFailed ? errorIndicator : null
 
@@ -371,7 +372,7 @@ Item {
                 HnLabel {
                     objectName: "modifiedColumnField"
                     role: HnTypographyRole.Caption
-                    rawText: delegate.statFailed ? delegate.statError : Qt.formatDateTime(delegate.modified, "yyyy-MM-dd HH:mm")
+                    rawText: delegate.statFailed ? delegate.statError : (delegate.isParent ? "" : Qt.formatDateTime(delegate.modified, "yyyy-MM-dd HH:mm"))
                     color: delegate.statFailed ? HoloniightPalette.error : HoloniightPalette.textMuted
                     elide: Text.ElideRight
                     visible: root.showModified

@@ -19,6 +19,11 @@ void EditingSession::beginRename(VimModeController::InsertKind kind) {
       controller_.navigation_.cursor_row_ >= controller_.navigation_.proxy_.rowCount()) {
     return;  // nothing selected to rename; the key is still consumed by the caller
   }
+  const auto sourceIndex = controller_.navigation_.proxy_.mapToSource(
+      controller_.navigation_.proxy_.index(controller_.navigation_.cursor_row_, 0));
+  if (controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+    return;  // cannot rename parent ".." entry
+  }
   controller_.navigation_.proxy_.setEditing(true);
   controller_.navigation_.model_.suspendUpdates();
   controller_.vim_.enterInsert(kind, controller_.navigation_.cursor_row_, controller_.navigation_.current_path_,
@@ -145,7 +150,9 @@ void EditingSession::ensureSearchCurrent() {
   }
   QStringList names;
   for (int row = 0; row < controller_.navigation_.proxy_.rowCount(); ++row) {
-    names.append(controller_.entryNameAt(row));
+    const auto sourceIndex = controller_.navigation_.proxy_.mapToSource(controller_.navigation_.proxy_.index(row, 0));
+    const bool isParent = controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool();
+    names.append(isParent ? QString{} : controller_.entryNameAt(row));
   }
   search_revision_ = listing_revision_;
   controller_.vim_.refreshSearch(names);
@@ -156,7 +163,9 @@ void EditingSession::updateSearchQuery(const QString& query) {
   }
   QStringList names;
   for (int row = 0; row < controller_.navigation_.proxy_.rowCount(); ++row) {
-    names.append(controller_.entryNameAt(row));
+    const auto sourceIndex = controller_.navigation_.proxy_.mapToSource(controller_.navigation_.proxy_.index(row, 0));
+    const bool isParent = controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool();
+    names.append(isParent ? QString{} : controller_.entryNameAt(row));
   }
   controller_.vim_.setSearchQuery(query, names);
   search_revision_ = listing_revision_;
