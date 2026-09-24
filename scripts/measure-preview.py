@@ -12,6 +12,8 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 
+import performance_report
+
 ROOT = Path(__file__).resolve().parent.parent
 SCENARIOS = {
     'cache': 'PreviewPerformance.CacheReuse',
@@ -78,6 +80,7 @@ def run_trial(binary, directory, scenario, run, env, timeout=300):
     log = directory / f'run-{run}.log'
     samples = []
     started = time.monotonic()
+    usage = None
     with log.open('w') as output:
         process = subprocess.Popen([str(binary), f'--gtest_filter={scenario}',
                                     f'--gtest_output=xml:{xml}'],
@@ -104,6 +107,9 @@ def run_trial(binary, directory, scenario, run, env, timeout=300):
             if process.returncode is None:
                 process.kill()
                 process.wait()
+            (directory / f'run-{run}-process.json').write_text(json.dumps({
+                'returncode': process.returncode,
+                'peak_rss_kib': usage.ru_maxrss if usage else None}, indent=2) + '\n')
             (directory / f'run-{run}-rss.json').write_text(json.dumps(samples, indent=2) + '\n')
     if process.returncode != 0:
         raise RuntimeError(f'Benchmark failed ({process.returncode}): {log}')
@@ -147,7 +153,8 @@ def provenance(binary, prefix):
         raise RuntimeError('Binary build must belong to this instrumented source checkout')
     if str(prefix) not in values.get('CMAKE_PREFIX_PATH', '').split(';'):
         raise RuntimeError('Provider prefix differs from the configured build')
-    files = ['scripts/measure-preview.py', 'tests/preview_performance_test.cpp',
+    files = ['scripts/performance_report.py', 'tests/fixtures/dbus-session.conf',
+             'scripts/measure-preview.py', 'tests/preview_performance_test.cpp',
              'tests/preview_service_test_access.h', 'tests/preview_fixtures.h', 'tests/smoke.cpp',
              'tests/CMakeLists.txt']
     providers = {}
@@ -159,8 +166,16 @@ def provenance(binary, prefix):
     provider_builds = {}
     for line in state.read_text().splitlines():
         name, source, revision = line.split('\t')
-        if providers[name]['revision'] != revision or providers[name]['status']:
+        if providers[name]['revision'] != revision:
             raise RuntimeError(f'Provider source does not match installed evidence: {name}')
+        repo = ROOT.parent / name
+        for folder in ('src', 'include'):
+            for path in (repo / folder).rglob('*'):
+                if path.is_file():
+                    committed = subprocess.check_output(['git', '-C', str(repo), 'show',
+                        f'{revision}:{path.relative_to(repo)}'])
+                    if hashlib.sha256(committed).hexdigest() != digest(path):
+                        raise RuntimeError(f'Provider production sources changed: {path}')
         provider_cache = ROOT / 'build/deps' / name / 'CMakeCache.txt'
         content = provider_cache.read_text()
         if f'CMAKE_INSTALL_PREFIX:PATH={prefix}\n' not in content:
@@ -200,7 +215,12 @@ def main():
     parser.add_argument('output', type=Path)
     parser.add_argument('--scenario', choices=[*SCENARIOS, 'all'], default='all')
     parser.add_argument('--prefix', type=Path, default=ROOT / 'build/deps/prefix')
+    parser.add_argument('--private-bus', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if not args.private_bus:
+        return subprocess.call(['dbus-run-session',
+                                f'--config-file={ROOT}/tests/fixtures/dbus-session.conf', '--',
+                                sys.executable, str(Path(__file__).resolve()), *sys.argv[1:], '--private-bus'])
     binary = args.binary.resolve(strict=True)
     prefix = args.prefix.resolve(strict=True)
     metadata = provenance(binary, prefix)
@@ -210,7 +230,7 @@ def main():
         raise RuntimeError('Use an empty output directory to preserve earlier evidence')
     (output / 'environment.json').write_text(json.dumps(metadata, indent=2) + '\n')
     env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software',
-               QT_SCALE_FACTOR='1',
+               QT_SCALE_FACTOR='1', QSG_RHI_BACKEND='software',
                QML_IMPORT_PATH=str(prefix / 'lib/qt6/qml'), LD_LIBRARY_PATH=str(prefix / 'lib'),
                FILES_PREVIEW_PERFORMANCE='1',
                FILES_PERFORMANCE_FIXTURES=str(output / 'fixtures'))
@@ -236,6 +256,9 @@ def main():
         {path.name: {'sha256': digest(path), 'bytes': path.stat().st_size} for path in fixtures},
         indent=2) + '\n')
     scenarios = SCENARIOS if args.scenario == 'all' else {args.scenario: SCENARIOS[args.scenario]}
+    report = performance_report.metadata(
+        ROOT, binary, prefix, metadata, scenarios, REQUIRED,
+        performance_report.read_json(output / 'fixtures.json'))
     summaries = {}
     failures = []
     for name, scenario in scenarios.items():
@@ -257,6 +280,7 @@ def main():
     (output / 'summary.json').write_text(json.dumps(summaries, indent=2) + '\n')
     if failures:
         raise RuntimeError(f'{len(failures)} failed trials; see {output / "failures.json"}')
+    performance_report.finish(output, report, scenarios, sys.modules[__name__])
     print(json.dumps(summaries, indent=2))
     return 0
 

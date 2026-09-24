@@ -414,3 +414,27 @@ cold/disk/memory evidence without generating input. Fractional preview requests
 now follow the window DPR on Wayland. The [current single-monitor candidate](docs/sdd/native-preview-acceptance/SINGLE-MONITOR.md)
 tracks the four-scale manual matrix separately from [historical evidence](docs/sdd/native-preview-acceptance/VERIFICATION.md).
 Physical second-monitor qualification awaits hardware and does not block this iteration.
+
+### Comparing fresh measurement datasets
+
+The offscreen runner also writes versioned `report.json` metadata and raw process
+exit/RSS evidence. Collect baseline and candidate with the same instrumentation,
+fixtures, scenarios, Release settings and installed providers. Each scenario must
+have exactly five successful fresh processes. Keep output directories distinct;
+the tools refuse to overwrite evidence.
+
+```sh
+python3 scripts/compare-performance.py build/measurement-baseline \
+  build/measurement-candidate build/measurement-comparison
+```
+
+The comparison writes JSON and Markdown with raw-trial median/min/max, absolute
+and percentage differences (`not applicable` for a zero baseline). It validates
+raw XML, process exits, RSS records and evidence hashes; cached summaries are
+ignored. Workload, fixture, instrumentation and rendering changes are rejected.
+Checkout/build/prefix paths are normalized for compatibility and original
+provenance is retained. Intentional provenance differences require one exact
+`--allow FIELD=REASON` per changed field; the rejection lists the field names.
+No timing gate or statistical significance is inferred. Old datasets without the
+versioned contract must be recollected. See the
+[maintenance SDD](docs/sdd/shared-image-maintenance/SPEC.md).

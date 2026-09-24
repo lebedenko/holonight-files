@@ -120,3 +120,5 @@ add_dependencies(files-unknown-dimensions files-unknown-size-handler)
 set_target_properties(files-unknown-dimensions PROPERTIES QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
 add_test(NAME files-unknown-dimensions COMMAND files-unknown-dimensions)
 set_tests_properties(files-unknown-dimensions PROPERTIES TIMEOUT 15)
+
+add_test(NAME files-performance-comparison COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/scripts/check-compare-performance.py")
