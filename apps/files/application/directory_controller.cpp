@@ -259,6 +259,13 @@ void DirectoryController::execute(const FileCommand& command) {
       break;
     case Kind::Visual:
       cancelPendingRestore();
+      if (listing()->rowCount() > 0 && listing()->data(listing()->index(0, 0), DirectoryModel::IsParentRole).toBool() &&
+          cursorRow() == 0) {
+        if (listing()->rowCount() == 1) {
+          break;
+        }
+        setCursorRow(1);
+      }
       vim_.enterVisual(cursorRow());
       break;
     case Kind::ExitVisual:

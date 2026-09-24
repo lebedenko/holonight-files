@@ -444,6 +444,8 @@ TEST(DirectoryController, VPressEntersVisualModeAndEscapeExitsIt) {
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
   EXPECT_TRUE(controller.handleKey("v"));
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Visual);
+  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_FALSE(controller.vim()->isRowSelected(0));
   EXPECT_EQ(controller.vim()->selectedCount(), 1);
   EXPECT_TRUE(controller.handleKey("Escape"));
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
@@ -462,11 +464,17 @@ TEST(DirectoryController, VisualModeMotionsExtendSelectionAndCountedMotionsWork)
   EXPECT_TRUE(controller.handleKey("V"));
   EXPECT_TRUE(controller.handleKey("3"));
   EXPECT_TRUE(controller.handleKey("j"));
-  EXPECT_EQ(controller.cursorRow(), 3);
+  EXPECT_EQ(controller.cursorRow(), 4);
   EXPECT_EQ(controller.vim()->selectedCount(), 4);
-  for (int row = 0; row <= 3; ++row) {
+  EXPECT_FALSE(controller.vim()->isRowSelected(0));
+  for (int row = 1; row <= 4; ++row) {
     EXPECT_TRUE(controller.vim()->isRowSelected(row));
   }
+  EXPECT_TRUE(controller.handleKey("g"));
+  EXPECT_TRUE(controller.handleKey("g"));
+  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_FALSE(controller.vim()->isRowSelected(0));
+  EXPECT_EQ(controller.vim()->selectedCount(), 1);
 }
 
 TEST(DirectoryController, VisualModeSwallowsUnrecognizedKeysAsNoOps) {
@@ -1613,7 +1621,7 @@ TEST(DirectoryController, PendingCountConsumedByHistoryNavigationRegardlessOfOut
   controller.navigateHistoryBack();  // gated off in VISUAL, but still consumes the count
   EXPECT_EQ(controller.currentPath(), fixture.c);
   controller.handleKey("j");
-  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_EQ(controller.cursorRow(), 2);
 }
 
 TEST(DirectoryController, GoBackAndGoForwardAlwaysUseCountOneIgnoringPendingCount) {
@@ -2183,6 +2191,30 @@ TEST(DirectoryController, ParentRowProtectedFromOperations) {
   EXPECT_TRUE(controller.handleKey("p"));
   EXPECT_FALSE(controller.tasks()->busy());
   EXPECT_EQ(controller.listing()->rowCount(), 1);  // only synthetic ".."
+}
+
+TEST(DirectoryController, VisualSelectionSkipsParentRowAndRequiresARealEntry) {
+  QTemporaryDir dir(fixturePattern("parent-visual"));
+  ASSERT_TRUE(dir.isValid());
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  ASSERT_EQ(controller.listing()->rowCount(), 1);
+  EXPECT_TRUE(controller.handleKey("v"));
+  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+  EXPECT_EQ(controller.vim()->selectedCount(), 0);
+
+  writeFile(dir, "item.txt");
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  ASSERT_EQ(controller.listing()->rowCount(), 2);
+  EXPECT_TRUE(controller.handleKey("v"));
+  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_EQ(controller.vim()->selectedCount(), 1);
+  EXPECT_FALSE(controller.vim()->isRowSelected(0));
+  EXPECT_TRUE(controller.handleKey("k"));
+  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_FALSE(controller.vim()->isRowSelected(0));
 }
 
 TEST(DirectoryController, ParentRowExcludedFromSearchAndQuickLook) {

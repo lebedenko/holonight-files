@@ -19,6 +19,13 @@
 | PDN-009 | DirectoryController.RootDirectoryHasNoParentRow | Passed |
 | PDN-010 | PreviewServiceTest.ParentDirectoryMetadata | Passed |
 
+## Visual Selection Follow-up
+
+- `DirectoryController.VisualSelectionSkipsParentRowAndRequiresARealEntry` covers visual entry from `..`, movement toward row 0, and a folder with no real entries.
+- `DirectoryController.VisualModeMotionsExtendSelectionAndCountedMotionsWork` checks that selected rows and the count exclude `..`.
+- Focused `DirectoryController.*:DirectoryControllerFileOps.*` regression: 100/100 passed.
+- `task check`: passed all 21 test suites, formatting, lint, license, staged installation, QML import policy, and QML metadata checks. The test run required elevated execution because the sandbox denied a Unix-socket fixture.
+
 ## Execution Log
 - Built and verified with `ctest --preset test`: 21/21 suites passed (100%), 608 passed, 6 skipped performance/native, 0 failed.
 - Clean code formatting verified with `task format-check`.

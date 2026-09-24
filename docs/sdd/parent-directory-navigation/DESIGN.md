@@ -36,6 +36,7 @@ Approved scope: Supplied implementation plan. GPL-3.0-or-later.
    - `EditingSession::updateSearchQuery`: Skip `..` when collecting names for search candidates.
    - `DirectoryController::yankOrCut` & `requestTrash`: No-op if cursor is on `..`.
    - `DirectoryController::collectVisualSelectionPaths`: Exclude rows with `IsParentRole == true`.
+   - Starting visual mode on `..` moves to the first real entry; with no real entries, visual mode stays inactive. Visual cursor movement and clamping cannot enter `..`, so the highlighted range and selected count match the entries acted on.
    - `PreviewSelection::canPreviewSelection`: Returns `false` for `..`.
    - `PreviewSelection::syncPreviewTarget`: Pass entry name to `PreviewService::setTarget` so `".." ` is displayed.
 
