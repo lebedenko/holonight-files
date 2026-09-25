@@ -1,5 +1,7 @@
 # HoloNight Files
 
+Use Conventional Commits for every new commit: `type(scope): imperative summary`, or `type: imperative summary` when a scope adds no clarity.
+
 Files owns file browsing, modal commands, operations, preview coordination, application settings and presentation.
 Shared Qt/QML primitives belong to holonight-qt. Preserve hn-files, org.holonight.Files and HolonightFiles.
 Read CONTRIBUTING.md and the assigned docs/sdd cycle before editing. An approved implementation plan authorizes
