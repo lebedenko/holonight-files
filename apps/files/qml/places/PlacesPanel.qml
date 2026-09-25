@@ -1,24 +1,35 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls as Controls
 import Holonight.Core
 import Holonight.Controls
 
+// Content-sized: SidebarPanel's Flickable scrolls Places and Devices together (device-actions
+// REQ-F-030, REQ-F-033), and its SidebarNavigator owns the keyboard cursor (REQ-F-049).
 Item {
     id: root
 
     required property DirectoryController controller
+    // True while the sidebar holds keyboard focus, which is when the cursor row is outlined.
+    property bool keyboardFocus: false
     readonly property real inset: HnMetrics.internalSpacing(HnControlSize.Normal)
-    readonly property bool activationEnabled: root.controller.vim.currentMode === VimModeController.Normal && !root.controller.tasks.hasPrompt && !root.controller.quickLookOpen
+    readonly property bool activationEnabled: root.controller.sidebarActivationEnabled
+    readonly property SidebarNavigator navigator: root.controller.sidebarNavigator
+    readonly property alias list: list
+
+    implicitHeight: list.y + list.height + root.inset
+
+    function activateRow(index: int): void {
+        const place = list.itemAtIndex(index) as PlaceRow;
+        if (place)
+            place.activate();
+    }
 
     HnLabel {
         id: heading
         objectName: "placesHeading"
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.margins: root.inset
-        anchors.leftMargin: root.inset + HnMetrics.horizontalPadding(HnControlSize.Compact)
+        x: root.inset + HnMetrics.horizontalPadding(HnControlSize.Compact)
+        y: root.inset
         rawText: qsTr("Places")
         role: HnTypographyRole.Caption
         color: HoloniightPalette.textMuted
@@ -27,28 +38,16 @@ Item {
     ListView {
         id: list
         objectName: "placesListView"
-        anchors.top: heading.bottom
-        anchors.topMargin: root.inset
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.margins: root.inset
-        clip: true
+        x: root.inset
+        y: heading.y + heading.height + root.inset
+        width: root.width - 2 * root.inset
+        height: contentHeight
+        interactive: false
         enabled: root.activationEnabled
-        activeFocusOnTab: true
-        keyNavigationEnabled: true
+        keyNavigationEnabled: false
+        currentIndex: root.navigator.section === SidebarNavigator.Places ? root.navigator.index : -1
         model: root.controller.places
         spacing: HnMetrics.internalSpacing(HnControlSize.Compact)
-        Controls.ScrollBar.vertical: Controls.ScrollBar {}
-
-        function activate(): void {
-            const place = currentItem as PlaceRow;
-            if (root.activationEnabled && place)
-                place.activate();
-        }
-        Keys.onReturnPressed: activate()
-        Keys.onEnterPressed: activate()
-        Keys.onSpacePressed: activate()
 
         // The wrapper keeps keyboard focus separate from exact-path selection in
         // HnSelectableDelegate (which otherwise also selects ListView.currentItem).
@@ -71,9 +70,12 @@ Item {
         readonly property real extraGap: row.startsBookmarks ? HnMetrics.internalSpacing(HnControlSize.Compact) : 0
         height: button.implicitHeight + row.extraGap
 
+        readonly property bool isCursor: root.navigator.section === SidebarNavigator.Places && root.navigator.index === row.index
+
         function activate(): void {
             if (!root.activationEnabled)
                 return;
+            root.navigator.setCursor(SidebarNavigator.Places, row.index);
             if (row.origin === PlacesModel.Bookmark)
                 root.controller.activateBookmark(row.index);
             else
@@ -147,7 +149,7 @@ Item {
             color: "transparent"
             border.width: HnMetrics.focusBorderWidth
             border.color: HoloniightPalette.borderFocus
-            visible: list.activeFocus && row.ListView.isCurrentItem
+            visible: root.keyboardFocus && row.isCursor
             Accessible.ignored: true
         }
     }

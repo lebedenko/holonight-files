@@ -2,6 +2,11 @@ add_library(files-private STATIC
   storage/devices_model.cpp
   storage/devices_model.h
   storage/storage_filter.h
+  storage/storage_policy.h
+  storage/capacity_probe.cpp
+  storage/capacity_probe.h
+  presentation/sidebar_navigator.cpp
+  presentation/sidebar_navigator.h
   application/directory_controller.cpp
   application/directory_controller.h
   application/editing_session.cpp
@@ -101,6 +106,8 @@ function(add_files_application target)
     qml/listing/DirectoryListing.qml
     qml/places/PlacesPanel.qml
     qml/places/DevicesPanel.qml
+    qml/places/SidebarPanel.qml
+    qml/places/CapacityBar.qml
     qml/inspection/PreviewPane.qml
     qml/inspection/QuickLookOverlay.qml
     qml/status/ModeStatusBar.qml
@@ -110,7 +117,7 @@ function(add_files_application target)
     list(APPEND module_qml "${app_dir}/${file}")
   endforeach()
   set(module_icons)
-  foreach(icon folder-fallback generic-file-fallback go-back go-forward warning-fallback)
+  foreach(icon drive-fallback eject-fallback folder-fallback generic-file-fallback go-back go-forward warning-fallback)
     set(file "${app_dir}/icons/${icon}.svg")
     set_source_files_properties("${file}" PROPERTIES QT_RESOURCE_ALIAS "icons/${icon}.svg")
     list(APPEND module_icons "${file}")

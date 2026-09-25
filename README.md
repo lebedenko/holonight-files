@@ -41,9 +41,10 @@ except that a missing bookmark stays listed, shown muted with a warning badge
 shows a status message, without disturbing the current folder. Two entries
 resolving to the same cleaned path are deduplicated (Home, then XDG, then
 bookmarks in file order — the first wins); symlinks are never canonicalised
-for this comparison. Tab into Places, move with Up/Down, and activate with
+for this comparison. Tab into the sidebar, move with Up/Down or `j`/`k`, and activate with
 Enter/Space or a click; activation requires NORMAL mode without a prompt or
-Quick Look. Navigation returns focus to the listing and participates in
+Quick Look. Places and Devices share one scroll area and one keyboard cursor, which
+crosses between the sections. Navigation returns focus to the listing and participates in
 history. See the [places sources specification](docs/sdd/places-sources/SPEC.md)
 and the prior [Places verification](docs/sdd/places/VERIFICATION.md).
 Stage 2 ("Inspect a selection") is also implemented: a docked preview pane
@@ -457,9 +458,29 @@ preview explanation; ordinary opening in Viewer remains available. SVGZ previews
 Storage uses the independently instantiated `HoloNightSystem::Storage` component and UDisks2 on the system bus.
 Install the `udisks2` runtime package and retain an existing polkit agent for authorization prompts.
 Operations are manual: no automatic mounting, encrypted-volume unlocking or disk administration is provided.
-Eject and power-off are distinct actions; power-off first presents all affected drives and volumes, including
-siblings. Busy devices and authorization failures are reported without forced unmounts or automatic retries.
+Busy devices and authorization failures are reported without forced unmounts or automatic retries.
 
-The Devices sidebar includes removable media, empty readers and mounted fixed data volumes. Activating an unmounted removable volume mounts it before opening; later navigation cancels that activation. If the displayed filesystem is unmounted or removed, Files returns Home with an explanation.
+The Devices section sits below Places, after a separator, and lists mounted fixed data volumes first,
+then removable media and empty optical drives. Empty card-reader slots and unmounted internal partitions are not shown.
+Each row shows a device icon, the name, and — once measured off the GUI thread — a used-space bar and
+`345 GB free of 1 TB`, refreshed on mount changes, after file operations and every 30 s. Until then, or
+while unmounted, the row shows its state instead; all rows are equally tall. The bar turns
+violet from 90% used and to the warning colour from 95%. A drive with several visible volumes labels them
+with its name.
+
+Activating a row mounts it if needed, then opens it; there is no separate Mount action, and later
+navigation cancels that activation. A mounted row has at most one removal action, the eject button or `x`
+on the focused row (an unmounted row has none; an empty optical drive keeps its tray eject):
+
+| Device class | How it is recognised | Removal action |
+|---|---|---|
+| Optical | UDisks2 `Optical` | Eject (opens the tray, also when empty) |
+| External | any non-empty `ConnectionBus` | Eject when the medium leaves the drive (card slot), otherwise Safely remove (power-off); falls back to the other, then to Unmount |
+| Internal | everything else | Unmount only |
+
+Failures such as a canceled authorization appear in the status bar. Removal runs without a confirmation prompt; if the set of affected drives changes before it runs, it is
+rejected and nothing is unmounted. A multi-slot card reader is only ever ejected slot by slot. If the
+displayed filesystem is unmounted or removed, Files returns Home with an explanation. See the
+[device actions specification](docs/sdd/device-actions/SPEC.md).
 
 Development builds also require the sibling `holonight-system-services` repository; `task deps` installs its Storage component without Audio/libpulse.

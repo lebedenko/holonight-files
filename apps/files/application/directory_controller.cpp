@@ -4,15 +4,19 @@
 #include <QDir>
 
 DirectoryController::DirectoryController(QObject* parent) : DirectoryController(nullptr, parent) {}
-DirectoryController::DirectoryController(HoloNight::System::StorageController* storage, QObject* parent)
-    : QObject(parent), devices_(storage != nullptr ? new DevicesModel(storage, this) : new DevicesModel(this)) {
+DirectoryController::DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
+                                         std::shared_ptr<const CapacityProbe> capacity)
+    : QObject(parent),
+      devices_(storage != nullptr ? new DevicesModel(storage, this, std::move(capacity)) : new DevicesModel(this)) {
   connect(devices_, &DevicesModel::openRequested, this, [this](const QString& path) { open(path); });
+  connect(devices_, &DevicesModel::operationFailed, this, [this](const QString& message) {
+    status_message_ = message;
+    emit changed();
+  });
   connect(devices_, &DevicesModel::recoveryRequested, this,
           [this] { open(QDir::homePath(), tr("Storage was unmounted or disconnected. Returned to Home.")); });
-  connect(this, &DirectoryController::changed, this, [this] {
-    devices_->setInteractionEnabled(vim_.currentMode() == VimModeController::Mode::Normal && !tasks_.hasPrompt() &&
-                                    !quickLookOpen());
-  });
+  connect(this, &DirectoryController::changed, this,
+          [this] { devices_->setInteractionEnabled(sidebarActivationEnabled()); });
   QCoreApplication::instance()->installEventFilter(&window_events_);
   navigation_.proxy_.setSourceModel(&navigation_.model_);
   // Ahead of the forwarding connection, so observers never see a settled listing whose cursor has
@@ -42,6 +46,7 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
     // Renders through the same normalStatusLabel/statusMessage channel open()'s fallbackReason
     // already uses (REQ-F-034/035) — no new ModeStatusBar branch needed for the summary itself.
     status_message_ = tasks_.lastSummaryText();
+    devices_->refreshCapacity();  // A copy or delete just changed free space somewhere.
     // In addition to (not instead of) the existing QFileSystemWatcher-driven refresh, so the
     // listing updates deterministically right after a paste/trash rather than only whenever the
     // watcher happens to coalesce a filesystem event.
@@ -66,6 +71,9 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
     ++preview_selection_.preview_revision_;
     navigation_.model_.refresh();
   });
+}
+bool DirectoryController::sidebarActivationEnabled() const {
+  return vim_.currentMode() == VimModeController::Mode::Normal && !tasks_.hasPrompt() && !quickLookOpen();
 }
 void DirectoryController::open(const QString& path, const QString& fallbackReason) {
   openInternal(path, fallbackReason, /*restoreName=*/{}, /*recordHistory=*/true);

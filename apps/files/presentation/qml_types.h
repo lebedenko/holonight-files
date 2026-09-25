@@ -5,6 +5,7 @@
 #include "directory_proxy_model.h"
 #include "places_model.h"
 #include "preview_service.h"
+#include "sidebar_navigator.h"
 #include "task_manager.h"
 #include "vim_mode_controller.h"
 
@@ -56,5 +57,12 @@ struct DevicesModelRegistration {
   Q_GADGET
   QML_FOREIGN(DevicesModel)
   QML_NAMED_ELEMENT(DevicesModel)
+  QML_UNCREATABLE("Created by the application")
+};
+
+struct SidebarNavigatorRegistration {
+  Q_GADGET
+  QML_FOREIGN(SidebarNavigator)
+  QML_NAMED_ELEMENT(SidebarNavigator)
   QML_UNCREATABLE("Created by the application")
 };

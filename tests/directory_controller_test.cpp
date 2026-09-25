@@ -8,6 +8,7 @@
 #include "settings/xdg_paths.h"
 #include "settings_fixtures.h"
 #include "state/state_store.h"
+#include "storage_fixtures.h"
 
 #include <QDir>
 #include <QScopeGuard>
@@ -2266,4 +2267,50 @@ TEST(DirectoryController, RootDirectoryHasNoParentRow) {
   // Navigating parent from root is a no-op
   EXPECT_TRUE(controller.handleKey("h"));
   EXPECT_EQ(controller.currentPath(), QStringLiteral("/"));
+}
+
+// device-actions REQ-F-023: one C++ definition of when sidebar rows may act.
+TEST(DirectoryController, SidebarActivationIsEnabledOnlyInUnobstructedNormalMode) {
+  QTemporaryDir dir(fixturePattern("ctrl-sidebar-guard"));
+  ASSERT_TRUE(dir.isValid());
+  writeFile(dir, "a.txt");
+  files_test::FakeStorage backend;
+  HoloNight::System::StorageController storage(&backend);
+  DirectoryController controller(&storage, nullptr, std::make_shared<files_test::FakeCapacityProbe>());
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  EXPECT_TRUE(controller.sidebarActivationEnabled());
+  EXPECT_TRUE(controller.handleKey("v"));  // VISUAL
+  EXPECT_FALSE(controller.sidebarActivationEnabled());
+  EXPECT_TRUE(controller.handleKey("Escape"));
+  EXPECT_TRUE(controller.sidebarActivationEnabled());
+  EXPECT_TRUE(controller.handleKey("j"));
+  EXPECT_TRUE(controller.handleKey("D"));  // Task prompt
+  ASSERT_TRUE(controller.tasks()->hasPrompt());
+  EXPECT_FALSE(controller.sidebarActivationEnabled());
+  EXPECT_TRUE(controller.handleKey("n"));
+  ASSERT_FALSE(controller.tasks()->hasPrompt());
+  EXPECT_TRUE(controller.sidebarActivationEnabled());
+  ASSERT_TRUE(quickLookReady(controller));
+  EXPECT_TRUE(controller.handleKey(" "));  // Quick Look
+  ASSERT_TRUE(controller.quickLookOpen());
+  EXPECT_FALSE(controller.sidebarActivationEnabled());
+}
+
+TEST(DirectoryController, SidebarNavigatorWalksThePlacesAndDevicesModels) {
+  files_test::FakeStorage backend;
+  HoloNight::System::StorageController storage(&backend);
+  DirectoryController controller(&storage, nullptr, std::make_shared<files_test::FakeCapacityProbe>());
+  auto* navigator = controller.sidebarNavigator();
+  ASSERT_NE(navigator, nullptr);
+  EXPECT_EQ(navigator->section(), SidebarNavigator::Places);
+  navigator->setCursor(SidebarNavigator::Places, controller.places()->rowCount() - 1);
+  EXPECT_FALSE(navigator->moveDown());  // No devices yet.
+  backend.drives = {files_test::storageDrive("stick")};
+  backend.volumes = {files_test::storageVolume("usb", "stick")};
+  backend.publish();
+  ASSERT_EQ(controller.devices()->rowCount(), 1);
+  EXPECT_TRUE(navigator->moveDown());
+  EXPECT_EQ(navigator->section(), SidebarNavigator::Devices);
+  EXPECT_EQ(navigator->index(), 0);
 }

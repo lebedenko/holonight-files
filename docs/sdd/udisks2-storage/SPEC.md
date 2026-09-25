@@ -16,3 +16,15 @@ Baseline: 672b7193fd5523dd5d52dabe0c666044f81b9ab7. Provider: 5f2ecda7eea653995f
   and hide the storage indicator when no eligible device remains.
 
 Automatic mounting, unlock, disk administration and network/FUSE discovery remain excluded.
+
+## Amendments
+
+Amended by the [device-actions](../device-actions/SPEC.md) cycle (2026-09-25); R1, R2, R5 and R6 are unaffected.
+
+- R3 (Files): narrowed. Empty **optical** drives remain shown, since opening the tray is the one action on
+  them; empty media-removable non-optical slots (card-reader LUNs) are hidden (device-actions REQ-F-016,
+  REQ-F-017). Unmounted internal volumes stay hidden (REQ-F-015).
+- R4: the power-off confirmation is removed (REQ-F-025). Each row offers at most one removal action, chosen
+  by drive class and `MediaRemovable` rather than one button per capability. Stale-scope rejection is
+  retained and now guards a scope derived at the moment of invocation: a change before the controller acts
+  is still rejected with `ScopeChanged` and leaves every affected volume mounted (REQ-F-026, REQ-F-027).

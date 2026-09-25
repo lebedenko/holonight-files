@@ -11,6 +11,7 @@
 #include "preview_selection.h"
 #include "preview_service.h"
 #include "session_lifecycle.h"
+#include "sidebar_navigator.h"
 #include "state/last_location_tracker.h"
 #include "state/state_store.h"
 #include "task_manager.h"
@@ -25,6 +26,8 @@
 #include <QString>
 #include <QtQml/qqmlregistration.h>
 
+#include <memory>
+
 // QML-facing application coordinator. Private sessions own navigation, editing, preview
 // selection, command parsing and lifecycle state; invokables retain the application contract.
 class DirectoryController : public QObject {
@@ -37,6 +40,10 @@ class DirectoryController : public QObject {
   Q_PROPERTY(DirectoryProxyModel* listing READ listing CONSTANT)
   Q_PROPERTY(PlacesModel* places READ places CONSTANT)
   Q_PROPERTY(DevicesModel* devices READ devices CONSTANT)
+  Q_PROPERTY(SidebarNavigator* sidebarNavigator READ sidebarNavigator CONSTANT)
+  // Sidebar rows may be activated or removed: Normal mode, no task prompt, no Quick Look
+  // (device-actions REQ-F-023). One definition for Places, Devices and the sidebar's keys.
+  Q_PROPERTY(bool sidebarActivationEnabled READ sidebarActivationEnabled NOTIFY changed)
   Q_PROPERTY(PreviewService* preview READ preview CONSTANT)
   Q_PROPERTY(VimModeController* vim READ vim CONSTANT)
   Q_PROPERTY(TaskManager* tasks READ tasks CONSTANT)
@@ -45,7 +52,9 @@ class DirectoryController : public QObject {
   Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
  public:
   explicit DirectoryController(QObject* parent = nullptr);
-  DirectoryController(HoloNight::System::StorageController* storage, QObject* parent);
+  // A null capacity probe measures the real filesystem; tests pass a fake (device-actions REQ-C-006).
+  DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
+                      std::shared_ptr<const CapacityProbe> capacity = {});
   QString currentPath() const { return navigation_.current_path_; }
   QString statusMessage() const { return status_message_; }
   QString directoryError() const { return navigation_.model_.directoryError(); }
@@ -54,6 +63,8 @@ class DirectoryController : public QObject {
   DirectoryProxyModel* listing() { return &navigation_.proxy_; }
   PlacesModel* places() { return &places_; }
   DevicesModel* devices() { return devices_; }
+  SidebarNavigator* sidebarNavigator() { return &navigator_; }
+  bool sidebarActivationEnabled() const;
   PreviewService* preview() { return &preview_; }
   VimModeController* vim() { return &vim_; }
   TaskManager* tasks() { return &tasks_; }
@@ -142,6 +153,7 @@ class DirectoryController : public QObject {
 
   PlacesModel places_;
   DevicesModel* devices_;
+  SidebarNavigator navigator_{&places_, devices_};  // After both models it walks.
   PreviewService preview_;
   VimModeController vim_;
   TaskManager tasks_;

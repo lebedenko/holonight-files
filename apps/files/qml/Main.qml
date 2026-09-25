@@ -94,23 +94,10 @@ HnApplicationWindow {
                     color: HoloniightPalette.surface
                 }
 
-                PlacesPanel {
-                    objectName: "placesPanel"
+                SidebarPanel {
+                    objectName: "sidebarPanel"
                     controller: window.controller
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    height: devicesPanel.visible ? parent.height * 0.5 : parent.height
-                }
-                DevicesPanel {
-                    id: devicesPanel
-                    objectName: "devicesPanel"
-                    controller: window.controller
-                    visible: controller.devices.count > 0 || controller.devices.errorMessage.length > 0
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: parent.height * 0.5
+                    anchors.fill: parent
                 }
 
                 HnSeparator {
