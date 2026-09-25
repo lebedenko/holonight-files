@@ -185,6 +185,7 @@ Item {
                     anchors.centerIn: parent
                     size: imageArea.iconExtent
                     source: !root.preview.hasEntry || root.preview.hasImage || imageArea.skipRequest ? "" : "image://icon/" + root.preview.iconName
+                    rendering: HnIcon.Original
                     visible: !root.preview.hasImage && !imageArea.showFallback
                     onHasErrorChanged: if (hasError) {
                         const chain = root.preview.iconName;

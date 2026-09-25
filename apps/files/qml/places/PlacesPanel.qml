@@ -103,6 +103,7 @@ Item {
                     anchors.centerIn: parent
                     size: parent.implicitWidth
                     source: "image://icon/" + row.iconName
+                    rendering: HnIcon.Original
                     visible: !hasError
                 }
                 HnIcon {
@@ -126,6 +127,7 @@ Item {
                     anchors.centerIn: parent
                     size: parent.implicitWidth
                     source: "image://icon/dialog-warning"
+                    rendering: HnIcon.Original
                     visible: !hasError
                 }
                 HnIcon {

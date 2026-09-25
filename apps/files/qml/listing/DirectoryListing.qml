@@ -277,6 +277,7 @@ Item {
                         anchors.centerIn: parent
                         size: root.iconColumnWidth
                         source: iconCell.skipRequest ? "" : "image://icon/" + delegate.iconName
+                        rendering: HnIcon.Original
                         visible: !iconCell.showFallback
                         onHasErrorChanged: if (hasError) {
                             const chain = delegate.iconName;

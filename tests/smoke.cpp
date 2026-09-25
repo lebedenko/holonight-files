@@ -686,7 +686,7 @@ TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
       const auto icons = rowIcons(list, row);
       EXPECT_FALSE(icons.theme->isVisible()) << row;
       EXPECT_TRUE(icons.fallback->property("source").toString().endsWith("generic-file-fallback.svg")) << row;
-      EXPECT_TRUE(icons.fallback->property("tinted").toBool()) << row;
+      EXPECT_EQ(icons.fallback->property("rendering").toInt(), 1) << row;
     }
 
     // Preview pane: the folder row's theme icon at up to 128 px; a file row falls back to its glyph.
