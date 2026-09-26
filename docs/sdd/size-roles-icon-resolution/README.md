@@ -1,6 +1,6 @@
 # Extra-small Files header
 
-Status: Implemented locally; full suite has unrelated failures. Baseline: `c85e0e0d9d75e2ddcd2130fb23c8ba3fedc0051c`.
+Status: Locally verified; publication pending. Baseline: `c85e0e0d9d75e2ddcd2130fb23c8ba3fedc0051c`.
 
 ## Contract
 
@@ -12,6 +12,6 @@ Files consumes `HnControlSize.Xs` and `HnHeaderBar.sizeRole` from the Qt provide
 
 Accepted local Qt provider: `61d0c16`.
 
-Verification on 2026-09-26: all 14 `WindowHistoryNavigation` tests and the affected icon tests passed with the local Qt plugin. Six accelerated OpenGL checks passed outside the sandbox. The full non-accelerated CTest run passed 20 of 21 entries; `files-smoke` had two failures in unchanged assertions: `Files.ModeBadgeWidthConstant` still expects a Pill radius after the prior badge-corner change, and `PlacesWindow.ExtraSpacingGapPrecedesFirstBookmarkRow` reads zero spacing while measuring a 4 px gap. Files formatting, QML import policy, QML lint, QML type metadata, staged installation, REUSE lint, and clang-tidy passed. These two test failures remain open outside this implementation scope.
+Verification on 2026-09-26: all 14 `WindowHistoryNavigation` tests and the affected icon tests passed with the local Qt plugin. Two stale assertions from the preceding Files baseline were corrected to check the existing Control badge radius and the bookmark row's 4 px extra gap. The final `task check` passed all 27 CTest entries, formatting, QML lint and metadata, clang-tidy, REUSE, and staged installation outside the sandbox. `task isolated-runtime-check` passed in Docker with networking disabled.
 
 After committing Qt, `task deps` refreshed the Files dependency prefix to `61d0c16`; the focused history/icon tests and `files-provider-revisions` passed again against that installed revision.

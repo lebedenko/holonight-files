@@ -2505,14 +2505,15 @@ TEST(Files, ModeBadgeWidthConstant) {
   const auto width = harness.badge.item->width();
   const auto sceneX = harness.badge.item->mapToScene(QPointF()).x();
   EXPECT_GT(width, 0);
-  // REQ-F-007: vertically centred in the status bar, rounded with the Pill role.
+  // REQ-F-007: vertically centred in the status bar, rounded with the Control role.
   auto* statusBar = window->findChild<QQuickItem*>("modeStatusBar");
   ASSERT_NE(statusBar, nullptr);
   EXPECT_NEAR(harness.badge.item->mapToItem(statusBar, QPointF(0, harness.badge.item->height() / 2)).y(),
               statusBar->height() / 2, 1);
-  EXPECT_EQ(harness.badge.background->property("radius"),
-            evaluateInContext(harness.badge.background,
-                              "HnAppearance.roundedRadius(HnSurfaceRole.Pill, width, height, HnAppearance.revision)"));
+  EXPECT_EQ(
+      harness.badge.background->property("radius"),
+      evaluateInContext(harness.badge.background,
+                        "HnAppearance.roundedRadius(HnSurfaceRole.Control, width, height, HnAppearance.revision)"));
 
   const QList<std::tuple<Qt::Key, VimModeController::Mode, QString, QString>> steps{
       {Qt::Key_V, VimModeController::Mode::Visual, "VISUAL", "accentViolet"},

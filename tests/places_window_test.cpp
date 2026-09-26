@@ -301,8 +301,9 @@ TEST(PlacesWindow, ExtraSpacingGapPrecedesFirstBookmarkRow) {
   };
   const auto gapBeforeBookmarks = delegateTop(bm1RowItem) - delegateBottom(homeRowItem);
   const auto gapBetweenBookmarks = delegateTop(bm2RowItem) - delegateBottom(bm1RowItem);
-  const auto compactSpacing = view.places->property("spacing").toReal();
-  EXPECT_NEAR(gapBeforeBookmarks - gapBetweenBookmarks, compactSpacing, 1.0);
+  const auto extraGap = bm1RowItem->property("extraGap").toReal();
+  EXPECT_EQ(extraGap, 4);
+  EXPECT_NEAR(gapBeforeBookmarks - gapBetweenBookmarks, extraGap, 1.0);
 }
 
 TEST(PlacesWindow, NoSeparatorOrBookmarksHeadingExistsInThePanel) {

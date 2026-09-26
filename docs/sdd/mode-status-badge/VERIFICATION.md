@@ -28,7 +28,7 @@ Logs are under `build/mode-status-badge-{deps,build,test,check}.log`.
 | --- | --- |
 | F-001–003, C-002–004 | Files.ModeBadgeNormalMode checks first-child placement, visibility, font, palette fill and text; VisualMode, SearchMode and InsertMode check each mode. Source inspection confirms a Control with HnLabel content and Rectangle background, and untranslated label literals. |
 | F-004 | NormalMode checks the text color token; DESIGN.md records default-dark contrast calculations. Native legibility remains pending. |
-| F-005, F-007, NF-001 | Files.ModeBadgeWidthConstant checks mode updates, width/x stability, centering and Pill radius. Native fractional-scale rendering remains pending. |
+| F-005, F-007, NF-001 | Files.ModeBadgeWidthConstant checks mode updates, width/x stability, centering and Control radius. Native fractional-scale rendering remains pending. |
 | F-006 | Files.ModeBadgeVisibleDuringPrompt checks trash-confirm visibility and dismissal. Busy-operation and conflict-prompt badge checks are not separately automated. |
 | F-008 | Files.ModeBadgeRemovesPrefixes checks selection count, insert hint and validation error. |
 | F-009 | Shared badgeShows assertions check accessible names in all four modes; NormalMode checks StaticText role. The former planned standalone AccessibleName test is covered by these assertions. Inspector acceptance remains pending. |

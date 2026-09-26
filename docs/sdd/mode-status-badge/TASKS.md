@@ -28,7 +28,7 @@ Acceptance remains open. See [verification evidence and pending checks](VERIFICA
 
 - [x] T-007: Accessibility, no-mouse/focus, and centering/radius tests
   - REQs: REQ-F-004, REQ-F-007, REQ-F-009, REQ-F-010
-  - Check: Files.ModeBadgeNormalMode, the shared badgeShows assertions, Files.ModeBadgeWidthConstant and Files.ModeBadgeNoMouseOrFocus pass; accessible name updates with mode, badge ignores mouse clicks, accepts no focus, is vertically centered, and uses HnSurfaceRole.Pill radius.
+  - Check: Files.ModeBadgeNormalMode, the shared badgeShows assertions, Files.ModeBadgeWidthConstant and Files.ModeBadgeNoMouseOrFocus pass; accessible name updates with mode, badge ignores mouse clicks, accepts no focus, is vertically centered, and uses HnSurfaceRole.Control radius.
 
 - [x] T-008: Build and code quality verification
   - REQs: REQ-NF-002

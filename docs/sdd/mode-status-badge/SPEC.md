@@ -75,10 +75,10 @@ HoloNight Files shall display a persistent, mode-aware status badge in the foote
 
 ---
 
-### REQ-F-007 — Pill Styling and Centering
-**Ubiquitous**: The badge shall be styled as an inset pill—a rounded rectangle with horizontal and vertical padding, rounded using `HnAppearance.roundedRadius(HnSurfaceRole.Pill, w, h, HnAppearance.revision)`, and vertically centered within the footer's padding.
+### REQ-F-007 — Rounded Styling and Centering
+**Ubiquitous**: The badge shall be styled as an inset rounded rectangle with horizontal and vertical padding, rounded using `HnAppearance.roundedRadius(HnSurfaceRole.Control, w, h, HnAppearance.revision)`, and vertically centered within the footer's padding.
 
-**Acceptance**: Smoke test asserts the badge's vertical center is within 1 px of the ModeStatusBar's vertical center and its radius equals the `HnSurfaceRole.Pill` radius. Crispness at 1.5× is confirmed by the manual native Hyprland check (offscreen rendering does not reproduce DPR issues).
+**Acceptance**: Smoke test asserts the badge's vertical center is within 1 px of the ModeStatusBar's vertical center and its radius equals the `HnSurfaceRole.Control` radius. Crispness at 1.5× is confirmed by the manual native Hyprland check (offscreen rendering does not reproduce DPR issues).
 
 ---
 
@@ -168,7 +168,7 @@ HoloNight Files shall display a persistent, mode-aware status badge in the foote
 | REQ-F-004 | Text Color & Contrast | Text is background color, contrast ratio ≥ 4.5:1 vs. all fills | Manual visual check + contrast calculator |
 | REQ-F-005 | Reactivity | Mode change updates text and color without jitter | Smoke test (4-mode cycle) |
 | REQ-F-006 | Visibility During Tasks | Badge remains visible and correct during task/prompt | Smoke test (task + prompt scenario) |
-| REQ-F-007 | Pill Styling & Centering | Rounded corners, vertical centering, crisp rendering | Manual native Hyprland check |
+| REQ-F-007 | Rounded Styling & Centering | Rounded corners, vertical centering, crisp rendering | Manual native Hyprland check |
 | REQ-F-008 | Remove Redundant Prefixes | VISUAL and INSERT labels no longer prefixed, counts/hints remain | Smoke test (VISUAL and INSERT mode) |
 | REQ-F-009 | Accessibility | Accessible name "<Mode> mode", role StaticText, updates with mode | Accessibility inspector + smoke test |
 | REQ-F-010 | Display-Only | No mouse response, no focus capture, no keyboard dispatch | Smoke test (click + focus simulation) |
