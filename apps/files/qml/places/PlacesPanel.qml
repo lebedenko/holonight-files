@@ -88,7 +88,7 @@ Item {
             anchors.bottom: parent.bottom
             opacity: row.status === PlacesModel.Unavailable ? 0.5 : 1.0
             title: row.name
-            sizeRole: HnControlSize.Compact
+            sizeRole: HnControlSize.Xs
             focusPolicy: Qt.NoFocus
             highlighted: root.controller.currentPath === row.path
             leadingContentAlignment: Qt.AlignVCenter
