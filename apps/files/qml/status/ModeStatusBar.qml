@@ -64,7 +64,7 @@ RowLayout {
         }
         background: Rectangle {
             color: root.currentModeMeta.fill
-            radius: HnAppearance.roundedRadius(HnSurfaceRole.Pill, width, height, HnAppearance.revision)
+            radius: HnAppearance.roundedRadius(HnSurfaceRole.Control, width, height, HnAppearance.revision)
         }
     }
 

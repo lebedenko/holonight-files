@@ -47,10 +47,8 @@ Item {
         keyNavigationEnabled: false
         currentIndex: root.navigator.section === SidebarNavigator.Places ? root.navigator.index : -1
         model: root.controller.places
-        spacing: HnMetrics.internalSpacing(HnControlSize.Compact)
+        spacing: 0
 
-        // The wrapper keeps keyboard focus separate from exact-path selection in
-        // HnSelectableDelegate (which otherwise also selects ListView.currentItem).
         delegate: PlaceRow {}
     }
 

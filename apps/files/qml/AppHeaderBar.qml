@@ -66,7 +66,7 @@ HnHeaderBar {
             anchors.verticalCenter: parent.verticalCenter
             width: Math.max(0, Math.min(breadcrumbLabel.implicitWidth + 2 * root.breadcrumbPadding, parent.width - x - HnMetrics.internalSpacing(HnControlSize.Normal)))
             height: HnMetrics.controlHeight(HnControlSize.Compact)
-            radius: height / 2
+            radius: HnAppearance.roundedRadius(HnSurfaceRole.Control, width, height, HnAppearance.revision)
             color: HoloniightPalette.surfaceRaised
 
             HnLabel {
