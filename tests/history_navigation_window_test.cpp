@@ -105,6 +105,27 @@ TEST(WindowHistoryNavigation, BackButtonSitsLeftOfForwardButtonWithinSidebarWidt
   }
 }
 
+TEST(WindowHistoryNavigation, HeaderAndNavigationUseExtraSmallMetrics) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  auto* header = rendered.window->findChild<QQuickItem*>("appHeaderBar");
+  auto* breadcrumb = rendered.window->findChild<QQuickItem*>("breadcrumbContainer");
+  ASSERT_NE(header, nullptr);
+  ASSERT_NE(breadcrumb, nullptr);
+  EXPECT_EQ(header->height(), 42);
+  EXPECT_EQ(header->property("sizeRole").toInt(), 4);
+  EXPECT_EQ(header->property("breadcrumbPadding").toInt(), 6);
+  EXPECT_EQ(breadcrumb->height(), 24);
+  for (auto* button : {rendered.back, rendered.forward}) {
+    EXPECT_EQ(button->width(), 24);
+    EXPECT_EQ(button->height(), 24);
+    auto* icon = button->findChild<QQuickItem*>("hnIconButtonIcon");
+    ASSERT_NE(icon, nullptr);
+    EXPECT_EQ(icon->width(), 16);
+    EXPECT_EQ(icon->height(), 16);
+  }
+}
+
 TEST(WindowHistoryNavigation, ButtonsEnabledStateTracksCanGoBackForwardModeAndPrompt) {
   QTemporaryDir home(files_test::fixturePattern("history-window-home"));
   const files_test::ScopedXdgDataHome guard(home.path());

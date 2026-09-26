@@ -7,6 +7,7 @@ import Holonight.Controls
 HnHeaderBar {
     id: root
     objectName: "appHeaderBar"
+    sizeRole: HnControlSize.Xs
 
     required property DirectoryController controller
     required property real sidebarWidth
@@ -14,7 +15,7 @@ HnHeaderBar {
     // Breadcrumb text starts at the listing's left edge (Main.qml content row: sidebar + spacing), which
     // is also the line-number gutter's left edge (line-number-gutter REQ-F-015).
     readonly property real breadcrumbLeftInset: root.sidebarWidth + HnMetrics.internalSpacing(HnControlSize.Normal)
-    readonly property real breadcrumbPadding: HnMetrics.horizontalPadding(HnControlSize.Compact)
+    readonly property real breadcrumbPadding: HnMetrics.horizontalPadding(HnControlSize.Xs)
     // Same gating as the Ctrl+O/Ctrl+I shortcuts (REQ-F-032).
     readonly property bool historyEnabled: root.controller.vim.currentMode === VimModeController.Normal && !root.controller.tasks.hasPrompt
 
@@ -38,7 +39,7 @@ HnHeaderBar {
             objectName: "historyBackButton"
             x: HnMetrics.internalSpacing(HnControlSize.Normal)
             anchors.verticalCenter: parent.verticalCenter
-            sizeRole: HnControlSize.Compact
+            sizeRole: HnControlSize.Xs
             focusPolicy: Qt.NoFocus
             icon.source: "qrc:/qt/qml/HolonightFiles/icons/go-back.svg"
             enabled: root.historyEnabled && root.controller.canGoBack
@@ -51,7 +52,7 @@ HnHeaderBar {
             objectName: "historyForwardButton"
             x: backButton.x + backButton.width
             anchors.verticalCenter: parent.verticalCenter
-            sizeRole: HnControlSize.Compact
+            sizeRole: HnControlSize.Xs
             focusPolicy: Qt.NoFocus
             icon.source: "qrc:/qt/qml/HolonightFiles/icons/go-forward.svg"
             enabled: root.historyEnabled && root.controller.canGoForward
@@ -65,7 +66,7 @@ HnHeaderBar {
             x: root.breadcrumbLeftInset - root.breadcrumbPadding
             anchors.verticalCenter: parent.verticalCenter
             width: Math.max(0, Math.min(breadcrumbLabel.implicitWidth + 2 * root.breadcrumbPadding, parent.width - x - HnMetrics.internalSpacing(HnControlSize.Normal)))
-            height: HnMetrics.controlHeight(HnControlSize.Compact)
+            height: HnMetrics.controlHeight(HnControlSize.Xs)
             radius: HnAppearance.roundedRadius(HnSurfaceRole.Control, width, height, HnAppearance.revision)
             color: HoloniightPalette.surfaceRaised
 
