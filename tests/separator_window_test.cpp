@@ -120,6 +120,8 @@ void expectJunctionPixels(const QImage& background, const QImage& rendered, cons
   // Check complete junction neighborhoods, including the surrounding unpainted pixels.
   QList<QPointF> junctions = {{bounds[1].center().x(), bounds[0].bottom()},
                               {bounds[1].center().x(), bounds[5].top()},
+                              {bounds[6].center().x(), bounds[0].bottom()},
+                              {bounds[6].center().x(), bounds[5].top()},
                               bounds[2].topLeft(),
                               bounds[2].topRight()};
   for (int column : {3, 4}) {
@@ -188,7 +190,7 @@ TEST(Files, WindowSeparatorJunctions) {
   const auto grab = [&] { return gpu_capture ? gpu_capture->grab() : window->grabWindow(); };
   QList<QQuickItem*> separators;
   for (const char* name : {"headerDivider", "sidebarDivider", "columnHeaderDivider", "sizeColumnDivider",
-                           "modifiedColumnDivider", "footerDivider"}) {
+                           "modifiedColumnDivider", "footerDivider", "listingPreviewDivider"}) {
     auto* item = window->findChild<QQuickItem*>(name);
     ASSERT_NE(item, nullptr) << name;
     ASSERT_EQ(item->property("thickness").toInt(), 1) << name;
@@ -197,11 +199,27 @@ TEST(Files, WindowSeparatorJunctions) {
   const auto original = separators.first()->property("color").value<QColor>();
   auto* listing = window->findChild<QQuickItem*>("directoryListing");
   ASSERT_NE(listing, nullptr);
-  for (int width : {1000, 850, 740, 420, 1000}) {
+  auto* preview = window->findChild<QQuickItem*>("previewContainer");
+  ASSERT_NE(preview, nullptr);
+  auto* handle = separators[6];
+  auto* mask = qobject_cast<QQuickItem*>(handle->containmentMask());
+  ASSERT_NE(mask, nullptr);
+  // The existing 420px window minimum cannot fit both side panes; cover usable narrow layouts here.
+  for (int width : {1000, 850, 740, 640, 1000}) {
     SCOPED_TRACE(::testing::Message() << "width=" << width << " DPR=" << dpr);
     window->resize(width, 500);
+    QTest::qWait(50);  // Allow the resized SplitView to complete its deferred layout.
     // grabWindow synchronizes and polishes the real application layout before inspection.
     ASSERT_TRUE(QTest::qWaitFor([&] { return grab().size() == QSize(qRound(width * dpr), qRound(500 * dpr)); }));
+    EXPECT_DOUBLE_EQ(handle->width(), 1 / dpr);
+    EXPECT_DOUBLE_EQ(listing->mapToScene(QPointF(listing->width(), 0)).x(), handle->mapToScene({}).x());
+    EXPECT_DOUBLE_EQ(handle->mapToScene(QPointF(handle->width(), 0)).x(), preview->mapToScene({}).x());
+    EXPECT_GE(preview->width(), 220);
+    EXPECT_GT(mask->width(), handle->width());
+    EXPECT_DOUBLE_EQ(mask->height(), handle->height());
+    EXPECT_DOUBLE_EQ(mask->x() + (mask->width() / 2), handle->width() / 2);
+    EXPECT_TRUE(handle->contains(QPointF(mask->x() + 0.5, handle->height() / 2)));
+    EXPECT_TRUE(handle->contains(QPointF(mask->x() + mask->width() - 0.5, handle->height() / 2)));
     EXPECT_EQ(separators[3]->isVisible(), listing->property("showSize").toBool());
     EXPECT_EQ(separators[4]->isVisible(), listing->property("showModified").toBool());
     QList<QRectF> bounds;
@@ -220,6 +238,9 @@ TEST(Files, WindowSeparatorJunctions) {
     ASSERT_EQ(background.size(), rendered.size());
     EXPECT_DOUBLE_EQ(bounds[0].bottom(), bounds[1].top());
     EXPECT_DOUBLE_EQ(bounds[1].bottom(), bounds[5].top());
+    EXPECT_DOUBLE_EQ(bounds[0].bottom(), bounds[6].top());
+    EXPECT_DOUBLE_EQ(bounds[6].bottom(), bounds[5].top());
+    EXPECT_DOUBLE_EQ(bounds[2].right(), bounds[6].left());
     for (int column : {3, 4}) {
       if (!separators[column]->isVisible()) {
         continue;

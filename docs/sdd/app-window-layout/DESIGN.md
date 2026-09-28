@@ -546,16 +546,20 @@ several barely-visible ones (everything added in this cycle).
 
 ### 8.6 Custom thin `SplitView` handle
 
-Qt Quick Controls' default `SplitView` handle is a wide (visually multi-pixel) drag grip. Review asked for
-a 1px visible divider between the listing and preview pane while preserving drag-to-resize. `SplitView.handle`
-is now a custom `Item` (`implicitWidth: HnMetrics.internalSpacing(Compact) + HnMetrics.separatorWidth`,
-giving a comfortable ~9px hit region) containing a single centered 1px `Rectangle`
-(`color: SplitHandle.pressed ? borderActive : (SplitHandle.hovered ? borderHover : borderPassive)`, using
-the `SplitHandle` attached property Qt Quick Controls provides on handle delegates). The wide hit region
-stays fully interactive (`SplitView` treats the whole handle item's bounds as the drag target, not just
-its visible pixels) — confirmed by `tests/smoke.cpp`'s `InspectionImageSplitterAndPixelSizing`, which
-computes its drag point as the midpoint between the listing's right edge and the preview pane's left edge
-and continued passing unmodified.
+The listing/preview handle is a vertical shared `HnSeparator`. Its implicit width reserves
+only the divider's physical-pixel thickness in logical coordinates, and its shared geometry
+keeps the stroke aligned at fractional display scales. Listing and preview meet opposite
+edges of this thin slot without an added rectangular gap; delegate rounded corners remain.
+
+A centered, full-height `containmentMask` Item retains the drag-target width of
+`HnMetrics.internalSpacing(HnControlSize.Compact) + HnMetrics.separatorWidth`.
+The invisible target overlaps both panes without allocating layout space. Qt's built-in
+`Controls.SplitView` resizing remains responsible for interaction. The separator color
+binds to the handle root's `Controls.SplitHandle.pressed` and `Controls.SplitHandle.hovered`,
+using `borderActive`, `borderHover`, and `borderPassive` respectively.
+
+Native acceptance covers dragging from both sides of the line, hover/pressed colors,
+and adjacent scrollbar interaction; pointer automation is prohibited.
 
 ### 8.7 Other changes
 

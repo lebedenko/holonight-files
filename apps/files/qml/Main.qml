@@ -119,14 +119,16 @@ HnApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
-                handle: Item {
-                    implicitWidth: HnMetrics.internalSpacing(HnControlSize.Compact) + HnMetrics.separatorWidth
+                handle: HnSeparator {
+                    id: splitHandle
+                    objectName: "listingPreviewDivider"
+                    orientation: Qt.Vertical
+                    color: splitHandle.Controls.SplitHandle.pressed ? HoloniightPalette.borderActive : (splitHandle.Controls.SplitHandle.hovered ? HoloniightPalette.borderHover : HoloniightPalette.borderPassive)
 
-                    Rectangle {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: HnMetrics.separatorWidth
-                        height: parent.height
-                        color: SplitHandle.pressed ? HoloniightPalette.borderActive : (SplitHandle.hovered ? HoloniightPalette.borderHover : HoloniightPalette.borderPassive)
+                    containmentMask: Item {
+                        x: (splitHandle.width - width) / 2
+                        width: HnMetrics.internalSpacing(HnControlSize.Compact) + HnMetrics.separatorWidth
+                        height: splitHandle.height
                     }
                 }
 
