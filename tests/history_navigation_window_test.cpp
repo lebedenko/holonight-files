@@ -245,7 +245,7 @@ TEST(WindowHistoryNavigation, BreadcrumbContainerXUnchangedAtDefaultAndMinimumWi
     EXPECT_NEAR(breadcrumb->x(), expectedX(), 1) << width;
   }
   const auto before = breadcrumb->mapToScene(QPointF()).x();
-  rendered.window->setProperty("sidebarWidth", 240);
+  rendered.window->setProperty("sidebarWidth", 260);
   QTest::qWait(20);
   EXPECT_NEAR(breadcrumb->mapToScene(QPointF()).x() - before, 40, 1);
   EXPECT_NEAR(breadcrumb->x(), expectedX(), 1);

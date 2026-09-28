@@ -13,7 +13,7 @@ HnApplicationWindow {
     id: window
     objectName: "filesWindow"
     required property DirectoryController controller
-    property real sidebarWidth: 200
+    property real sidebarWidth: 220
     width: 1000
     height: 700
     minimumWidth: 420
@@ -139,7 +139,7 @@ HnApplicationWindow {
                 Item {
                     id: previewContainer
                     objectName: "previewContainer"
-                    Controls.SplitView.preferredWidth: 320
+                    Controls.SplitView.preferredWidth: 220
                     Controls.SplitView.minimumWidth: 220
 
                     Rectangle {

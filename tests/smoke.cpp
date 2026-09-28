@@ -224,12 +224,12 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
   ASSERT_NE(modifiedHeader, nullptr);
   ASSERT_NE(breadcrumb, nullptr);
   // line-number-gutter keeps the showSize/showModified formulas unchanged (its non-goal 8), so the
-  // gutter narrows Name below them; 740 px (not 700) is the narrowest width that still hides Size
+  // gutter narrows Name below them; 660 px (not 620) is the narrowest width that still hides Size
   // while leaving Name its 120 px.
-  for (const int width : {1000, 850, 740, 1000}) {
+  for (const int width : {1000, 770, 660, 1000}) {
     window->resize(width, 400);
     ASSERT_TRUE(QTest::qWaitFor([&] {
-      return name->width() >= 120 && size->isVisible() == (width != 740) && modified->isVisible() == (width == 1000);
+      return name->width() >= 120 && size->isVisible() == (width != 660) && modified->isVisible() == (width == 1000);
     }));
     EXPECT_EQ(sizeHeader->isVisible(), size->isVisible());
     EXPECT_EQ(modifiedHeader->isVisible(), modified->isVisible());
