@@ -26,7 +26,33 @@ Item {
         root.preview.setRequestedSize(PreviewService.Pane, Qt.size(imageArea.width * ratio, imageArea.frameHeight * ratio));
     }
 
-    Component.onCompleted: root.reportImageAreaSize()
+    property bool fallbackDelayElapsed: false
+    readonly property bool showIconFallback: root.preview.hasEntry && !root.preview.hasImage && (!root.preview.busy || root.preview.previewErrorKind !== PreviewService.None || root.fallbackDelayElapsed)
+
+    function resetFallbackDelay(): void {
+        fallbackDelay.stop();
+        root.fallbackDelayElapsed = false;
+        if (root.preview.busy && !root.preview.hasImage)
+            fallbackDelay.start();
+    }
+
+    Timer {
+        id: fallbackDelay
+        interval: 150
+        onTriggered: root.fallbackDelayElapsed = true
+    }
+
+    Connections {
+        target: root.preview
+        function onSelectionChanged(): void {
+            root.resetFallbackDelay();
+        }
+    }
+
+    Component.onCompleted: {
+        root.reportImageAreaSize();
+        root.resetFallbackDelay();
+    }
     onPreviewDevicePixelRatioChanged: root.reportImageAreaSize()
 
     function formatModified(value): string {
@@ -183,6 +209,7 @@ Item {
                 readonly property bool isFolderIconName: root.preview.iconName === "folder" || root.preview.iconName.startsWith("folder/")
 
                 PreviewImageItem {
+                    objectName: "previewThumbnail"
                     anchors.fill: parent
                     image: root.preview.image
                     visible: root.preview.hasImage
@@ -197,7 +224,7 @@ Item {
                     size: imageArea.iconSourceSize
                     source: !root.preview.hasEntry || root.preview.hasImage || imageArea.skipRequest ? "" : "image://icon/" + root.preview.iconName
                     rendering: HnIcon.Original
-                    visible: !root.preview.hasImage && !imageArea.showFallback
+                    visible: root.showIconFallback && !imageArea.showFallback
                     onHasErrorChanged: if (hasError) {
                         const chain = root.preview.iconName;
                         IconFallbacks.markUnresolved(chain);
@@ -213,7 +240,7 @@ Item {
                     height: imageArea.iconExtent
                     size: imageArea.iconExtent
                     source: root.preview.hasImage || !imageArea.showFallback ? "" : imageArea.isFolderIconName ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
-                    visible: !root.preview.hasImage && imageArea.showFallback
+                    visible: root.showIconFallback && imageArea.showFallback
                 }
                 Rectangle {
                     objectName: "previewIconFailurePlaceholder"
@@ -223,7 +250,7 @@ Item {
                     radius: 8
                     color: "transparent"
                     border.color: HoloniightPalette.textMuted
-                    visible: !root.preview.hasImage && imageArea.showFallback && previewFallbackIcon.hasError
+                    visible: root.showIconFallback && imageArea.showFallback && previewFallbackIcon.hasError
                     Text {
                         anchors.centerIn: parent
                         text: "?"

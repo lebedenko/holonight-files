@@ -74,22 +74,22 @@ TEST(QuickLookClassification, PreservesPrecedenceAndIntermediateLoadingStates) {
   EXPECT_EQ(Access::classify(true, false, "inode/directory", false, false), Kind::Compact);
 }
 
-TEST_F(QuickLookPresentationTest, StartsCompactAndClassifiesBeforeBusyIsSet) {
+TEST_F(QuickLookPresentationTest, StartsCompactAndClassifiesTheInitialBusySelection) {
   EXPECT_EQ(model().kind(), Kind::None);
   EXPECT_EQ(model().cardSize(), QSizeF(240, 166));
   EXPECT_EQ(model().frameSize(), QSizeF(96, 96));
   const auto path = image("initial.png", {600, 400});
   ASSERT_FALSE(path.isEmpty());
-  bool sawPreDispatch = false;
+  bool sawInitialLoading = false;
   QObject::connect(&service(), &PreviewService::changed, &model(), [&] {
-    if (service().hasEntry() && service().mimeType().isEmpty() && !service().busy()) {
-      sawPreDispatch = true;
+    if (service().hasEntry() && service().mimeType().isEmpty() && service().busy()) {
+      sawInitialLoading = true;
       EXPECT_EQ(model().kind(), Kind::Pending);
       EXPECT_EQ(model().cardSize(), QSizeF(240, 166));
     }
   });
   selectFile(service(), path);
-  EXPECT_TRUE(sawPreDispatch);
+  EXPECT_TRUE(sawInitialLoading);
   EXPECT_EQ(model().kind(), Kind::Pending);
   ASSERT_TRUE(waitForPreview());
   EXPECT_EQ(model().kind(), Kind::Image);

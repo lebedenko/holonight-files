@@ -131,7 +131,7 @@ QuickLookPresentationModel::Kind QuickLookPresentationModel::classify(bool hasEn
   if (hasError) {
     return Kind::Compact;
   }
-  // setTarget() publishes metadata before dispatch sets busy: empty MIME already means pending.
+  // An empty MIME means the new selection has not been classified yet.
   if (mimeType.isEmpty()) {
     return Kind::Pending;
   }

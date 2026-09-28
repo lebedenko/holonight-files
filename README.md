@@ -484,3 +484,9 @@ displayed filesystem is unmounted or removed, Files returns Home with an explana
 [device actions specification](docs/sdd/device-actions/SPEC.md).
 
 Development builds also require the sibling `holonight-system-services` repository; `task deps` installs its Storage component without Audio/libpulse.
+
+Sidebar previews reserve an empty square for up to 150 ms while a new selection loads.
+Thumbnails appear as soon as available; slower loads show the existing icon until the
+image arrives. Folders and completed or failed previews without images show icons
+immediately. The delay is internal, with no new setting. See the
+[sidebar icon delay verification](docs/sdd/sidebar-icon-delay/VERIFICATION.md).

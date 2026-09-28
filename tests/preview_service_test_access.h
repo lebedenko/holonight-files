@@ -5,6 +5,14 @@
 // Internal synchronization seam, configured before a target dispatches its worker job. Mirrors
 // DirectoryModelTestAccess: a test-only hook, not part of the production API surface.
 struct PreviewServiceTestAccess {
+  // Drive presentation states without timing worker I/O; service transitions have separate tests.
+  static void presentationState(PreviewService& service, bool busy, const QImage& image = {},
+                                PreviewService::PreviewErrorKind error = PreviewService::PreviewErrorKind::None) {
+    service.busy_ = busy;
+    service.display_image_ = image;
+    service.error_.kind = error;
+    service.notifyChanged();
+  }
   static auto rasterError(HolonightImages::Outcome outcome) { return PreviewService::rasterError(outcome); }
   static auto exif(const PreviewService& service) { return service.exif_; }
   static void thumbnailStage(PreviewService& service, ThumbnailService::StageCallback callback) {

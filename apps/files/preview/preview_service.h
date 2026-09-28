@@ -146,6 +146,8 @@ class PreviewService : public QObject {
   void shutdown();
 
  signals:
+  // Emitted before changed() for a new target/revision or clear, never for a size upgrade.
+  void selectionChanged();
   void changed();
   void currentLineIndexChanged();
   void shutdownFinished();

@@ -1094,3 +1094,41 @@ TEST(PreviewService, SvgInputBudgetRejectsOversizedSource) {
   EXPECT_FALSE(service.hasImage());
   EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::ResourceLimit);
 }
+
+TEST(PreviewService, SelectionNotificationPublishesBusyAtomicallyAndTracksRefreshNotResize) {
+  QTemporaryDir dir(fixturePattern("preview-selection-notification"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeJpegWithExif(dir);
+  const QFileInfo info(path);
+  PreviewService service;
+  QSignalSpy selections(&service, &PreviewService::selectionChanged);
+  int initialChanges = 0;
+  bool initial = true;
+  QObject::connect(&service, &PreviewService::selectionChanged, &service, [&] {
+    EXPECT_TRUE(service.busy());
+    EXPECT_FALSE(service.hasImage());
+    EXPECT_EQ(service.name(), info.fileName());
+  });
+  QObject::connect(&service, &PreviewService::changed, &service, [&] {
+    if (initial) {
+      ++initialChanges;
+      EXPECT_EQ(selections.count(), 1);
+      EXPECT_TRUE(service.busy());
+      EXPECT_FALSE(service.hasImage());
+    }
+  });
+  setTargetFromFile(service, path);
+  EXPECT_EQ(initialChanges, 1);
+  initial = false;
+  ASSERT_TRUE(settled(service));
+  setTargetFromFile(service, path);
+  EXPECT_EQ(selections.count(), 1);  // Identical target is a no-op.
+  service.setRequestedSize(PreviewService::PreviewConsumer::Pane, QSize(1600, 1600));
+  QTest::qWait(200);
+  EXPECT_EQ(selections.count(), 1);
+  EXPECT_TRUE(service.hasImage());
+  service.setTarget(path, false, info.size(), info.lastModified(), 0100644, false, {}, {}, 1);
+  EXPECT_EQ(selections.count(), 2);  // Same path, new listing revision.
+  EXPECT_TRUE(service.busy());
+  ASSERT_TRUE(settled(service));
+}

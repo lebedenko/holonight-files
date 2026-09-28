@@ -412,21 +412,20 @@ void PreviewService::setTarget(const QString& path, bool isDir, qint64 size, con
     error_ = {.kind = statError.contains(QStringLiteral("Broken symbolic link")) ? PreviewErrorKind::BrokenSymlink
                                                                                  : PreviewErrorKind::PermissionDenied,
               .message = statError};
-    notifyChanged();
-    return;
-  }
-  if (!S_ISREG(mode) && !S_ISLNK(mode) && !isDir) {
+  } else if (!S_ISREG(mode) && !S_ISLNK(mode) && !isDir) {
     mime_type_ = S_ISFIFO(mode) ? QStringLiteral("inode/fifo") : QStringLiteral("application/octet-stream");
-    notifyChanged();
-    return;
-  }
-  if (isDir) {
+  } else if (isDir) {
     mime_type_ = QStringLiteral("inode/directory");
-    notifyChanged();
-    return;
+  } else {
+    busy_ = !stopping_;
   }
-  notifyChanged();  // Metadata is visible instantly; image/text/EXIF follow asynchronously.
-  dispatch();
+  // Reset presentation before property notifications, with the complete initial state readable.
+  emit selectionChanged();
+  if (busy_) {
+    dispatch();
+  } else {
+    notifyChanged();
+  }
 }
 
 void PreviewService::clear() {
@@ -443,6 +442,7 @@ void PreviewService::clear() {
   busy_ = false;
   retained_line_ = 0;
   resetDisplayState();
+  emit selectionChanged();
   notifyChanged();
 }
 
@@ -497,7 +497,7 @@ void PreviewService::dispatch() {
   busy_ = true;
   timeout_timer_.start(kDecodeTimeoutMs);
   pending_job_ = true;
-  emit changed();
+  notifyChanged();
   if (!active_job_) {
     startJob();
   }

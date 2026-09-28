@@ -12,6 +12,9 @@
 #include <QQuickRenderControl>
 #include <QQuickRenderTarget>
 #include <QQuickWindow>
+#include <QScopeGuard>
+#include <QSemaphore>
+#include <QSignalSpy>
 #include <QTest>
 
 #include <gtest/gtest.h>
@@ -78,4 +81,153 @@ TEST(PreviewConsumers, UseWindowDprWhenScreenDprDiffersAndTrackChanges) {
         << PreviewServiceTestAccess::paneSize(*controller.preview()).width() << "; quick DPR "
         << quick->devicePixelRatio();
   }
+}
+
+TEST(PreviewConsumers, SidebarDelaysEveryFallbackAndResetsForEachSelection) {
+  DirectoryController controller;
+  auto& preview = *controller.preview();
+  QQmlEngine engine;
+  initializeFilesEngine(engine);
+  QQmlComponent component(&engine);
+  component.setData(R"(
+    import QtQuick
+    import HolonightFiles
+    PreviewPane { width: 320; height: 600 }
+  )",
+                    QUrl());
+  std::unique_ptr<QObject> pane(
+      component.createWithInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}}));
+  ASSERT_NE(pane, nullptr) << component.errorString().toStdString();
+  auto* area = pane->findChild<QQuickItem*>("previewImageArea");
+  ASSERT_NE(area, nullptr);
+  const auto hidden = [&] {
+    for (const auto* name : {"previewThemeIcon", "previewFallbackIcon", "previewIconFailurePlaceholder"}) {
+      auto* icon = pane->findChild<QQuickItem*>(name);
+      EXPECT_NE(icon, nullptr);
+      if (icon != nullptr) {
+        EXPECT_FALSE(icon->isVisible()) << name;
+      }
+    }
+  };
+  const auto fallback = [&] { return pane->property("showIconFallback").toBool(); };
+  // A folder gives a real selection and no worker. Synthetic worker states isolate timer behavior.
+  preview.setTarget("/folder", true, -1, {}, 0040755, false, {}, "folder");
+  EXPECT_TRUE(fallback());
+  const auto begin = [&] {
+    PreviewServiceTestAccess::presentationState(preview, true);
+    emit preview.selectionChanged();
+    EXPECT_FALSE(fallback());
+    hidden();
+  };
+  begin();
+  QTest::qWait(60);
+  EXPECT_FALSE(fallback());
+  hidden();
+  // Navigation before the old deadline restarts the full interval, even for the same path.
+  begin();
+  QTest::qWait(100);
+  EXPECT_FALSE(fallback());
+  ASSERT_TRUE(QTest::qWaitFor(fallback, 500));
+  EXPECT_TRUE(pane->property("fallbackDelayElapsed").toBool());
+  // A thumbnail wins while metadata remains busy, including after the fallback was visible.
+  QImage image(32, 32, QImage::Format_RGB32);
+  image.fill(Qt::red);
+  PreviewServiceTestAccess::presentationState(preview, true, image);
+  EXPECT_TRUE(preview.busy());
+  EXPECT_FALSE(fallback());
+  hidden();
+  // Size upgrades keep the pixels; they do not reset selection presentation.
+  auto* item = qobject_cast<QQuickItem*>(pane.get());
+  ASSERT_NE(item, nullptr);
+  item->setWidth(400);
+  EXPECT_TRUE(preview.hasImage());
+  EXPECT_FALSE(fallback());
+  EXPECT_TRUE(pane->property("fallbackDelayElapsed").toBool());
+  begin();
+  PreviewServiceTestAccess::presentationState(preview, true, image);  // Fast cache-like delivery.
+  hidden();
+  EXPECT_FALSE(pane->property("fallbackDelayElapsed").toBool());
+  QTest::qWait(200);
+  hidden();
+  begin();
+  PreviewServiceTestAccess::presentationState(preview, false);  // Completion without pixels.
+  EXPECT_TRUE(fallback());
+  EXPECT_FALSE(pane->property("fallbackDelayElapsed").toBool());
+  begin();
+  PreviewServiceTestAccess::presentationState(preview, false, {}, PreviewService::PreviewErrorKind::DecodeFailed);
+  EXPECT_TRUE(fallback());
+  EXPECT_FALSE(pane->property("fallbackDelayElapsed").toBool());
+  begin();
+  PreviewServiceTestAccess::presentationState(preview, false, {}, PreviewService::PreviewErrorKind::DecodeTimeout);
+  EXPECT_TRUE(fallback());
+  preview.clear();
+  EXPECT_FALSE(fallback());
+  hidden();
+}
+
+TEST(PreviewConsumers, SidebarWorkerThumbnailIsVisibleBeforeMetadataAndOnCacheRevisit) {
+  QTemporaryDir dir(files_test::fixturePattern("sidebar-worker"));
+  ASSERT_TRUE(dir.isValid());
+  const auto path = files_test::writeJpegWithExif(dir);
+  const QFileInfo info(path);
+  DirectoryController controller;
+  auto& preview = *controller.preview();
+  QQmlEngine engine;
+  initializeFilesEngine(engine);
+  QQmlComponent component(&engine);
+  component.setData(R"(
+    import QtQuick
+    import HolonightFiles
+    PreviewPane { width: 320; height: 600 }
+  )",
+                    QUrl());
+  std::unique_ptr<QObject> pane(
+      component.createWithInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}}));
+  ASSERT_NE(pane, nullptr) << component.errorString().toStdString();
+  auto* thumbnail = pane->findChild<QQuickItem*>("previewThumbnail");
+  ASSERT_NE(thumbnail, nullptr);
+  bool sawPartial = false;
+  std::atomic_int decodes = 0;
+  QSemaphore release;
+  PreviewServiceTestAccess::beforeDispatch(preview, [&] { release.acquire(); });
+  const auto unblock = qScopeGuard([&] {
+    release.release();
+    EXPECT_TRUE(QTest::qWaitFor([&] { return !PreviewServiceTestAccess::activeJob(preview); }));
+    PreviewServiceTestAccess::beforeFullDecode(preview, {});
+  });
+  const auto select = [&] {
+    preview.setTarget(path, false, info.size(), info.lastModified(), 0100644, false, {}, "image-jpeg");
+  };
+  QObject::connect(&preview, &PreviewService::changed, pane.get(), [&] {
+    if (preview.hasImage() && preview.busy()) {
+      sawPartial = true;
+      EXPECT_TRUE(thumbnail->isVisible());
+      EXPECT_FALSE(pane->property("showIconFallback").toBool());
+    }
+  });
+  select();
+  EXPECT_FALSE(pane->property("showIconFallback").toBool());
+  EXPECT_FALSE(thumbnail->isVisible());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return pane->property("showIconFallback").toBool(); }, 500));
+  PreviewServiceTestAccess::beforeDispatch(preview, {});
+  release.release();
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !preview.busy(); }));
+  EXPECT_TRUE(sawPartial);
+  EXPECT_TRUE(thumbnail->isVisible());
+  preview.setTarget(dir.path(), true, -1, {}, 0040755, false, {}, "folder");
+  EXPECT_TRUE(pane->property("showIconFallback").toBool());
+  EXPECT_FALSE(thumbnail->isVisible());
+  PreviewServiceTestAccess::beforeFullDecode(preview, [&] { ++decodes; });
+  select();
+  EXPECT_FALSE(pane->property("showIconFallback").toBool());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !preview.busy(); }));
+  EXPECT_EQ(decodes.load(), 0);
+  EXPECT_TRUE(thumbnail->isVisible());
+  EXPECT_FALSE(pane->property("showIconFallback").toBool());
+  QSignalSpy selections(&preview, &PreviewService::selectionChanged);
+  qobject_cast<QQuickItem*>(pane.get())->setWidth(640);
+  QTest::qWait(200);
+  EXPECT_TRUE(thumbnail->isVisible());
+  EXPECT_TRUE(selections.empty());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !preview.busy(); }));
 }

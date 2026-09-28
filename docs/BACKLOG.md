@@ -212,3 +212,9 @@ The user authorized publication and pinning; the umbrella ledger records the fin
 Implementation and focused coverage are in place for explicit self-contained SVG previews, vector-aware DPR sizing,
 resource validation and policy-marked thumbnails. Full and native acceptance status is tracked in
 [shared SVG tasks](sdd/shared-svg-support/TASKS.md).
+
+## Sidebar icon delay
+
+The sidebar suppresses brief fallback flashes with a 150 ms selection-local delay.
+Automated and pending native acceptance are tracked in
+[verification](sdd/sidebar-icon-delay/VERIFICATION.md).
