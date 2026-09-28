@@ -28,6 +28,7 @@
 #include <QTest>
 #include <QThread>
 #include <QWheelEvent>
+#include <QtMath>
 
 #include <algorithm>
 #include <atomic>
@@ -689,15 +690,39 @@ TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
       EXPECT_EQ(icons.fallback->property("rendering").toInt(), 1) << row;
     }
 
-    // Preview pane: the folder row's theme icon at up to 128 px; a file row falls back to its glyph.
+    // Preview pane: the folder row's theme icon fills the square frame inside a 16 px inset, rendered
+    // from the largest standard size that fits; a file row falls back to its glyph.
     auto* previewTheme = window->findChild<QQuickItem*>("previewThemeIcon");
     auto* previewFallback = window->findChild<QQuickItem*>("previewFallbackIcon");
     ASSERT_NE(previewTheme, nullptr);
     ASSERT_NE(previewFallback, nullptr);
     ASSERT_TRUE(QTest::qWaitFor([&] { return previewTheme->isVisible() && imageReady(previewTheme); }));
     EXPECT_FALSE(previewFallback->isVisible());
-    EXPECT_LE(previewTheme->width(), 128);
-    EXPECT_GT(previewTheme->width(), 0);
+    auto* previewArea = window->findChild<QQuickItem*>("previewImageArea");
+    ASSERT_NE(previewArea, nullptr);
+    const auto expectIconFitsInset = [&](QQuickItem* icon) {
+      const int extent = qFloor(previewArea->width()) - 32;
+      ASSERT_GT(extent, 16);
+      EXPECT_EQ(icon->width(), extent);
+      EXPECT_EQ(icon->height(), extent);
+      int tier = 16;
+      for (const int candidate : {22, 24, 32, 48, 64, 96, 128, 256, 512}) {
+        if (candidate <= extent) {
+          tier = candidate;
+        }
+      }
+      EXPECT_EQ(icon->property("size").toInt(), tier);
+    };
+    expectIconFitsInset(previewTheme);
+    auto* previewContainer = window->findChild<QQuickItem*>("previewContainer");
+    ASSERT_NE(previewContainer, nullptr);
+    for (const int paneWidth : {260, 300}) {
+      QQmlProperty(previewContainer, QStringLiteral("SplitView.preferredWidth"), qmlContext(previewContainer))
+          .write(paneWidth);
+      ASSERT_TRUE(
+          QTest::qWaitFor([&] { return qAbs(previewTheme->width() - (qFloor(previewArea->width()) - 32)) < 1; }));
+      expectIconFitsInset(previewTheme);
+    }
     window->requestActivate();
     ASSERT_TRUE(QTest::qWaitForWindowActive(window));
     QTest::keyClick(window, Qt::Key_J);
@@ -1516,24 +1541,22 @@ TEST(Files, PreviewSidebarRowsHideWrapAndStayFreeOfBindingLoops) {
                      sizeValue, dimensionsValue, errorNotice, fileName}) {
     ASSERT_NE(item, nullptr);
   }
-  // Frame height follows the source aspect ratio, capped at 240 (REQ-F-001, REQ-NF-001).
-  const auto frameSettles = [&](double aspect) {
+  // The frame stays square regardless of the source aspect ratio, so the tables below never shift.
+  const auto frameSettles = [&] {
     return QTest::qWaitFor([&] {
-      return controller.preview()->hasImage() &&
-             qAbs(imageArea->height() - qMin(240.0, qRound(imageArea->width() * aspect) * 1.0)) <= 1;
+      return controller.preview()->hasImage() && qAbs(imageArea->height() - qRound(imageArea->width())) <= 1;
     });
   };
 
   ASSERT_TRUE(stepPreviewTo(controller, "01-portrait.jpg"));
-  ASSERT_TRUE(frameSettles(2.0));
-  EXPECT_LE(imageArea->height(), 240);
+  ASSERT_TRUE(frameSettles());
   EXPECT_TRUE(exifTable->isVisible());
   EXPECT_TRUE(lensValue->isVisible());
   EXPECT_EQ(dimensionsValue->property("text").toString(), QStringLiteral("60 \u00d7 120"));
   EXPECT_EQ(cameraValue->property("text").toString(), QStringLiteral("Holonight TestCam 1000"));
 
   ASSERT_TRUE(stepPreviewTo(controller, "02-landscape.jpg"));
-  ASSERT_TRUE(frameSettles(0.5));
+  ASSERT_TRUE(frameSettles());
   EXPECT_TRUE(exifTable->isVisible());
   EXPECT_TRUE(cameraValue->isVisible());
   EXPECT_FALSE(lensValue->isVisible());

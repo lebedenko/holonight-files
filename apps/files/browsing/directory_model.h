@@ -78,6 +78,8 @@ class DirectoryModel : public QAbstractListModel {
   // No-op if row is out of range or isn't a placeholder row.
   void removePlaceholderRow(int row);
   void shutdown();
+  // The synthetic ".." row shown until the walker delivers the parent folder's stat'ed entry.
+  static DirectoryEntry syntheticParentEntry(const QString& path);
   // Stats and classifies a stored last location on the worker thread (SPEC.md REQ-F-016) and
   // reports the result through restoreValidated().
   void validateForRestore(const QString& path);
@@ -107,6 +109,8 @@ class DirectoryModel : public QAbstractListModel {
   void resolveLocation(const QString& path, quint64 generation);
   void startWalk(const QString& path, bool diff);
   void applyBatch(const Batch& batch);
+  // Applies a load batch's leading ".." entry to row 0 in place and returns the remaining entries.
+  QList<DirectoryEntry> replaceParentRow(QList<DirectoryEntry> entries);
   void appendEntries(const QList<DirectoryEntry>& entries);
   void applyDiffEntries(const QList<DirectoryEntry>& entries);
   void finishDiff();

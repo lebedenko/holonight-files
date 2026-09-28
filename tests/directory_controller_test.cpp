@@ -11,6 +11,7 @@
 #include "storage_fixtures.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -152,6 +153,21 @@ TEST(DirectoryController, HNavigatesToParentDirectory) {
   EXPECT_TRUE(controller.handleKey("h"));
   ASSERT_TRUE(settled(controller));
   EXPECT_EQ(QDir(controller.currentPath()).canonicalPath(), QDir(parent.path()).canonicalPath());
+}
+
+TEST(DirectoryController, ParentRowPreviewsTheParentFolderUnderItsOwnName) {
+  QTemporaryDir parent(fixturePattern("ctrl-parent-preview"));
+  ASSERT_TRUE(parent.isValid());
+  ASSERT_TRUE(QDir(parent.path()).mkdir("child"));
+  DirectoryController controller;
+  controller.open(QDir(parent.path()).filePath("child"));
+  ASSERT_TRUE(settled(controller));
+  ASSERT_EQ(controller.cursorRow(), 0);
+  const QFileInfo parentInfo(parent.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->modified().isValid(); }));
+  EXPECT_EQ(controller.preview()->name(), parentInfo.fileName());
+  EXPECT_EQ(controller.preview()->mimeType(), QStringLiteral("inode/directory"));
+  EXPECT_EQ(controller.preview()->modified().toSecsSinceEpoch(), parentInfo.lastModified().toSecsSinceEpoch());
 }
 
 TEST(DirectoryController, CursorRowStaysClampedToZeroOnAnEmptyDirectory) {

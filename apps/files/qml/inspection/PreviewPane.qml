@@ -17,9 +17,8 @@ Item {
 
     readonly property PreviewService preview: root.controller.preview
 
-    // Height comes from the frame's own width and the source aspect ratio, never read back from
-    // imageArea.height: that feedback edge is what would turn the aspect-ratio frame into a
-    // binding loop (DESIGN.md §5.1).
+    // The image frame is a square derived from its own width, so its height never depends on the
+    // selected entry and the metadata below does not jump as the selection changes.
     readonly property real previewDevicePixelRatio: root.Window.window ? root.Window.window.devicePixelRatio : 1
 
     function reportImageAreaSize(): void {
@@ -149,10 +148,9 @@ Item {
             Item {
                 id: imageArea
                 objectName: "previewImageArea"
-                // Source metadata, fixed per file and independent of the requested decode size; square
-                // until known, and always square for entries that are not images.
-                readonly property real aspectRatio: root.preview.documentSize.width > 0 && root.preview.documentSize.height > 0 ? root.preview.documentSize.height / root.preview.documentSize.width : 1
-                readonly property real frameHeight: Math.min(240, Math.round(width * aspectRatio))
+                // Always square, whatever the entry: PreviewImageItem aspect-fits and centers the
+                // thumbnail inside it, so it spans the full width or the full height.
+                readonly property real frameHeight: Math.round(width)
 
                 Layout.fillWidth: true
                 Layout.preferredHeight: frameHeight
@@ -161,7 +159,18 @@ Item {
                 visible: root.preview.hasEntry
                 onWidthChanged: root.reportImageAreaSize()
 
-                readonly property int iconExtent: Math.min(128, Math.floor(width))
+                // Icons sit inside a 16 px inset and are drawn at the full inset extent, rendered from
+                // the largest standard theme size that fits in it (the theme falls back to its next
+                // smaller size when it lacks that one) and scaled up from there.
+                readonly property int iconExtent: Math.max(0, Math.floor(width) - 32)
+                readonly property int iconSourceSize: {
+                    const standardSizes = [512, 256, 128, 96, 64, 48, 32, 24, 22, 16];
+                    for (const candidate of standardSizes) {
+                        if (candidate <= iconExtent)
+                            return candidate;
+                    }
+                    return Math.max(1, iconExtent);
+                }
                 // Re-read whenever the selected chain changes; a chain the listing already failed is not
                 // requested again (IconFallbacks).
                 readonly property bool knownUnresolved: IconFallbacks.isUnresolved(root.preview.iconName)
@@ -183,7 +192,9 @@ Item {
                     id: previewThemeIcon
                     objectName: "previewThemeIcon"
                     anchors.centerIn: parent
-                    size: imageArea.iconExtent
+                    width: imageArea.iconExtent
+                    height: imageArea.iconExtent
+                    size: imageArea.iconSourceSize
                     source: !root.preview.hasEntry || root.preview.hasImage || imageArea.skipRequest ? "" : "image://icon/" + root.preview.iconName
                     rendering: HnIcon.Original
                     visible: !root.preview.hasImage && !imageArea.showFallback
@@ -198,6 +209,8 @@ Item {
                     id: previewFallbackIcon
                     objectName: "previewFallbackIcon"
                     anchors.centerIn: parent
+                    width: imageArea.iconExtent
+                    height: imageArea.iconExtent
                     size: imageArea.iconExtent
                     source: root.preview.hasImage || !imageArea.showFallback ? "" : imageArea.isFolderIconName ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
                     visible: !root.preview.hasImage && imageArea.showFallback

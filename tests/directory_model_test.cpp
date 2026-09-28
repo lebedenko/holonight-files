@@ -5,7 +5,9 @@
 #include "settings_fixtures.h"
 
 #include <QAbstractItemModelTester>
+#include <QDir>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -39,6 +41,27 @@ TEST(DirectoryModel, EmptyDirectoryLoadsParentRowAndNoError) {
   EXPECT_TRUE(model.data(model.index(0), DirectoryModel::IsParentRole).toBool());
   EXPECT_FALSE(model.data(model.index(0), DirectoryModel::IsHiddenRole).toBool());
   EXPECT_TRUE(model.directoryError().isEmpty());
+}
+
+TEST(DirectoryModel, ParentRowCarriesTheParentFoldersOwnMetadata) {
+  QTemporaryDir dir(fixturePattern("parent-meta"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("child"));
+  const QFileInfo parentInfo(dir.path());
+  DirectoryModel model;
+  QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+  model.load(QDir(dir.path()).filePath("child"));
+  ASSERT_TRUE(settled(model));
+  ASSERT_EQ(model.rowCount(), 1);
+  EXPECT_EQ(model.data(model.index(0), DirectoryModel::NameRole).toString(), "..");
+  EXPECT_EQ(model.data(model.index(0), DirectoryModel::PathRole).toString(), QDir::cleanPath(dir.path()));
+  EXPECT_TRUE(model.data(model.index(0), DirectoryModel::IsDirRole).toBool());
+  EXPECT_EQ(model.data(model.index(0), DirectoryModel::ModifiedRole).toDateTime().toSecsSinceEpoch(),
+            parentInfo.lastModified().toSecsSinceEpoch());
+  // A refresh diffs the parent row in place rather than duplicating it.
+  model.refresh();
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(model.rowCount(), 1);
 }
 
 TEST(DirectoryModel, FsRootLoadsWithoutParentRow) {

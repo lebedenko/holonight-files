@@ -2,6 +2,8 @@
 
 #include "directory_controller.h"
 
+#include <QFileInfo>
+
 #include <sys/stat.h>
 
 void PreviewSelection::syncPreviewTarget() {
@@ -39,7 +41,12 @@ void PreviewSelection::syncPreviewTarget() {
     controller_.navigation_.watcher_.addPath(path);
     emit controller_.navigated();
   }
-  const auto entryName = controller_.navigation_.model_.data(sourceIndex, DirectoryModel::NameRole).toString();
+  // ".." previews the parent folder it links to, under that folder's own name ("/" for the root).
+  auto entryName = controller_.navigation_.model_.data(sourceIndex, DirectoryModel::NameRole).toString();
+  if (controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+    const auto parentName = QFileInfo(path).fileName();
+    entryName = parentName.isEmpty() ? path : parentName;
+  }
   preview_target_path_ = path;
   controller_.preview_.setTarget(
       path, controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IsDirRole).toBool(),

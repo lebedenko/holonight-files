@@ -3,6 +3,7 @@
 #include "preview_fixtures.h"
 
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -138,9 +139,9 @@ TEST(PreviewIntegration, EmptyDirectoryShowsThePlaceholderWithNoDecodeAttempted)
   DirectoryController controller;
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
-  // Non-root empty directory displays .. (parent row) in preview pane with no decode.
+  // Non-root empty directory previews its parent row, named after the parent folder, with no decode.
   EXPECT_TRUE(controller.preview()->hasEntry());
-  EXPECT_EQ(controller.preview()->name(), QStringLiteral(".."));
+  EXPECT_EQ(controller.preview()->name(), QFileInfo(QFileInfo(dir.path()).absolutePath()).fileName());
   EXPECT_FALSE(controller.preview()->hasImage());
   EXPECT_FALSE(controller.preview()->busy());
 }
@@ -177,6 +178,7 @@ TEST(PreviewIntegration, SelectedFileEditsPermissionsReplacementRenameAndDeletio
   controller.handleKey(" ");
   EXPECT_TRUE(controller.quickLookOpen());
   ASSERT_TRUE(QFile::remove(renamed));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->name() == ".."; }));
+  const auto parentName = QFileInfo(QFileInfo(dir.path()).absolutePath()).fileName();
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->name() == parentName; }));
   EXPECT_FALSE(controller.quickLookOpen());
 }

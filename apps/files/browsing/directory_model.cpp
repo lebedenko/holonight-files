@@ -56,6 +56,21 @@ DirectoryEntry readEntry(const QString& path, const QString& name) {
   }
   return entry;
 }
+// The ".." row stands for the parent folder itself, so it carries the parent's real metadata; the
+// synthetic row is kept when the parent cannot be stat'ed.
+DirectoryEntry readParentEntry(const QString& path) {
+  const auto parentPath = QDir::cleanPath(QFileInfo(path).absolutePath());
+  auto entry = readEntry(parentPath, QStringLiteral("."));
+  if (entry.stat_failed) {
+    return DirectoryModel::syntheticParentEntry(path);
+  }
+  entry.name = QStringLiteral("..");
+  entry.absolute_path = parentPath;
+  entry.is_parent = true;
+  entry.icon_name =
+      IconNameResolver::candidateIconNames(entry.mode, entry.name).join(IconNameResolver::kChainSeparator);
+  return entry;
+}
 
 // At most two batch deliveries may be queued. Cancellation makes the worker wait
 // interruptible, including when the model destructor stops processing GUI events.
@@ -90,6 +105,9 @@ void walkDirectory(const QString& path, const std::shared_ptr<std::atomic_bool>&
     const int error = errno;
     flush(true, DirectoryModel::tr("Cannot open folder: %1").arg(QString::fromLocal8Bit(std::strerror(error))));
     return;
+  }
+  if (!QDir(path).isRoot()) {
+    buffer.append(readParentEntry(path));
   }
   int readCount = 0;
   while (!cancel->load()) {
@@ -175,6 +193,17 @@ QHash<int, QByteArray> DirectoryModel::roleNames() const {
       {IsParentRole, "isParent"},
   };
 }
+DirectoryEntry DirectoryModel::syntheticParentEntry(const QString& path) {
+  DirectoryEntry parent;
+  parent.name = QStringLiteral("..");
+  parent.absolute_path = QDir::cleanPath(QFileInfo(path).absolutePath());
+  parent.is_dir = true;
+  parent.is_parent = true;
+  parent.mode = S_IFDIR | 0755;
+  parent.icon_name =
+      IconNameResolver::candidateIconNames(parent.mode, parent.name).join(IconNameResolver::kChainSeparator);
+  return parent;
+}
 void DirectoryModel::load(const QString& path) {
   if (stopping_) {
     return;
@@ -189,16 +218,8 @@ void DirectoryModel::load(const QString& path) {
   name_to_row_.clear();
   seen_this_refresh_.clear();
   if (!path.isEmpty() && !QDir(path).isRoot()) {
-    DirectoryEntry parent;
-    parent.name = QStringLiteral("..");
-    parent.absolute_path = QDir::cleanPath(QFileInfo(path).absolutePath());
-    parent.is_dir = true;
-    parent.is_parent = true;
-    parent.mode = S_IFDIR | 0755;
-    parent.icon_name =
-        IconNameResolver::candidateIconNames(parent.mode, parent.name).join(IconNameResolver::kChainSeparator);
-    entries_.append(parent);
-    name_to_row_.insert(parent.name, 0);
+    entries_.append(syntheticParentEntry(path));
+    name_to_row_.insert(entries_.first().name, 0);
   }
   endResetModel();
   directory_path_ = path;
@@ -388,7 +409,7 @@ void DirectoryModel::applyBatch(const Batch& batch) {
   if (batch.diff) {
     applyDiffEntries(batch.entries);
   } else {
-    appendEntries(batch.entries);
+    appendEntries(replaceParentRow(batch.entries));
   }
   if (!batch.directory_error.isEmpty()) {
     if (entries_.size() == 1 && entries_[0].is_parent) {
@@ -429,6 +450,17 @@ void DirectoryModel::appendEntries(const QList<DirectoryEntry>& entries) {
     entries_.append(entry);
   }
   endInsertRows();
+}
+QList<DirectoryEntry> DirectoryModel::replaceParentRow(QList<DirectoryEntry> entries) {
+  if (entries.isEmpty() || !entries.first().is_parent) {
+    return entries;
+  }
+  const auto parent = entries.takeFirst();
+  if (!entries_.isEmpty() && entries_.first().is_parent && entries_.first() != parent) {
+    entries_.first() = parent;
+    emit dataChanged(index(0), index(0));
+  }
+  return entries;
 }
 void DirectoryModel::applyDiffEntries(const QList<DirectoryEntry>& entries) {
   QList<DirectoryEntry> additions;
