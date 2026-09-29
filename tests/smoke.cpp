@@ -158,6 +158,14 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   const auto cleanup = qScopeGuard([] { QDesktopServices::unsetUrlHandler("file"); });
   QTest::keyClick(window, Qt::Key_J);
   const auto expectedUrl = QUrl::fromLocalFile(dir.filePath("entry-00000.txt"));
+  {
+    QString shown = dir.filePath("entry-00000.txt");
+    const auto home = QDir::homePath();
+    if (shown.startsWith(home + u'/')) {
+      shown = QStringLiteral("~") + shown.mid(home.size());
+    }
+    EXPECT_EQ(controller.cursorPath(), shown);
+  }
   for (const auto enter : {Qt::Key_L, Qt::Key_Return}) {
     receiver.received = QUrl{};
     QTest::keyClick(window, enter);
@@ -179,7 +187,8 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   EXPECT_TRUE(window->findChild<QObject*>("normalStatusLabel")
                   ->property("rawText")
                   .toString()
-                  .contains(dir.filePath("missing")));
+                  .contains(controller.cursorPath()));
+  EXPECT_TRUE(controller.cursorPath().endsWith(QStringLiteral("/missing")));
   if (!capture.isEmpty()) {
     QTest::qWait(100);
     EXPECT_TRUE(window->grabWindow().save(capture + "-error.png"));

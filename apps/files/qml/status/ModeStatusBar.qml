@@ -82,7 +82,7 @@ RowLayout {
         elide: Text.ElideMiddle
         visible: root.controller.vim.currentMode === VimModeController.Normal && !root.controller.tasks.busy && !root.controller.tasks.hasPrompt
         Layout.fillWidth: visible
-        rawText: root.controller.statusMessage.length > 0 ? qsTr("%1  ·  %2").arg(root.controller.currentPath).arg(root.controller.statusMessage) : root.controller.currentPath
+        rawText: root.controller.statusMessage.length > 0 ? qsTr("%1  ·  %2").arg(root.controller.cursorPath).arg(root.controller.statusMessage) : root.controller.cursorPath
     }
 
     HnLabel {

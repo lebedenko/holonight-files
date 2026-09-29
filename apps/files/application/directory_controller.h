@@ -33,6 +33,8 @@
 class DirectoryController : public QObject {
   Q_OBJECT
   Q_PROPERTY(QString currentPath READ currentPath NOTIFY changed)
+  // Footer text: path of the row under the cursor (falls back to currentPath), with $HOME shown as ~.
+  Q_PROPERTY(QString cursorPath READ cursorPath NOTIFY changed)
   Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY changed)
   Q_PROPERTY(QString directoryError READ directoryError NOTIFY changed)
   Q_PROPERTY(bool scanning READ scanning NOTIFY changed)
@@ -56,6 +58,7 @@ class DirectoryController : public QObject {
   DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
                       std::shared_ptr<const CapacityProbe> capacity = {});
   QString currentPath() const { return navigation_.current_path_; }
+  QString cursorPath() const;
   QString statusMessage() const { return status_message_; }
   QString directoryError() const { return navigation_.model_.directoryError(); }
   bool scanning() const { return navigation_.model_.scanning(); }

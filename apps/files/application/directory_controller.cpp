@@ -113,6 +113,28 @@ void DirectoryController::toggleSortDirection() {
 void DirectoryController::setCursorRow(qint64 row) { navigation_.setCursorRow(row); }
 void DirectoryController::clampCursorRow() { navigation_.clampCursorRow(); }
 bool DirectoryController::canPreviewSelection() const { return preview_selection_.canPreviewSelection(); }
+QString DirectoryController::cursorPath() const {
+  QString path = navigation_.current_path_;
+  const int row = navigation_.cursor_row_;
+  if (directoryError().isEmpty() && row >= 0 && row < navigation_.proxy_.rowCount()) {
+    const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(row, 0));
+    // The ".." row keeps the current directory: its own path is the parent, which the breadcrumb doesn't show.
+    if (!navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+      const auto rowPath = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+      if (!rowPath.isEmpty()) {
+        path = rowPath;
+      }
+    }
+  }
+  const QString home = QDir::cleanPath(QDir::homePath());
+  if (path == home) {
+    return QStringLiteral("~/");
+  }
+  if (home != QLatin1String("/") && path.startsWith(home + u'/')) {
+    return QStringLiteral("~") + path.mid(home.size());
+  }
+  return path;
+}
 QString DirectoryController::entryNameAt(int proxyRow) const { return navigation_.entryNameAt(proxyRow); }
 void DirectoryController::beginRename(VimModeController::InsertKind kind) { editing_.beginRename(kind); }
 void DirectoryController::beginCreate(VimModeController::InsertKind kind) { editing_.beginCreate(kind); }
