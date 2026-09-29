@@ -24,6 +24,9 @@ Item {
     readonly property real columnSpacing: HnMetrics.internalSpacing(HnControlSize.Compact)
     // Every non-gutter column carries this much padding on each side of its content.
     readonly property real cellPadding: 8
+    // Breathing room between the selection and the header rule, gutter and right sidebar. The top and
+    // bottom gaps are list header/footer items, so they only show at the ends of the scroll range.
+    readonly property real listInset: 4
     readonly property real columnPadding: HnMetrics.horizontalPadding(HnControlSize.Normal)
     readonly property bool showSize: width >= lineNumberGutterWidth + 120 + 2 * cellPadding + iconColumnWidth + columnSpacing + sizeColumnWidth + 2 * cellPadding
     readonly property bool showModified: showSize && width >= lineNumberGutterWidth + 120 + 2 * cellPadding + iconColumnWidth + columnSpacing + sizeColumnWidth + modifiedColumnWidth + 4 * cellPadding
@@ -70,7 +73,8 @@ Item {
             anchors.fill: parent
             // The gutter spacer replaces the leading padding, matching the delegates' leftPadding: 0.
             anchors.leftMargin: 0
-            anchors.rightMargin: 0
+            // Header columns track the inset rows below (the delegates start listInset right of the gutter and end listInset before the sidebar).
+            anchors.rightMargin: root.listInset
             spacing: 0
 
             // Blank: no label and no separator above the line-number gutter (REQ-F-009).
@@ -88,7 +92,7 @@ Item {
                 elide: Text.ElideRight
                 Layout.fillWidth: true
                 // Aligned with the delegates' icon, not their filename.
-                Layout.leftMargin: root.cellPadding
+                Layout.leftMargin: root.listInset + root.cellPadding
                 Layout.rightMargin: root.cellPadding
             }
             HnLabel {
@@ -187,6 +191,16 @@ Item {
                 left: gutterStrip.right
                 right: parent.right
                 bottom: parent.bottom
+                leftMargin: root.listInset
+                rightMargin: root.listInset
+            }
+            header: Item {
+                width: listView.width
+                height: root.listInset
+            }
+            footer: Item {
+                width: listView.width
+                height: root.listInset
             }
             clip: false
             focus: true
@@ -194,7 +208,14 @@ Item {
             model: root.controller ? root.controller.listing : null
             currentIndex: root.controller ? root.controller.cursorRow : -1
             onCurrentIndexChanged: {
-                if (currentIndex >= 0)
+                if (currentIndex < 0)
+                    return;
+                // Contain ignores the header/footer inset items, so the ends are positioned explicitly.
+                if (currentIndex === 0)
+                    positionViewAtBeginning();
+                else if (currentIndex === count - 1)
+                    positionViewAtEnd();
+                else
                     positionViewAtIndex(currentIndex, ListView.Contain);
             }
 
@@ -279,7 +300,7 @@ Item {
                     verticalAlignment: Text.AlignVCenter
                     leftPadding: 8
                     rightPadding: 8
-                    x: -root.lineNumberGutterWidth
+                    x: -(root.lineNumberGutterWidth + root.listInset)
                     width: root.lineNumberGutterWidth
                     height: delegate.height
                     Accessible.ignored: true
