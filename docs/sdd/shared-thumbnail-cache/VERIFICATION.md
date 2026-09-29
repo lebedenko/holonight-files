@@ -15,3 +15,14 @@ from `holonight-qt` and generic unused CMake option notices from dependency
 preparation. No actionable compiler warnings appeared.
 
 Manual native Files/Viewer raster and SVG reuse remains pending for user operation during umbrella integration.
+
+## Published CI follow-up
+
+The first published Files run, [36615845295](https://github.com/lebedenko/holonight-files/actions/runs/36615845295),
+failed in both build lanes before compilation. `task deps` could not find
+`/work/holonight-thumbnails` because the workflow did not check out the new
+provider. Licensing passed. The workflow now checks out the published provider
+revision above and marks it safe in both container lanes. Local YAML parsing
+verified the exact checkout path, revision and both safe-directory lists;
+`task deps` passed with that sibling checkout. The corrected workflow has not
+yet run in hosted CI.
