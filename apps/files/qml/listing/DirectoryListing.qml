@@ -15,7 +15,7 @@ Item {
 
     // Leading file-type icon cell (SPEC.md REQ-F-008/010); the header's Name label is inset by the
     // same width plus columnSpacing so the two rows stay aligned (REQ-F-009).
-    readonly property real iconColumnWidth: 20
+    readonly property real iconColumnWidth: 32
     readonly property real sizeColumnWidth: 88
     // Widest expected rendering of "yyyy-MM-dd HH:mm" (all-digit fields, so "9" stands in for the
     // widest glyph in every position); measured against an offstage label using the exact role/
