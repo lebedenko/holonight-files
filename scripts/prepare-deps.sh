@@ -7,7 +7,7 @@ parallel_args=()
 if [[ -n ${JOBS:-} ]]; then
   parallel_args=(--parallel "$JOBS")
 fi
-providers=(holonight-config holonight-qt holonight-images holonight-system-services)
+providers=(holonight-config holonight-qt holonight-images holonight-thumbnails holonight-system-services)
 declare -A source_dirs revisions
 
 for provider in "${providers[@]}"; do
@@ -18,6 +18,8 @@ for provider in "${providers[@]}"; do
     source_dir=${HOLONIGHT_QT_SOURCE:-$source_dir}
   elif [[ $provider == holonight-images ]]; then
     source_dir=${HOLONIGHT_IMAGES_SOURCE:-$source_dir}
+  elif [[ $provider == holonight-thumbnails ]]; then
+    source_dir=${HOLONIGHT_THUMBNAILS_SOURCE:-$source_dir}
   else
     source_dir=${HOLONIGHT_SYSTEM_SERVICES_SOURCE:-$source_dir}
   fi

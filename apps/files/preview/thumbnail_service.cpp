@@ -2,81 +2,54 @@
 
 #include "image_policy.h"
 
-#include <QCryptographicHash>
 #include <QDateTime>
-#include <QDir>
 #include <QFile>
-#include <QFileInfo>
-#include <QSaveFile>
-#include <QStandardPaths>
 #include <QUrl>
 
-#include <array>
 #include <holonight_images/svg.h>
+#include <holonight_thumbnails/cache.h>
+#include <sys/stat.h>
 
 namespace ThumbnailService {
 namespace {
 
 using HolonightImages::Outcome;
 
-constexpr std::array kTiers = {Tier::Normal, Tier::Large, Tier::XLarge, Tier::XXLarge};
-QString cacheKeyFor(const QString& uri) {
-  return QString::fromLatin1(QCryptographicHash::hash(uri.toUtf8(), QCryptographicHash::Md5).toHex());
+HolonightThumbnails::Request cacheRequest(QFile& file, const QString& path, const QString& revision, QSize required,
+                                          ImageKind kind, Tier tier) {
+  struct stat source{};
+  const bool metadataValid = file.handle() >= 0 && ::fstat(file.handle(), &source) == 0;
+  const qint64 milliseconds =
+      metadataValid ? (static_cast<qint64>(source.st_mtim.tv_sec) * 1000) + (source.st_mtim.tv_nsec / 1000000) : 0;
+  return {.uri = QUrl::fromLocalFile(path),
+          .modified = metadataValid ? QDateTime::fromMSecsSinceEpoch(milliseconds) : QDateTime{},
+          .size = metadataValid ? source.st_size : -1,
+          .required = required,
+          .kind = kind == ImageKind::Svg ? HolonightThumbnails::Kind::Svg : HolonightThumbnails::Kind::Raster,
+          .revision = revision,
+          .tier = static_cast<int>(tier)};
 }
 
-// Falls back to ~/.cache when $XDG_CACHE_HOME is unset, per REQ-F-017 (QStandardPaths already
-// implements the freedesktop base-directory fallback, no need to read the environment ourselves).
-QString cacheDir(Tier tier) {
-  QString name;
-  switch (tier) {
-    case Tier::Normal:
-      name = QStringLiteral("normal");
-      break;
-    case Tier::Large:
-      name = QStringLiteral("large");
-      break;
-    case Tier::XLarge:
-      name = QStringLiteral("x-large");
-      break;
-    case Tier::XXLarge:
-      name = QStringLiteral("xx-large");
-      break;
+HolonightThumbnails::StageCallback cacheStage(const StageCallback& stage) {
+  if (!stage) {
+    return {};
   }
-  return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/thumbnails/") + name;
-}
-
-void ensureCacheDir(const QString& dir) {
-  QDir().mkpath(dir);
-  const auto privateOwnerOnly = QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
-  QFile::setPermissions(dir, privateOwnerOnly);
-  QFile::setPermissions(QFileInfo(dir).absolutePath(), privateOwnerOnly);
-}
-
-// QImageReader::text()/textKeys() only reliably sees a PNG's tEXt chunks after a full read() —
-// canRead()'s header-only peek does not populate them (keys containing "::" come back empty, or
-// silently truncated at the first colon). QImage's own constructor performs a full decode, so it
-// sees the chunks correctly; validation therefore loads the candidate image fully rather than
-// peeking its header, at the cost of one bounded cache-image decode per candidate.
-bool cacheEntryValid(const QImage& cached, const QString& uri, const QFileInfo& sourceInfo, ImageKind kind) {
-  if (cached.isNull() || cached.text(QStringLiteral("Files::OrientationPolicy")) != QStringLiteral("applied-v1")) {
-    return false;
-  }
-  const auto svgPolicy = cached.text(QStringLiteral("Files::SvgPolicy"));
-  if ((kind == ImageKind::Svg && svgPolicy != QStringLiteral("self-contained-static-v1")) ||
-      (kind == ImageKind::Raster && !svgPolicy.isEmpty())) {
-    return false;
-  }
-  if (cached.text(QStringLiteral("Thumb::URI")) != uri) {
-    return false;
-  }
-  bool mtimeOk = false;
-  const qint64 mtime = cached.text(QStringLiteral("Thumb::MTime")).toLongLong(&mtimeOk);
-  if (!mtimeOk || mtime != sourceInfo.lastModified().toSecsSinceEpoch()) {
-    return false;
-  }
-  bool sizeOk = false;
-  const qint64 size = cached.text(QStringLiteral("Thumb::Size")).toLongLong(&sizeOk);
-  return sizeOk && size == sourceInfo.size();
+  return [stage](HolonightThumbnails::Stage current) {
+    switch (current) {
+      case HolonightThumbnails::Stage::CacheInspect:
+        stage(Stage::CacheInspect);
+        break;
+      case HolonightThumbnails::Stage::CacheInspected:
+        stage(Stage::CacheInspected);
+        break;
+      case HolonightThumbnails::Stage::CacheDecode:
+        stage(Stage::CacheDecode);
+        break;
+      case HolonightThumbnails::Stage::BeforeCommit:
+        stage(Stage::BeforeCommit);
+        break;
+    }
+  };
 }
 
 // Shared by both the cache tier and the full-resolution tier: setScaledSize() before read() lets
@@ -90,77 +63,6 @@ Result decodeBounded(QFile& file, QSize bound, HolonightImages::OrientationPolic
     return {{}, Outcome::Cancelled};
   }
   return {std::move(result.image), result.outcome};
-}
-
-std::optional<Result> readCacheEntry(QFile& cachedFile, Tier tier, QSize required, const std::atomic_bool& cancelled,
-                                     const StageCallback& stage) {
-  if (stage) {
-    stage(Stage::CacheInspect);
-  }
-  const auto inspection = HolonightImages::inspect(cachedFile, kPreviewImageLimits, cancelled,
-                                                   HolonightImages::OrientationPolicy::Ignore, false);
-  if (inspection.outcome == Outcome::Cancelled || cancelled.load()) {
-    return Result{{}, Outcome::Cancelled};
-  }
-  if (stage) {
-    stage(Stage::CacheInspected);
-  }
-  if (cancelled.load()) {
-    return Result{{}, Outcome::Cancelled};
-  }
-  if (inspection.outcome != Outcome::Success) {
-    return std::nullopt;
-  }
-  const auto size = inspection.sourceSize;
-  const auto limit = static_cast<int>(tier);
-  if (size.width() < required.width() || size.height() < required.height() || size.width() > limit ||
-      size.height() > limit) {
-    return std::nullopt;
-  }
-  if (stage) {
-    stage(Stage::CacheDecode);
-  }
-  auto result = decodeBounded(cachedFile, {limit, limit}, HolonightImages::OrientationPolicy::Ignore, cancelled);
-  if (result.outcome == Outcome::Success || result.outcome == Outcome::Cancelled) {
-    return result;
-  }
-  return std::nullopt;
-}
-
-void writeCacheEntry(const QString& cachePath, const QImage& image, const QString& uri, const QFileInfo& sourceInfo,
-                     const QString& revision, const std::atomic_bool& cancelled, const StageCallback& stage,
-                     ImageKind kind = ImageKind::Raster) {
-  if (cancelled.load()) {
-    return;
-  }
-  QImage tagged = image;
-  tagged.setText(QStringLiteral("Files::Revision"), revision);
-  if (kind == ImageKind::Svg) {
-    tagged.setText(QStringLiteral("Files::SvgPolicy"), QStringLiteral("self-contained-static-v1"));
-  }
-  tagged.setText(QStringLiteral("Files::OrientationPolicy"), QStringLiteral("applied-v1"));
-  tagged.setText(QStringLiteral("Thumb::URI"), uri);
-  tagged.setText(QStringLiteral("Thumb::MTime"), QString::number(sourceInfo.lastModified().toSecsSinceEpoch()));
-  tagged.setText(QStringLiteral("Thumb::Size"), QString::number(sourceInfo.size()));
-  QSaveFile file(cachePath);
-  if (!file.open(QIODevice::WriteOnly)) {
-    return;
-  }
-  file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-  if (cancelled.load() || !tagged.save(&file, "PNG")) {
-    file.cancelWriting();
-    return;
-  }
-  if (stage) {
-    stage(Stage::BeforeCommit);
-  }
-  if (cancelled.load()) {
-    file.cancelWriting();
-    return;
-  }
-  if (file.commit()) {
-    QFile::setPermissions(cachePath, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-  }
 }
 
 }  // namespace
@@ -188,15 +90,8 @@ QSize requiredSize(QSizeF source, QSize bound, ImageKind kind) {
 }
 
 std::optional<Tier> tierForSize(QSize required) {
-  if (!required.isValid() || required.isEmpty()) {
-    return std::nullopt;
-  }
-  for (const auto tier : kTiers) {
-    if (required.width() <= static_cast<int>(tier) && required.height() <= static_cast<int>(tier)) {
-      return tier;
-    }
-  }
-  return std::nullopt;
+  const auto tier = HolonightThumbnails::tierForSize(required);
+  return tier ? std::optional{static_cast<Tier>(*tier)} : std::nullopt;
 }
 
 std::optional<Result> lookup(QFile& file, const QString& path, const QString& revision, Tier selected, QSize required,
@@ -204,30 +99,12 @@ std::optional<Result> lookup(QFile& file, const QString& path, const QString& re
   if (cancelled.load()) {
     return Result{{}, Outcome::Cancelled};
   }
-  const QFileInfo sourceInfo(file);
-  const auto uri = QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded);
-  for (const auto tier : kTiers) {
-    if (cancelled.load()) {
-      return Result{{}, Outcome::Cancelled};
-    }
-    if (static_cast<int>(tier) < static_cast<int>(selected)) {
-      continue;
-    }
-    QFile cachedFile(cacheDir(tier) + QLatin1Char('/') + cacheKeyFor(uri) + QStringLiteral(".png"));
-    if (!cachedFile.open(QIODevice::ReadOnly)) {
-      continue;
-    }
-    auto cached = readCacheEntry(cachedFile, tier, required, cancelled, stage);
-    if (cancelled.load() || (cached && cached->outcome == Outcome::Cancelled)) {
-      return Result{{}, Outcome::Cancelled};
-    }
-    if (cached && cacheEntryValid(cached->image, uri, sourceInfo, kind) && cached->image.width() >= required.width() &&
-        cached->image.height() >= required.height() &&
-        (revision.isEmpty() || cached->image.text(QStringLiteral("Files::Revision")) == revision)) {
-      return cancelled.load() ? Result{{}, Outcome::Cancelled} : *cached;
-    }
+  auto cached = HolonightThumbnails::lookup(cacheRequest(file, path, revision, required, kind, selected), cancelled,
+                                            cacheStage(stage));
+  if (cancelled.load()) {
+    return Result{{}, Outcome::Cancelled};
   }
-  return std::nullopt;
+  return cached ? std::optional<Result>{Result{std::move(*cached), Outcome::Success}} : std::nullopt;
 }
 
 Result renderSvg(QFile& file, const QString& path, const QString& revision, const QByteArray& bytes, QSize bound,
@@ -253,11 +130,8 @@ Result renderSvg(QFile& file, const QString& path, const QString& revision, cons
     return {{}, Outcome::Cancelled};
   }
   if (decoded.inspection.outcome == Outcome::Success && tier) {
-    const auto uri = QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded);
-    const auto dir = cacheDir(*tier);
-    ensureCacheDir(dir);
-    writeCacheEntry(dir + QLatin1Char('/') + cacheKeyFor(uri) + QStringLiteral(".png"), decoded.image, uri,
-                    QFileInfo(file), revision, cancelled, stage, ImageKind::Svg);
+    HolonightThumbnails::store(cacheRequest(file, path, revision, decoded.image.size(), ImageKind::Svg, *tier),
+                               decoded.image, cancelled, cacheStage(stage));
   }
   return cancelled.load() ? Result{{}, Outcome::Cancelled}
                           : Result{std::move(decoded.image), decoded.inspection.outcome};
@@ -289,14 +163,11 @@ Result lookupOrDecode(QFile& file, const QString& path, const QString& revision,
   if (decoded.outcome != Outcome::Success) {
     return decoded;
   }
-  const auto uri = QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded);
-  const auto dir = cacheDir(tier);
   if (cancelled.load()) {
     return {{}, Outcome::Cancelled};
   }
-  ensureCacheDir(dir);
-  writeCacheEntry(dir + QLatin1Char('/') + cacheKeyFor(uri) + QStringLiteral(".png"), decoded.image, uri,
-                  QFileInfo(file), revision, cancelled, stage);
+  HolonightThumbnails::store(cacheRequest(file, path, revision, required, ImageKind::Raster, tier), decoded.image,
+                             cancelled, cacheStage(stage));
   return cancelled.load() ? Result{{}, Outcome::Cancelled} : decoded;
 }
 

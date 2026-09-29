@@ -1041,21 +1041,40 @@ TEST(PreviewService, SvgPolicyValidationPrecedesThumbnailLookup) {
   EXPECT_EQ(cacheInspections.load(), 0);
 }
 TEST(PreviewService, SvgDiskAndMemoryCachesReuseValidatedPixels) {
+  QTemporaryDir cacheHome(fixturePattern("svg-reuse-cache"));
+  const auto previousCache = qgetenv("XDG_CACHE_HOME");
+  qputenv("XDG_CACHE_HOME", cacheHome.path().toLocal8Bit());
+  const auto restoreCache = qScopeGuard([&] {
+    if (previousCache.isNull()) {
+      qunsetenv("XDG_CACHE_HOME");
+    } else {
+      qputenv("XDG_CACHE_HOME", previousCache);
+    }
+  });
   QTemporaryDir dir(fixturePattern("svg-reuse"));
   const auto path = writeFile(dir, "small.svg", smallSvg());
   std::atomic_int decodes = 0;
+  std::atomic_int commits = 0;
   {
     PreviewService service;
     PreviewServiceTestAccess::beforeFullDecode(service, [&] { ++decodes; });
+    PreviewServiceTestAccess::thumbnailStage(service, [&](ThumbnailService::Stage stage) {
+      if (stage == ThumbnailService::Stage::BeforeCommit) {
+        ++commits;
+      }
+    });
     service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {200, 200});
     setTargetFromFile(service, path);
     ASSERT_TRUE(settled(service));
     ASSERT_TRUE(service.hasImage());
+    EXPECT_EQ(service.image().size(), QSize(256, 256));
     service.clear();
     setTargetFromFile(service, path);
     ASSERT_TRUE(settled(service));
     EXPECT_EQ(decodes.load(), 1);
   }
+  EXPECT_EQ(QDir(cacheHome.path() + "/thumbnails").entryList(QDir::Dirs | QDir::NoDotAndDotDot), QStringList{"large"});
+  EXPECT_EQ(commits.load(), 1);
   PreviewService second;
   PreviewServiceTestAccess::beforeFullDecode(second, [&] { ++decodes; });
   second.setRequestedSize(PreviewService::PreviewConsumer::Pane, {200, 200});

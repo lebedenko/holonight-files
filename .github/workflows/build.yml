@@ -17,21 +17,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: lebedenko/holonight-config
+          ref: 03fa635cedc506e101a148fc54f7eb46d17c6de5
           path: holonight-config
       - uses: actions/checkout@v4
         with:
           repository: lebedenko/holonight-qt
-          ref: 863af4183bdf09ce05199b37e8f5dfb46a311ba1
+          ref: 61d0c16af689e960367fd0f631f2c88afa169441
           path: holonight-qt
       - uses: actions/checkout@v4
         with:
           repository: lebedenko/holonight-images
-          ref: efe3e780327fa793fb76c82b18fddde15298120b
+          ref: ac11f23e9ff2d70b1c142b643bc2abb6dd69f6c1
           path: holonight-images
       - uses: actions/checkout@v4
         with:
+          repository: lebedenko/holonight-thumbnails
+          ref: d27addc044f277686850588147ec825c40c0f252
+          path: holonight-thumbnails
+      - uses: actions/checkout@v4
+        with:
           repository: lebedenko/holonight-system-services
-          ref: 5f2ecda7eea653995f4c860bfb7f3a3f53beb279
+          ref: f93ae00fcb850426c433e4e9f97b569979f330d6
           path: holonight-system-services
       - name: Build CI image locally
         shell: bash
@@ -48,7 +54,7 @@ jobs:
           mkdir -p files/build
           docker run --rm -v "$GITHUB_WORKSPACE:/work" files-ci \
             bash -euc 'trap "chown -R $(stat -c %u:%g /work/files) /work/files/build" EXIT;
-            for source in /work/files /work/holonight-config /work/holonight-qt /work/holonight-images /work/holonight-system-services; do
+            for source in /work/files /work/holonight-config /work/holonight-qt /work/holonight-images /work/holonight-thumbnails /work/holonight-system-services; do
               git config --system --add safe.directory "$source";
             done;
             task deps;
@@ -82,7 +88,7 @@ jobs:
           set -euo pipefail
           docker run --rm -v "$GITHUB_WORKSPACE:/work" files-ci \
             bash -euc 'trap "chown -R $(stat -c %u:%g /work/files) /work/files/build" EXIT;
-            for source in /work/files /work/holonight-config /work/holonight-qt /work/holonight-images /work/holonight-system-services; do
+            for source in /work/files /work/holonight-config /work/holonight-qt /work/holonight-images /work/holonight-thumbnails /work/holonight-system-services; do
               git config --system --add safe.directory "$source";
             done;
             task deps;

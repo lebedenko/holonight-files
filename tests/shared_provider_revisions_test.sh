@@ -7,10 +7,10 @@ source_repo=$1
 workspace=$(mktemp -d)
 trap 'rm -rf "$workspace"' EXIT
 
-mkdir -p "$workspace/files/scripts" "$workspace/bin" "$workspace/config" "$workspace/qt" "$workspace/images" "$workspace/system-services"
+mkdir -p "$workspace/files/scripts" "$workspace/bin" "$workspace/config" "$workspace/qt" "$workspace/images" "$workspace/thumbnails" "$workspace/system-services"
 cp "$source_repo/scripts/prepare-deps.sh" "$workspace/files/scripts/prepare-deps.sh"
 
-for provider in config qt images system-services; do
+for provider in config qt images thumbnails system-services; do
   git -C "$workspace/$provider" init --quiet
   git -C "$workspace/$provider" config user.email test@example.invalid
   git -C "$workspace/$provider" config user.name 'Provider revision test'
@@ -31,6 +31,7 @@ run_deps() {
     HOLONIGHT_CONFIG_SOURCE="$workspace/config" \
     HOLONIGHT_QT_SOURCE="$workspace/qt" \
     HOLONIGHT_IMAGES_SOURCE="$workspace/images" \
+    HOLONIGHT_THUMBNAILS_SOURCE="$workspace/thumbnails" \
     HOLONIGHT_SYSTEM_SERVICES_SOURCE="$workspace/system-services" \
     HOLONIGHT_DEPENDENCY_PREFIX="$workspace/files/build/deps/prefix" \
     bash "$workspace/files/scripts/prepare-deps.sh"
@@ -42,7 +43,7 @@ call_count() {
 
 : > "$workspace/cmake-calls"
 run_deps
-test "$(call_count)" = 12
+test "$(call_count)" = 15
 
 : > "$workspace/cmake-calls"
 run_deps
@@ -67,6 +68,14 @@ test "$(call_count)" = 3
 printf 'images change\n' >> "$workspace/images/provider.txt"
 git -C "$workspace/images" add provider.txt
 git -C "$workspace/images" commit --quiet -m 'Update image provider'
+
+: > "$workspace/cmake-calls"
+run_deps
+test "$(call_count)" = 3
+
+printf 'thumbnails change\n' >> "$workspace/thumbnails/provider.txt"
+git -C "$workspace/thumbnails" add provider.txt
+git -C "$workspace/thumbnails" commit --quiet -m 'Update thumbnail provider'
 
 : > "$workspace/cmake-calls"
 run_deps
