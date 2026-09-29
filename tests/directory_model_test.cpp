@@ -446,7 +446,7 @@ namespace {
 struct NamedFolderFixture {
   QTemporaryDir root{fixturePattern("named-folders")};
   QString home;
-  QString userDirs;
+  QString user_dirs;
 
   NamedFolderFixture() {
     if (!root.isValid()) {
@@ -461,14 +461,14 @@ struct NamedFolderFixture {
     QFile::link(home + "/Elsewhere", home + "/Downloads");  // link NAMED as a place: matched
     QFile::link(home + "/missing", home + "/Music");        // dangling link named as a place: generic
     writeFile(root, "home/note.txt");
-    userDirs = writeFile(root, "user-dirs.dirs",
-                         QStringLiteral("XDG_DOCUMENTS_DIR=\"$HOME/Documents\"\n"
-                                        "XDG_DOWNLOAD_DIR=\"$HOME/Downloads\"\n"
-                                        "XDG_MUSIC_DIR=\"$HOME/Music\"\n")
-                             .toUtf8());
+    user_dirs = writeFile(root, "user-dirs.dirs",
+                          QStringLiteral("XDG_DOCUMENTS_DIR=\"$HOME/Documents\"\n"
+                                         "XDG_DOWNLOAD_DIR=\"$HOME/Downloads\"\n"
+                                         "XDG_MUSIC_DIR=\"$HOME/Music\"\n")
+                              .toUtf8());
   }
   [[nodiscard]] std::shared_ptr<const PlaceList::IconMap> icons() const {
-    return PlaceList::iconMap(PlaceList::standardPlaces(home, userDirs));
+    return PlaceList::iconMap(PlaceList::standardPlaces(home, user_dirs));
   }
 };
 
@@ -580,7 +580,7 @@ TEST(DirectoryModel, ListingBeforeSetPlaceIconsIsGenericAndRefreshAppliesTheMap)
 TEST(DirectoryModel, ListingChainsStartWithTheSidebarRowIconForEveryPlace) {
   NamedFolderFixture fixture;
   ASSERT_TRUE(fixture.root.isValid());
-  PlacesModel places(fixture.home, fixture.userDirs, fixture.root.filePath("places.toml"),
+  PlacesModel places(fixture.home, fixture.user_dirs, fixture.root.filePath("places.toml"),
                      std::make_shared<files_test::FakePlaceAvailabilityChecker>(),
                      std::make_shared<files_test::RecordingWarningSink>());
   DirectoryModel model;

@@ -233,14 +233,15 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
   ASSERT_NE(sizeHeader, nullptr);
   ASSERT_NE(modifiedHeader, nullptr);
   ASSERT_NE(breadcrumb, nullptr);
-  // line-number-gutter keeps the showSize/showModified formulas unchanged (its non-goal 8), so the
-  // gutter narrows Name below them; 660 px (not 620) is the narrowest width that still hides Size
-  // while leaving Name its 120 px.
-  for (const int width : {1000, 770, 660, 1000}) {
+  // Cover all three column states while leaving Name at least 120 px, including the gutter and
+  // the 32 px icon column. The former 20 px icon fixtures were too narrow for the enlarged icons.
+  for (const int width : {1000, 800, 700, 1000}) {
     window->resize(width, 400);
     ASSERT_TRUE(QTest::qWaitFor([&] {
-      return name->width() >= 120 && size->isVisible() == (width != 660) && modified->isVisible() == (width == 1000);
-    }));
+      return name->width() >= 120 && size->isVisible() == (width != 700) && modified->isVisible() == (width == 1000);
+    })) << "window width="
+        << width << ", name width=" << name->width() << ", size visible=" << size->isVisible()
+        << ", modified visible=" << modified->isVisible();
     EXPECT_EQ(sizeHeader->isVisible(), size->isVisible());
     EXPECT_EQ(modifiedHeader->isVisible(), modified->isVisible());
     if (size->isVisible()) {
@@ -252,13 +253,13 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
       EXPECT_NEAR(modifiedHeader->width(), modified->width(), 1);
     }
   }
-  // main-view-icons REQ-F-008/009/026: fixed 20 px icon cell, header Name label inset to match.
+  // Fixed 32 px icon cell, with the header Name label inset to match.
   for (const int width : {420, 700, 1000, 1600}) {
     window->resize(width, 400);
     ASSERT_TRUE(
         QTest::qWaitFor([&] { return window->width() == width && qFuzzyCompare(row->width(), list->width()); }));
     QTest::qWait(20);  // let both RowLayouts finish polishing at the new width
-    EXPECT_EQ(icon->width(), 20) << width;
+    EXPECT_EQ(icon->width(), 32) << width;
     // The header's Name label lines up with the icon, not the filename.
     EXPECT_NEAR(nameHeader->mapToScene(QPointF()).x(), icon->mapToScene(QPointF()).x(), 1) << width;
     EXPECT_LT(icon->mapToScene(QPointF()).x() + icon->width(), name->mapToScene(QPointF()).x()) << width;

@@ -16,11 +16,14 @@
 using files_test::fixturePattern;
 
 namespace {
-std::atomic_int iconWarningCount{0};
+std::atomic_int& iconWarningCount() {
+  static std::atomic_int count{0};
+  return count;
+}
 
-void countIconWarnings(QtMsgType type, const QMessageLogContext&, const QString&) {
+void countIconWarnings(QtMsgType type, const QMessageLogContext& /*context*/, const QString& /*message*/) {
   if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg) {
-    iconWarningCount.fetch_add(1);
+    iconWarningCount().fetch_add(1);
   }
 }
 
@@ -147,7 +150,7 @@ TEST(IconImageProvider, RepeatedNamedFolderRequestsDoNotInflateLookupsOrWarnings
     const auto restore = scopedIconTheme(
         {root.path()}, hasFolder ? QStringLiteral("tiny-test-theme") : QStringLiteral("nonexistent-test-theme"));
     IconImageProvider provider;
-    iconWarningCount.store(0);
+    iconWarningCount().store(0);
     const auto previousHandler = qInstallMessageHandler(countIconWarnings);
     const auto restoreHandler = qScopeGuard([previousHandler] { qInstallMessageHandler(previousHandler); });
     const QString chain = QStringLiteral("folder-documents/folder/inode-directory");
@@ -162,6 +165,6 @@ TEST(IconImageProvider, RepeatedNamedFolderRequestsDoNotInflateLookupsOrWarnings
       EXPECT_EQ(provider.requestPixmap(chain, nullptr, extent).isNull(), !hasFolder);
     }
     EXPECT_EQ(IconImageProviderTestAccess::themeLookupCount(provider), firstLookupCount);
-    EXPECT_EQ(iconWarningCount.load(), 0);
+    EXPECT_EQ(iconWarningCount().load(), 0);
   }
 }
