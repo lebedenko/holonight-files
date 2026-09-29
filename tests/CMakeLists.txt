@@ -9,7 +9,7 @@ add_files_application(files-smoke smoke.cpp separator_window_test.cpp size_forma
   jump_list_test.cpp history_navigation_window_test.cpp places_model_test.cpp places_window_test.cpp
   warning_sink_test.cpp xdg_paths_test.cpp toml_document_test.cpp settings_registry_test.cpp app_settings_test.cpp
   location_classifier_test.cpp state_store_test.cpp last_location_tracker_test.cpp user_dirs_parser_test.cpp
-  bookmark_store_test.cpp place_availability_checker_test.cpp)
+  bookmark_store_test.cpp place_availability_checker_test.cpp place_list_test.cpp)
 find_package(Qt6 REQUIRED COMPONENTS OpenGL)
 pkg_check_modules(EXIF REQUIRED IMPORTED_TARGET libexif)
 target_link_libraries(files-smoke PRIVATE Qt6::Test Qt6::OpenGL GTest::gtest PkgConfig::EXIF)

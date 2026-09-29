@@ -1,7 +1,7 @@
 #include "places_model.h"
 
 #include "places/bookmark_store.h"
-#include "places/user_dirs_parser.h"
+#include "places/place_list.h"
 #include "settings/xdg_paths.h"
 
 #include <QDir>
@@ -44,16 +44,12 @@ void PlacesModel::buildPlaces(const QString& homePath, const QString& userDirsFi
     seen.insert(path);
   };
 
-  const auto cleanedHome = QDir::cleanPath(homePath);
-  append(tr("Home"), cleanedHome, QStringLiteral("user-home"), Origin::Home, /*startsBookmarks=*/false);
-
-  for (const auto& entry : UserDirsParser::parseFile(userDirsFilePath, cleanedHome)) {
-    if (seen.contains(entry.path)) {
-      continue;  // REQ-F-016: silent (two XDG_*_DIR keys aliasing the same path)
-    }
-    append(UserDirsParser::label(entry.key), entry.path, UserDirsParser::iconName(entry.key), Origin::XdgUserDirectory,
+  const auto standardPlaces = PlaceList::standardPlaces(homePath, userDirsFilePath);
+  for (const auto& place : standardPlaces) {
+    append(place.name, place.path, place.icon_name, place.is_home ? Origin::Home : Origin::XdgUserDirectory,
            /*startsBookmarks=*/false);
   }
+  place_icons_ = PlaceList::iconMap(standardPlaces);
 
   bool bookmarksStarted = false;
   for (const auto& bookmark : BookmarkStore::read(placesFilePath, warnings)) {

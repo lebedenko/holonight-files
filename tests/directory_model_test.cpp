@@ -2,6 +2,8 @@
 
 #include "directory_fixtures.h"
 #include "directory_model_test_access.h"
+#include "places/place_list.h"
+#include "places_model.h"
 #include "settings_fixtures.h"
 
 #include <QAbstractItemModelTester>
@@ -436,6 +438,170 @@ TEST(DirectoryModel, IconNameRoleCarriesTheWorkerDerivedCandidateChain) {
 
   const int placeholder = model.insertPlaceholderRow();
   EXPECT_EQ(model.data(model.index(placeholder), DirectoryModel::IconNameRole).toString(), "application-x-generic");
+}
+
+namespace {
+// A temp "home" with XDG places (Documents, Downloads, Music) plus decoys, and the icon map built from it exactly
+// as production does (PlaceList over a user-dirs.dirs file).
+struct NamedFolderFixture {
+  QTemporaryDir root{fixturePattern("named-folders")};
+  QString home;
+  QString userDirs;
+
+  NamedFolderFixture() {
+    if (!root.isValid()) {
+      return;
+    }
+    home = root.filePath("home");
+    const QDir rootDir(root.path());
+    rootDir.mkpath("home/Documents/Projects");
+    rootDir.mkpath("home/work/Documents");
+    rootDir.mkpath("home/Elsewhere");
+    QFile::link(home + "/Documents", home + "/Docs");       // symlink TO a place: stays generic
+    QFile::link(home + "/Elsewhere", home + "/Downloads");  // link NAMED as a place: matched
+    QFile::link(home + "/missing", home + "/Music");        // dangling link named as a place: generic
+    writeFile(root, "home/note.txt");
+    userDirs = writeFile(root, "user-dirs.dirs",
+                         QStringLiteral("XDG_DOCUMENTS_DIR=\"$HOME/Documents\"\n"
+                                        "XDG_DOWNLOAD_DIR=\"$HOME/Downloads\"\n"
+                                        "XDG_MUSIC_DIR=\"$HOME/Music\"\n")
+                             .toUtf8());
+  }
+  [[nodiscard]] std::shared_ptr<const PlaceList::IconMap> icons() const {
+    return PlaceList::iconMap(PlaceList::standardPlaces(home, userDirs));
+  }
+};
+
+QHash<QString, QString> chainsByName(const DirectoryModel& model) {
+  QHash<QString, QString> chains;
+  for (int row = 0; row < model.rowCount(); ++row) {
+    const auto index = model.index(row);
+    chains.insert(model.data(index, DirectoryModel::NameRole).toString(),
+                  model.data(index, DirectoryModel::IconNameRole).toString());
+  }
+  return chains;
+}
+}  // namespace
+
+// named-folder-icons REQ-F-002/004/005/008
+TEST(DirectoryModel, PlacePathsGetTheirNamedIconAndOnlyExactMatchesDo) {
+  NamedFolderFixture fixture;
+  ASSERT_TRUE(fixture.root.isValid());
+  DirectoryModel model;
+  model.setPlaceIcons(fixture.icons());
+  model.load(fixture.home);
+  ASSERT_TRUE(settled(model));
+  const auto chains = chainsByName(model);
+  EXPECT_EQ(chains.value("Documents"), "folder-documents/folder/inode-directory");
+  EXPECT_EQ(chains.value("Downloads"), "folder-download/folder/inode-directory");  // link named as the place
+  EXPECT_EQ(chains.value("Docs"), "folder/inode-directory");                       // link to the place
+  EXPECT_EQ(chains.value("work"), "folder/inode-directory");
+  EXPECT_EQ(chains.value("Elsewhere"), "folder/inode-directory");
+  EXPECT_EQ(chains.value("Music"), "application-x-generic");  // dangling: stat() failed, never named
+  EXPECT_EQ(chains.value("note.txt"), "text-plain/text-x-generic/application-x-generic");
+}
+
+// REQ-F-002: same name, different path
+TEST(DirectoryModel, SameNamedFolderElsewhereStaysGeneric) {
+  NamedFolderFixture fixture;
+  ASSERT_TRUE(fixture.root.isValid());
+  DirectoryModel model;
+  model.setPlaceIcons(fixture.icons());
+  model.load(fixture.home + "/work");
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(chainsByName(model).value("Documents"), "folder/inode-directory");
+}
+
+// REQ-F-010
+TEST(DirectoryModel, HomeDirectoryRowUsesTheHomeIcon) {
+  NamedFolderFixture fixture;
+  ASSERT_TRUE(fixture.root.isValid());
+  DirectoryModel model;
+  model.setPlaceIcons(fixture.icons());
+  model.load(fixture.root.path());
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(chainsByName(model).value("home"), "user-home/folder/inode-directory");
+}
+
+// REQ-F-009
+TEST(DirectoryModel, ParentRowIsNamedBothBeforeAndAfterTheWalkSettles) {
+  NamedFolderFixture fixture;
+  ASSERT_TRUE(fixture.root.isValid());
+  DirectoryModel model;
+  model.setPlaceIcons(fixture.icons());
+  model.load(fixture.home + "/Documents/Projects");
+  ASSERT_EQ(model.rowCount(), 1);  // synthetic row, GUI thread
+  EXPECT_EQ(model.data(model.index(0), DirectoryModel::IconNameRole).toString(),
+            "folder-documents/folder/inode-directory");
+  ASSERT_TRUE(settled(model));
+  ASSERT_EQ(model.rowCount(), 1);
+  EXPECT_EQ(model.data(model.index(0), DirectoryModel::IconNameRole).toString(),
+            "folder-documents/folder/inode-directory");
+
+  model.load(fixture.home + "/work/Documents");  // parent "work" is not a place
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(model.data(model.index(0), DirectoryModel::IconNameRole).toString(), "folder/inode-directory");
+}
+
+// REQ-F-011
+TEST(DirectoryModel, PlaceholderRowInAPlaceDirectoryStaysGeneric) {
+  NamedFolderFixture fixture;
+  ASSERT_TRUE(fixture.root.isValid());
+  DirectoryModel model;
+  model.setPlaceIcons(fixture.icons());
+  model.load(fixture.home + "/Documents");
+  ASSERT_TRUE(settled(model));
+  const int placeholder = model.insertPlaceholderRow();
+  EXPECT_EQ(model.data(model.index(placeholder), DirectoryModel::IconNameRole).toString(), "application-x-generic");
+}
+
+// REQ-F-013: a walk started before the map is installed is generic; a refresh afterwards applies it.
+TEST(DirectoryModel, ListingBeforeSetPlaceIconsIsGenericAndRefreshAppliesTheMap) {
+  NamedFolderFixture fixture;
+  ASSERT_TRUE(fixture.root.isValid());
+  DirectoryModel model;
+  model.load(fixture.home);
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(chainsByName(model).value("Documents"), "folder/inode-directory");
+  model.setPlaceIcons(fixture.icons());
+  EXPECT_EQ(chainsByName(model).value("Documents"), "folder/inode-directory");  // not re-resolved by the setter
+  QSignalSpy changedRows(&model, &QAbstractItemModel::dataChanged);
+  model.refresh();
+  ASSERT_TRUE(settled(model));
+  EXPECT_GE(changedRows.count(), 1);
+  EXPECT_EQ(chainsByName(model).value("Documents"), "folder-documents/folder/inode-directory");
+  model.setPlaceIcons(nullptr);
+  model.refresh();
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(chainsByName(model).value("Documents"), "folder/inode-directory");
+}
+
+// REQ-F-014: the listing and the sidebar derive their icons from one list.
+TEST(DirectoryModel, ListingChainsStartWithTheSidebarRowIconForEveryPlace) {
+  NamedFolderFixture fixture;
+  ASSERT_TRUE(fixture.root.isValid());
+  PlacesModel places(fixture.home, fixture.userDirs, fixture.root.filePath("places.toml"),
+                     std::make_shared<files_test::FakePlaceAvailabilityChecker>(),
+                     std::make_shared<files_test::RecordingWarningSink>());
+  DirectoryModel model;
+  model.setPlaceIcons(places.placeIcons());
+  model.load(fixture.root.path());
+  ASSERT_TRUE(settled(model));
+  const auto homeChain = chainsByName(model).value("home");
+  EXPECT_EQ(homeChain.split('/').first(), places.data(places.index(0), PlacesModel::IconNameRole).toString());
+  model.load(fixture.home);
+  ASSERT_TRUE(settled(model));
+  const auto chains = chainsByName(model);
+  for (int row = 1; row < places.rowCount(); ++row) {
+    const auto path = places.data(places.index(row), PlacesModel::PathRole).toString();
+    const auto name = QFileInfo(path).fileName();
+    if (!chains.contains(name) || chains.value(name) == "application-x-generic") {
+      continue;  // the dangling Music link is generic by design
+    }
+    EXPECT_EQ(chains.value(name).split('/').first(),
+              places.data(places.index(row), PlacesModel::IconNameRole).toString())
+        << name.toStdString();
+  }
 }
 
 TEST(DirectoryModel, RefreshEmitsDataChangedWhenAnEntrysIconChanges) {

@@ -259,9 +259,8 @@ Item {
                 property string failedChain
                 readonly property bool skipRequest: knownUnresolved || failedChain === root.preview.iconName
                 readonly property bool showFallback: skipRequest || previewThemeIcon.hasError
-                // Directory chains, and only they, begin with "folder" (IconNameResolver), so the one
-                // exposed iconName is enough to pick the fallback glyph.
-                readonly property bool isFolderIconName: root.preview.iconName === "folder" || root.preview.iconName.startsWith("folder/")
+                // A named folder's chain begins with its place icon, so the glyph follows the entry kind, not the name.
+                readonly property bool isFolderEntry: root.preview.isDirectory
 
                 PreviewImageItem {
                     id: thumbnail
@@ -295,7 +294,7 @@ Item {
                     width: imageArea.iconExtent
                     height: imageArea.iconExtent
                     size: imageArea.iconExtent
-                    source: root.preview.hasImage || !imageArea.showFallback ? "" : imageArea.isFolderIconName ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
+                    source: root.preview.hasImage || !imageArea.showFallback ? "" : imageArea.isFolderEntry ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
                     visible: root.showIconFallback && imageArea.showFallback
                 }
                 Rectangle {

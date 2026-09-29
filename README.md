@@ -157,6 +157,12 @@ by reading file contents. When the theme has no match, bundled folder and generi
 glyphs are drawn in the palette colours instead. Files never changes the icon theme
 or its search paths; an icon theme installed while Files is running is picked up
 after a restart. See the [icons verification record](docs/sdd/main-view-icons/VERIFICATION.md).
+Folders that are Places entries (Home and the XDG user directories) show the same icon in the
+listing, the `..` row and the preview as in the sidebar (for example `folder-documents`), falling
+back to the generic folder icon when the theme lacks it. Matching is by exact listed path, so a
+same-named folder elsewhere or a symlink to a place keeps the generic folder icon, and bookmarks
+never change a listing icon. The list is read once at startup. See the
+[named folder icons specification](docs/sdd/named-folder-icons/SPEC.md).
 
 Navigation history works like Vim's jump list: `Ctrl+O` goes back and `Ctrl+I` goes forward
 through previously visited folders (count prefixes such as `3 Ctrl+O` work), as do the back/forward

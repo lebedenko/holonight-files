@@ -19,6 +19,7 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
           [this] { devices_->setInteractionEnabled(sidebarActivationEnabled()); });
   QCoreApplication::instance()->installEventFilter(&window_events_);
   navigation_.proxy_.setSourceModel(&navigation_.model_);
+  navigation_.model_.setPlaceIcons(places_.placeIcons());
   // Ahead of the forwarding connection, so observers never see a settled listing whose cursor has
   // not yet been restored.
   connect(&navigation_.model_, &DirectoryModel::changed, this, &DirectoryController::maybeApplyPendingRestore);

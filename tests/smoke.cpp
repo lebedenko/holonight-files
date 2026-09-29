@@ -808,6 +808,75 @@ TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return barePreviewPlaceholder->isVisible(); }));
 }
 
+// named-folder-icons REQ-F-006/007: on a theme with none of a named folder's icons, the listing and the preview both
+// fall back to the bundled folder glyph (chosen by entry kind, not by the chain's first name), and a file stays
+// generic.
+TEST(Files, NamedFolderFallsBackToTheFolderGlyphWhenTheThemeLacksItsIcon) {
+  QTemporaryDir root(files_test::fixturePattern("named-folder-window"));
+  ASSERT_TRUE(root.isValid());
+  const QDir rootDir(root.path());
+  ASSERT_TRUE(rootDir.mkpath("home/Documents"));
+  ASSERT_TRUE(rootDir.mkpath("config"));
+  ASSERT_FALSE(files_test::writeFile(root, "home/z-notes.txt").isEmpty());
+  ASSERT_FALSE(
+      files_test::writeFile(root, "config/user-dirs.dirs", "XDG_DOCUMENTS_DIR=\"$HOME/Documents\"\n").isEmpty());
+  const auto home = root.filePath("home");
+  // The controller reads $HOME and $XDG_CONFIG_HOME once at construction; isolate both from the developer's.
+  const files_test::ScopedEnvironmentVariable homeGuard("HOME", home);
+  const files_test::ScopedEnvironmentVariable configGuard("XDG_CONFIG_HOME", root.filePath("config"));
+
+  const auto previousPaths = QIcon::themeSearchPaths();
+  const auto previousFallbackPaths = QIcon::fallbackSearchPaths();
+  const auto previousTheme = QIcon::themeName();
+  const auto previousFallbackTheme = QIcon::fallbackThemeName();
+  const auto restoreTheme = qScopeGuard([&] {
+    QIcon::setThemeSearchPaths(previousPaths);
+    QIcon::setFallbackSearchPaths(previousFallbackPaths);
+    QIcon::setThemeName(previousTheme);
+    QIcon::setFallbackThemeName(previousFallbackTheme);
+  });
+  QIcon::setThemeSearchPaths({root.filePath("no-themes-here")});
+  QIcon::setFallbackSearchPaths({});
+  QIcon::setThemeName(QStringLiteral("nonexistent-test-theme"));
+  QIcon::setFallbackThemeName(QStringLiteral("nonexistent-test-theme"));
+
+  DirectoryController controller;
+  QQmlApplicationEngine engine;
+  initializeFilesEngine(engine);
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.loadFromModule("HolonightFiles", "Main");
+  ASSERT_EQ(engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  window->resize(1000, 500);
+  window->releaseResources();  // earlier tests' cached image://icon/ results used another theme
+  controller.open(home);
+  auto* list = window->findChild<QQuickItem*>("directoryListView");
+  ASSERT_NE(list, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && list->property("count").toInt() == 3; }));
+
+  // Sorted folders first: 0 .., 1 Documents, 2 z-notes.txt.
+  auto* previewFallback = window->findChild<QQuickItem*>("previewFallbackIcon");
+  ASSERT_NE(previewFallback, nullptr);
+  window->requestActivate();
+  ASSERT_TRUE(QTest::qWaitForWindowActive(window));
+  QTest::keyClick(window, Qt::Key_J);
+  ASSERT_TRUE(QTest::qWaitFor([&] {
+    const auto icons = rowIcons(list, 1);
+    return icons.fallback != nullptr && icons.fallback->isVisible() && imageReady(icons.fallback) &&
+           previewFallback->isVisible() && imageReady(previewFallback);
+  }));
+  EXPECT_TRUE(rowIcons(list, 1).fallback->property("source").toString().endsWith("folder-fallback.svg"));
+  EXPECT_TRUE(previewFallback->property("source").toString().endsWith("folder-fallback.svg"));
+  auto* failedIcons = engine.singletonInstance<IconFallbacks*>("HolonightFiles", "IconFallbacks");
+  ASSERT_NE(failedIcons, nullptr);
+  EXPECT_TRUE(failedIcons->isUnresolved("folder-documents/folder/inode-directory"));
+
+  QTest::keyClick(window, Qt::Key_J);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return previewFallback->isVisible() && imageReady(previewFallback); }));
+  EXPECT_TRUE(previewFallback->property("source").toString().endsWith("generic-file-fallback.svg"));
+}
+
 TEST(Files, WindowAndKeyboard) {
   DirectoryController controller;
   QQmlApplicationEngine engine;

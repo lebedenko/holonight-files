@@ -15,9 +15,13 @@ void appendUnique(QStringList& names, const QString& name) {
 
 namespace IconNameResolver {
 
-QStringList candidateIconNames(quint32 mode, const QString& fileName) {
+QStringList candidateIconNames(quint32 mode, const QString& fileName, const QString& namedIcon) {
   if (S_ISDIR(mode)) {
-    return {QStringLiteral("folder"), QStringLiteral("inode-directory")};
+    QStringList chain;
+    appendUnique(chain, namedIcon);
+    appendUnique(chain, QStringLiteral("folder"));
+    appendUnique(chain, QStringLiteral("inode-directory"));
+    return chain;
   }
   if (S_ISFIFO(mode)) {
     return {QStringLiteral("inode-fifo")};

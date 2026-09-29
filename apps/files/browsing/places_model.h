@@ -1,6 +1,7 @@
 #pragma once
 
 #include "places/place_availability_checker.h"
+#include "places/place_list.h"
 #include "warning_sink.h"
 
 #include <QAbstractListModel>
@@ -47,6 +48,11 @@ class PlacesModel : public QAbstractListModel {
   // keyed by id.
   quint64 recheckBookmark(int row);
 
+  // Immutable path -> icon name map of Home + XDG places, built once from the same PlaceList the sidebar rows
+  // come from (named-folder-icons REQ-F-001, REQ-F-014). Never null; not pruned when a missing XDG row is
+  // later removed from the sidebar (a nonexistent directory is never listed, so the stale entry is inert).
+  [[nodiscard]] std::shared_ptr<const PlaceList::IconMap> placeIcons() const { return place_icons_; }
+
  signals:
   // Fired once the freshest in-flight recheck for that place resolves; its StatusRole is already
   // updated (one dataChanged, REQ-NF-003) before this signal is emitted. A recheck superseded by a
@@ -77,6 +83,7 @@ class PlacesModel : public QAbstractListModel {
   };
   void dispatchCheck(quint64 placeId, quint64 generation, const QString& path);
   QList<Place> places_;
+  std::shared_ptr<const PlaceList::IconMap> place_icons_;
   std::shared_ptr<DeliveryGuard> guard_;
   std::shared_ptr<PlaceAvailabilityChecker> checker_;
   quint64 next_id_ = 1;

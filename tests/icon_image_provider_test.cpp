@@ -10,11 +10,20 @@
 #include <QScopeGuard>
 #include <QTemporaryDir>
 
+#include <atomic>
 #include <gtest/gtest.h>
 
 using files_test::fixturePattern;
 
 namespace {
+std::atomic_int iconWarningCount{0};
+
+void countIconWarnings(QtMsgType type, const QMessageLogContext&, const QString&) {
+  if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg) {
+    iconWarningCount.fetch_add(1);
+  }
+}
+
 // Tests may replace the process-wide icon theme; production code never does (REQ-F-018).
 [[nodiscard]] auto scopedIconTheme(const QStringList& searchPaths, const QString& themeName) {
   const auto previousPaths = QIcon::themeSearchPaths();
@@ -123,4 +132,36 @@ TEST(IconImageProvider, MissingAndMalformedChainsStayNullAndReuseCachedMisses) {
   // Equivalent malformed URLs have the same candidate chain; misses stay cached across rows.
   EXPECT_TRUE(provider.requestPixmap("/folder//inode-directory/", nullptr, QSize(20, 20)).isNull());
   EXPECT_EQ(IconImageProviderTestAccess::themeLookupCount(provider), 4);
+}
+
+// named-folder-icons REQ-F-007: repeated named chains must reuse both successful and failed lookups,
+// without adding warnings for each row. Exercise a missing named icon with and without a folder fallback.
+TEST(IconImageProvider, RepeatedNamedFolderRequestsDoNotInflateLookupsOrWarnings) {
+  for (const bool hasFolder : {false, true}) {
+    SCOPED_TRACE(hasFolder ? "folder-only theme" : "empty theme");
+    QTemporaryDir root(fixturePattern("icon-named-folder-cache"));
+    ASSERT_TRUE(root.isValid());
+    if (hasFolder) {
+      ASSERT_TRUE(writeTinyTheme(root));
+    }
+    const auto restore = scopedIconTheme(
+        {root.path()}, hasFolder ? QStringLiteral("tiny-test-theme") : QStringLiteral("nonexistent-test-theme"));
+    IconImageProvider provider;
+    iconWarningCount.store(0);
+    const auto previousHandler = qInstallMessageHandler(countIconWarnings);
+    const auto restoreHandler = qScopeGuard([previousHandler] { qInstallMessageHandler(previousHandler); });
+    const QString chain = QStringLiteral("folder-documents/folder/inode-directory");
+    const QSize extent(20, 20);
+    EXPECT_EQ(provider.requestPixmap(chain, nullptr, extent).isNull(), !hasFolder);
+    const int firstLookupCount = IconImageProviderTestAccess::themeLookupCount(provider);
+    EXPECT_GT(firstLookupCount, 0);
+    if (!hasFolder) {
+      EXPECT_EQ(firstLookupCount, 3);
+    }
+    for (int row = 1; row < 100; ++row) {
+      EXPECT_EQ(provider.requestPixmap(chain, nullptr, extent).isNull(), !hasFolder);
+    }
+    EXPECT_EQ(IconImageProviderTestAccess::themeLookupCount(provider), firstLookupCount);
+    EXPECT_EQ(iconWarningCount.load(), 0);
+  }
 }

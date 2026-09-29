@@ -241,8 +241,8 @@ Controls.Popup {
                 // A chain the listing or this icon already failed is not requested again (IconFallbacks).
                 property string failedChain
                 readonly property bool useFallback: IconFallbacks.isUnresolved(root.preview.iconName) || compactIcon.failedChain === root.preview.iconName
-                readonly property bool isFolderIconName: root.preview.iconName === "folder" || root.preview.iconName.startsWith("folder/")
-                source: presentation.kind !== QuickLookPresentationModel.Compact ? "" : !compactIcon.useFallback ? "image://icon/" + root.preview.iconName : compactIcon.isFolderIconName ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
+                readonly property bool isFolderEntry: root.preview.isDirectory
+                source: presentation.kind !== QuickLookPresentationModel.Compact ? "" : !compactIcon.useFallback ? "image://icon/" + root.preview.iconName : compactIcon.isFolderEntry ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
                 rendering: compactIcon.useFallback ? HnIcon.Semantic : HnIcon.Original
                 visible: presentation.kind === QuickLookPresentationModel.Compact && !root.preview.hasImage
                 onHasErrorChanged: if (hasError && !compactIcon.useFallback) {

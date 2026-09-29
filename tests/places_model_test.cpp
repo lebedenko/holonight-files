@@ -113,6 +113,23 @@ TEST(PlacesModel, XdgDirectoriesOrderedTranslatedAndIconed) {
   }
 }
 
+TEST(PlacesModel, PlaceIconsMapKeysEqualStandardPlacePathsAndIcons) {
+  ModelFixture fixture;
+  ASSERT_TRUE(fixture.valid());
+  fixture.writeUserDirs("XDG_DOCUMENTS_DIR=\"$HOME/Documents\"\nXDG_DOWNLOAD_DIR=\"$HOME/Downloads\"\n");
+  fixture.writePlaces("version = 1\n[[bookmarks]]\nname = \"Work\"\npath = \"/srv/work\"\n");
+  const auto model = fixture.build();
+  const auto icons = model->placeIcons();
+  ASSERT_NE(icons, nullptr);
+  ASSERT_EQ(model->rowCount(), 4);  // Home, Documents, Downloads, one bookmark
+  EXPECT_EQ(icons->size(), 3);      // bookmarks never enter the map
+  for (int row = 0; row < 3; ++row) {
+    const auto path = model->data(idx(*model, row), PlacesModel::PathRole).toString();
+    ASSERT_TRUE(icons->contains(path)) << path.toStdString();
+    EXPECT_EQ(icons->value(path), model->data(idx(*model, row), PlacesModel::IconNameRole).toString());
+  }
+}
+
 TEST(PlacesModel, MissingUserDirsFileHasNoFallbackOnlyHomeAndBookmarks) {
   ModelFixture fixture;
   ASSERT_TRUE(fixture.valid());

@@ -18,8 +18,10 @@ inline constexpr QChar kChainSeparator = u'/';
 // `mode` is a stat() st_mode value, already resolved through symlinks by the caller. `fileName` is
 // the entry's own name, used for MIME extension matching. Returns an ordered list with duplicates
 // removed (first occurrence wins); never empty, always ending in the generic file fallback for
-// regular files.
-[[nodiscard]] QStringList candidateIconNames(quint32 mode, const QString& fileName);
+// regular files. `namedIcon` is the place icon for this entry's exact path ("" for none). It is prepended
+// only when S_ISDIR(mode); for every other mode it is ignored, so a file can never receive a folder icon
+// (named-folder-icons REQ-F-005). Result for a matched directory: {namedIcon, "folder", "inode-directory"}.
+[[nodiscard]] QStringList candidateIconNames(quint32 mode, const QString& fileName, const QString& namedIcon = {});
 
 // The REQ-F-007 fallback name alone, for entries whose stat() data cannot be trusted (dangling
 // symlink, stat() failure) or does not exist yet (the INSERT-mode placeholder row, REQ-F-011).

@@ -58,6 +58,7 @@ class PreviewService : public QObject {
   };
 
   Q_PROPERTY(bool hasEntry READ hasEntry NOTIFY changed)
+  Q_PROPERTY(bool isDirectory READ isDirectory NOTIFY changed)
   Q_PROPERTY(QString name READ name NOTIFY changed)
   Q_PROPERTY(qint64 size READ size NOTIFY changed)
   Q_PROPERTY(QDateTime modified READ modified NOTIFY changed)
@@ -104,6 +105,9 @@ class PreviewService : public QObject {
   ~PreviewService() override;
 
   bool hasEntry() const { return has_entry_; }
+  // True when the current target is a directory; the QML fallback-glyph selector reads this instead of parsing
+  // iconName, whose first name is now a place icon for named folders.
+  bool isDirectory() const { return has_entry_ && is_dir_; }
   QString name() const { return name_; }
   qint64 size() const { return size_; }
   QDateTime modified() const { return modified_; }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "location_classifier.h"
+#include "places/place_list.h"
 #include "restore_outcome.h"
 
 #include <QAbstractListModel>
@@ -78,8 +79,13 @@ class DirectoryModel : public QAbstractListModel {
   // No-op if row is out of range or isn't a placeholder row.
   void removePlaceholderRow(int row);
   void shutdown();
-  // The synthetic ".." row shown until the walker delivers the parent folder's stat'ed entry.
-  static DirectoryEntry syntheticParentEntry(const QString& path);
+  // The synthetic ".." row shown until the walker delivers the parent folder's stat'ed entry. `places` may be
+  // null (generic chain).
+  static DirectoryEntry syntheticParentEntry(const QString& path, const PlaceList::IconMap* places = nullptr);
+  // Installs the immutable place->icon map used by walks started after this call (load()/refresh()). Rows
+  // already in the model are not re-resolved; callers refresh() to apply it. GUI thread only. C++-only on
+  // purpose (no Q_INVOKABLE/Q_PROPERTY/role). A null pointer restores generic-only behaviour.
+  void setPlaceIcons(std::shared_ptr<const PlaceList::IconMap> icons);
   // Stats and classifies a stored last location on the worker thread (SPEC.md REQ-F-016) and
   // reports the result through restoreValidated().
   void validateForRestore(const QString& path);
@@ -99,6 +105,7 @@ class DirectoryModel : public QAbstractListModel {
   int read_error_after_for_test_ = -1;
   // Shared with in-flight worker tasks, so replacing it never invalidates a running call.
   std::shared_ptr<const LocationClassifier> classifier_;
+  std::shared_ptr<const PlaceList::IconMap> place_icons_;  // null until set
   struct Batch {
     quint64 generation = 0;
     bool diff = false;

@@ -48,6 +48,8 @@ add_library(files-private STATIC
   places/bookmark_store.h
   places/place_availability_checker.cpp
   places/place_availability_checker.h
+  places/place_list.cpp
+  places/place_list.h
   places/user_dirs_parser.cpp
   places/user_dirs_parser.h
   preview/exif_reader.cpp

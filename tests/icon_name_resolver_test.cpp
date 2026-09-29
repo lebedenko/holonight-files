@@ -13,6 +13,28 @@ TEST(IconNameResolver, DirectoryPrefersFolderThenInodeDirectory) {
             (QStringList{"folder", "inode-directory"}));
 }
 
+TEST(IconNameResolver, NamedDirectoryPrependsNamedIcon) {
+  EXPECT_EQ(IconNameResolver::candidateIconNames(S_IFDIR | 0755, "Documents", "folder-documents"),
+            (QStringList{"folder-documents", "folder", "inode-directory"}));
+}
+
+TEST(IconNameResolver, EmptyNamedIconLeavesDirectoryChainUnchanged) {
+  EXPECT_EQ(IconNameResolver::candidateIconNames(S_IFDIR | 0755, "Documents", QString()),
+            (QStringList{"folder", "inode-directory"}));
+}
+
+TEST(IconNameResolver, NamedIconEqualToFolderDoesNotDuplicate) {
+  EXPECT_EQ(IconNameResolver::candidateIconNames(S_IFDIR | 0755, "x", "folder"),
+            (QStringList{"folder", "inode-directory"}));
+}
+
+TEST(IconNameResolver, NamedIconIgnoredForNonDirectories) {
+  EXPECT_EQ(IconNameResolver::candidateIconNames(S_IFIFO | 0600, "pipe", "folder-documents"),
+            (QStringList{"inode-fifo"}));
+  EXPECT_EQ(IconNameResolver::candidateIconNames(S_IFREG | 0644, "data.xyz123", "folder-documents"),
+            (QStringList{"application-x-generic"}));
+}
+
 TEST(IconNameResolver, FifoUsesModeOnly) {
   EXPECT_EQ(IconNameResolver::candidateIconNames(S_IFIFO | 0600, "pipe.txt"), (QStringList{"inode-fifo"}));
 }

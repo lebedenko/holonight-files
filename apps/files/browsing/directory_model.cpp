@@ -30,7 +30,11 @@ dirent* readNext(DIR* directory, int readCount, int readErrorAfter) {
   }
   return ::readdir(directory);
 }
-DirectoryEntry readEntry(const QString& path, const QString& name) {
+// "" when there is no map or the exact cleaned path is not a standard place.
+QString namedIconFor(const PlaceList::IconMap* places, const QString& cleanedPath) {
+  return places == nullptr ? QString() : places->value(cleanedPath);
+}
+DirectoryEntry readEntry(const QString& path, const QString& name, const PlaceList::IconMap* places) {
   DirectoryEntry entry;
   entry.name = name;
   entry.absolute_path = QDir(path).absoluteFilePath(name);
@@ -42,7 +46,10 @@ DirectoryEntry readEntry(const QString& path, const QString& name) {
     entry.mode = info.st_mode;
     entry.modified =
         QDateTime::fromMSecsSinceEpoch((qint64{info.st_mtim.tv_sec} * 1000) + (info.st_mtim.tv_nsec / 1000000));
-    entry.icon_name = IconNameResolver::candidateIconNames(info.st_mode, name).join(IconNameResolver::kChainSeparator);
+    // Only the entry's own listed path is looked up: no realpath/readlink, so a symlink to a place stays generic.
+    const auto named = entry.is_dir ? namedIconFor(places, entry.absolute_path) : QString();
+    entry.icon_name =
+        IconNameResolver::candidateIconNames(info.st_mode, name, named).join(IconNameResolver::kChainSeparator);
   } else {
     const int error = errno;
     entry.stat_failed = true;
@@ -58,17 +65,17 @@ DirectoryEntry readEntry(const QString& path, const QString& name) {
 }
 // The ".." row stands for the parent folder itself, so it carries the parent's real metadata; the
 // synthetic row is kept when the parent cannot be stat'ed.
-DirectoryEntry readParentEntry(const QString& path) {
+DirectoryEntry readParentEntry(const QString& path, const PlaceList::IconMap* places) {
   const auto parentPath = QDir::cleanPath(QFileInfo(path).absolutePath());
-  auto entry = readEntry(parentPath, QStringLiteral("."));
+  auto entry = readEntry(parentPath, QStringLiteral("."), nullptr);
   if (entry.stat_failed) {
-    return DirectoryModel::syntheticParentEntry(path);
+    return DirectoryModel::syntheticParentEntry(path, places);
   }
   entry.name = QStringLiteral("..");
   entry.absolute_path = parentPath;
   entry.is_parent = true;
-  entry.icon_name =
-      IconNameResolver::candidateIconNames(entry.mode, entry.name).join(IconNameResolver::kChainSeparator);
+  entry.icon_name = IconNameResolver::candidateIconNames(entry.mode, entry.name, namedIconFor(places, parentPath))
+                        .join(IconNameResolver::kChainSeparator);
   return entry;
 }
 
@@ -85,7 +92,8 @@ std::shared_ptr<QSemaphore> acquireBatchSlot(const std::shared_ptr<QSemaphore>& 
 }
 using PublishBatch = std::function<void(QList<DirectoryEntry>, bool, QString)>;
 void walkDirectory(const QString& path, const std::shared_ptr<std::atomic_bool>& cancel,
-                   const std::function<void()>& beforeOpen, int readErrorAfter, const PublishBatch& publish) {
+                   const std::function<void()>& beforeOpen, int readErrorAfter,
+                   const std::shared_ptr<const PlaceList::IconMap>& places, const PublishBatch& publish) {
   QList<DirectoryEntry> buffer;
   QElapsedTimer sinceFlush;
   sinceFlush.start();
@@ -107,7 +115,7 @@ void walkDirectory(const QString& path, const std::shared_ptr<std::atomic_bool>&
     return;
   }
   if (!QDir(path).isRoot()) {
-    buffer.append(readParentEntry(path));
+    buffer.append(readParentEntry(path, places.get()));
   }
   int readCount = 0;
   while (!cancel->load()) {
@@ -124,7 +132,7 @@ void walkDirectory(const QString& path, const std::shared_ptr<std::atomic_bool>&
       continue;
     }
     ++readCount;
-    buffer.append(readEntry(path, name));
+    buffer.append(readEntry(path, name, places.get()));
     if (buffer.size() >= kBatchEntryThreshold || sinceFlush.elapsed() >= kBatchTimeThresholdMs) {
       flush(false);
     }
@@ -193,7 +201,7 @@ QHash<int, QByteArray> DirectoryModel::roleNames() const {
       {IsParentRole, "isParent"},
   };
 }
-DirectoryEntry DirectoryModel::syntheticParentEntry(const QString& path) {
+DirectoryEntry DirectoryModel::syntheticParentEntry(const QString& path, const PlaceList::IconMap* places) {
   DirectoryEntry parent;
   parent.name = QStringLiteral("..");
   parent.absolute_path = QDir::cleanPath(QFileInfo(path).absolutePath());
@@ -201,9 +209,11 @@ DirectoryEntry DirectoryModel::syntheticParentEntry(const QString& path) {
   parent.is_parent = true;
   parent.mode = S_IFDIR | 0755;
   parent.icon_name =
-      IconNameResolver::candidateIconNames(parent.mode, parent.name).join(IconNameResolver::kChainSeparator);
+      IconNameResolver::candidateIconNames(parent.mode, parent.name, namedIconFor(places, parent.absolute_path))
+          .join(IconNameResolver::kChainSeparator);
   return parent;
 }
+void DirectoryModel::setPlaceIcons(std::shared_ptr<const PlaceList::IconMap> icons) { place_icons_ = std::move(icons); }
 void DirectoryModel::load(const QString& path) {
   if (stopping_) {
     return;
@@ -218,7 +228,7 @@ void DirectoryModel::load(const QString& path) {
   name_to_row_.clear();
   seen_this_refresh_.clear();
   if (!path.isEmpty() && !QDir(path).isRoot()) {
-    entries_.append(syntheticParentEntry(path));
+    entries_.append(syntheticParentEntry(path, place_icons_.get()));
     name_to_row_.insert(entries_.first().name, 0);
   }
   endResetModel();
@@ -345,16 +355,19 @@ void DirectoryModel::startWalk(const QString& path, bool diff) {
   const auto deliverySlots = std::make_shared<QSemaphore>(2);
   // Refreshes of the same folder are never reclassified (DESIGN.md §12).
   const auto classifier = diff ? nullptr : classifier_;
+  // Snapshot like classifier_: the worker never touches a member, and an in-flight walk keeps its own map alive.
+  const auto placeIcons = place_icons_;
   // Accessed only by GUI-thread deliveries. Once accepted, a successful load remains a
   // tracking candidate even if a refresh, navigation or shutdown happens during classification.
   const auto acceptedLoad = std::make_shared<bool>(false);
   QMetaObject::invokeMethod(
       worker_,
-      [this, path, generation, diff, cancel, beforeOpen, readErrorAfter, deliverySlots, classifier, acceptedLoad] {
+      [this, path, generation, diff, cancel, beforeOpen, readErrorAfter, deliverySlots, classifier, acceptedLoad,
+       placeIcons] {
         if (!cancel->load()) {
           resolveLocation(path, generation);
         }
-        walkDirectory(path, cancel, beforeOpen, readErrorAfter,
+        walkDirectory(path, cancel, beforeOpen, readErrorAfter, placeIcons,
                       [this, path, generation, diff, cancel, deliverySlots, classifier, acceptedLoad](
                           QList<DirectoryEntry> entries, bool finished, QString error) {
                         const auto slot = acquireBatchSlot(deliverySlots, cancel);

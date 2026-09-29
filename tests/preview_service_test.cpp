@@ -64,8 +64,10 @@ TEST(PreviewService, ClearResetsToThePlaceholderState) {
   PreviewService service;
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
+  EXPECT_FALSE(service.isDirectory());
   service.clear();
   EXPECT_FALSE(service.hasEntry());
+  EXPECT_FALSE(service.isDirectory());
   EXPECT_FALSE(service.hasText());
   EXPECT_FALSE(service.hasImage());
 }
@@ -127,6 +129,10 @@ TEST(PreviewService, DirectoryTargetSetsInodeDirectoryMimeTypeWithNoWorkerDispat
   PreviewService service;
   service.setTarget(dir.filePath("child"), true, -1, QFileInfo(dir.path()).lastModified(), 040755, false, {});
   EXPECT_EQ(service.mimeType(), QStringLiteral("inode/directory"));
+  EXPECT_TRUE(service.isDirectory());
+  service.clear();
+  EXPECT_FALSE(service.isDirectory());
+  service.setTarget(dir.filePath("child"), true, -1, QFileInfo(dir.path()).lastModified(), 040755, false, {});
   // Directories never reach the worker, where the description is resolved (DESIGN.md §5.2).
   EXPECT_TRUE(service.mimeTypeDescription().isEmpty());
   EXPECT_FALSE(service.busy());
