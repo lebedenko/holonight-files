@@ -10,8 +10,10 @@
 #include <QThread>
 
 #include <atomic>
+#include <cstdio>
 #include <future>
 #include <gtest/gtest.h>
+#include <print>
 #include <sys/stat.h>
 
 namespace {
@@ -255,6 +257,11 @@ TEST(CrossFilesystem, CopyToCapacityLimitedFilesystemReportsNoSpaceAndCleansUpPa
 
 int main(int argc, char* argv[]) {
   setupResult() = fs_isolation::setUp();
+  if (!setupResult().available && qEnvironmentVariableIntValue("FILES_REQUIRE_FS_ISOLATION") == 1) {
+    std::println(stderr, "Required filesystem isolation unavailable: {}",
+                 setupResult().unavailableReason.toStdString());
+    return 1;
+  }
   const QCoreApplication app(argc, argv);
   const auto fixtureRoot = QCoreApplication::applicationDirPath() + QStringLiteral("/fixtures/fsops");
   if (!QDir().mkpath(fixtureRoot)) {

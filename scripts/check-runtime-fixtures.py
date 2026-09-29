@@ -13,6 +13,7 @@ EXECUTABLE = "/usr/bin/hn-files"
 DESKTOP = "/usr/share/applications/org.holonight.Files.desktop"
 CASES = {
     "healthy": ("true", None),
+    "unwritable-home": ("chmod 000 /home/files-test", 'test -w "$HOME"'),
     "delayed-exit": ("""cc -x c -o /usr/bin/hn-files - <<'C'
 #include <string.h>
 #include <unistd.h>

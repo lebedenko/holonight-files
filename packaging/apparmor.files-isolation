@@ -1,0 +1,7 @@
+# Used only by the disposable CI filesystem-test container. Ubuntu restricts
+# unprivileged user namespaces even for ordinary unconfined processes.
+abi <abi/4.0>,
+include <tunables/global>
+profile holonight-files-isolation flags=(unconfined) {
+  userns,
+}

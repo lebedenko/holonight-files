@@ -30,7 +30,9 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <cstdio>
 #include <gtest/gtest.h>
+#include <print>
 #include <sys/statvfs.h>
 #include <unistd.h>
 
@@ -274,6 +276,11 @@ TEST(WindowCrossFilesystem, VisualDMixedMetadataFailureHasOneConfirmationAndPres
 int main(int argc, char* argv[]) {
   configurePreviewImageLimits();
   setupResult() = fs_isolation::setUp();
+  if (!setupResult().available && qEnvironmentVariableIntValue("FILES_REQUIRE_FS_ISOLATION") == 1) {
+    std::println(stderr, "Required filesystem isolation unavailable: {}",
+                 setupResult().unavailableReason.toStdString());
+    return 1;
+  }
   qunsetenv("QT_QUICK_CONTROLS_STYLE");
   qunsetenv("QT_QUICK_CONTROLS_FALLBACK_STYLE");
   qunsetenv("QT_QUICK_CONTROLS_CONF");

@@ -211,8 +211,12 @@ Requires C++23, Qt 6.11+ (including the Svg component), CMake 3.25+, Ninja,
 Task, libexif (via pkg-config), tomlplusplus 3.4+ (shared library, CMake config), and installed HolonightQt::Core /
 HolonightQt::Controls. Tests use Qt Test and GTest. Checks need clang-format,
 clang-tidy (run-clang-tidy), REUSE, desktop-file-utils and Python 3.
-`task isolated-runtime-check` additionally needs Docker and a locally built
-`files-ci` image (`docker build -t files-ci -f packaging/Dockerfile.ci .`).
+`task isolated-runtime-check` additionally needs Docker. It builds the current CI
+image, snapshots the current working sources (including nonignored untracked files),
+and builds providers and Files inside that image before verifying its installed payload.
+Host build directories are preserved. Sources, image IDs and logs are retained under
+`build/container-runtime.*`. Provider source overrides and `JOBS` /
+`CMAKE_BUILD_PARALLEL_LEVEL` are supported; parallelism defaults to four.
 On Arch, the [CI Dockerfile](packaging/Dockerfile.ci) lists the packages.
 
 ```sh
@@ -231,7 +235,7 @@ task license-check
 task install-check
 task check                # (alias: verify) build×2, test, format-check, lint, license-check, install-check, QML policy/metadata, in order
 task visual-check         # captures under build/visual for inspection
-task isolated-runtime-check  # builds Release, verifies the staged payload in a network-isolated Docker container
+task isolated-runtime-check  # builds in Docker, verifies the installed payload without network or host mounts
 task clean                   # removes build/{debug,release,test}; preserves build/deps and check evidence
 
 # Coordinated system installation/removal is owned by the umbrella:
@@ -383,8 +387,17 @@ Each UI executable owns a HolonightFiles QML module and calls `initializeFilesEn
 [Alignment specification and verification](docs/sdd/holonight-alignment/README.md) records the onboarding work.
 
 For isolated runtime checks with verified existing provider artifacts, `scripts/prepare-runtime-check.sh`
-accepts `HOLONIGHT_CONFIG_BUILD` and `HOLONIGHT_QT_BUILD`; defaults remain `build/deps/<provider>`.
+accepts `HOLONIGHT_CONFIG_BUILD`, `HOLONIGHT_QT_BUILD`, `HOLONIGHT_IMAGES_BUILD` and
+`HOLONIGHT_SYSTEM_SERVICES_BUILD`; defaults remain `build/deps/<provider>`.
 Verify provider revisions, build options and the exact Qt package versions against the runtime image first.
+
+CI runs a separate `isolation` job for both cross-filesystem executables. It sets
+`FILES_REQUIRE_FS_ISOLATION=1`, so unavailable user/mount namespaces fail the job.
+Only that test invocation disables Docker seccomp and uses a namespace-permitting
+AppArmor profile where AppArmor is active; it remains unprivileged and network-disabled.
+Ordinary developer test runs retain optional namespace skips.
+To require this coverage locally, run
+`FILES_REQUIRE_FS_ISOLATION=1 ctest --preset test -R '^files-fsops' -V`.
 
 ## Shared raster processing
 

@@ -91,13 +91,9 @@ tasks:
     cmds:
       - rm -rf -- build/debug build/release build/test
   isolated-runtime-check:
-    desc: Build and verify the installed payload in a disposable, network-isolated container
+    desc: Build in a fresh CI container and verify its installed payload without networking
     cmds:
-      - task: build
-        vars: {PRESET: release}
-      - bash scripts/prepare-runtime-check.sh
-      - docker build -t holonight-files-runtime-check "$(cat build/runtime-check-context)"
-      - docker run --rm --network none holonight-files-runtime-check
+      - python3 scripts/check-container-runtime.py
   visual-check:
     desc: Capture dark/light renders at normal and fractional scale for inspection
     cmds:

@@ -4,6 +4,7 @@ RUN pacman -Syu --noconfirm && pacman -S --needed --noconfirm \
     qt6-tools qt6-wayland gtest clang python reuse libexif libwebp qt6-imageformats tomlplusplus \
     desktop-file-utils glib2 dbus binutils procps-ng ripgrep git ttf-dejavu && pacman -Scc --noconfirm
 RUN ln -s /usr/bin/go-task /usr/local/bin/task
-RUN localedef -i en_US -f UTF-8 en_US.UTF-8 && useradd -m files-test
+RUN localedef -i en_US -f UTF-8 en_US.UTF-8 && useradd -m files-test \
+    && install -d -o files-test -g files-test -m 0700 /home/files-test
 ENV QT_QPA_PLATFORM=offscreen QSG_RHI_BACKEND=software
 WORKDIR /work/files
