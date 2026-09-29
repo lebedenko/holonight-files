@@ -26,3 +26,9 @@ revision above and marks it safe in both container lanes. Local YAML parsing
 verified the exact checkout path, revision and both safe-directory lists;
 `task deps` passed with that sibling checkout. The corrected workflow has not
 yet run in hosted CI.
+
+Before the corrective push, a pin audit found that the workflow's old Images
+revision lacked `holonight_images/svg.h` and its old Qt revision lacked
+`HnControlSize.Xs` and `HnIcon.Original`, all used by Files. CI now pins Config,
+Qt, Images, Thumbnails and Storage to the exact published revisions used by
+local Files acceptance. YAML parsing, source API checks and `task deps` passed.
