@@ -81,7 +81,7 @@ HnApplicationWindow {
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: HnMetrics.internalSpacing(HnControlSize.Normal)
+            spacing: 0
 
             Item {
                 id: sidebarContainer

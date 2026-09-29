@@ -222,7 +222,7 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
   auto* breadcrumb = window->findChild<QQuickItem*>("breadcrumbLabel");
   auto* gutter = row->findChild<QQuickItem*>("lineNumberGutterField");
   auto* gutterHeader = window->findChild<QQuickItem*>("lineNumberGutterHeader");
-  auto* listing = list->parentItem();
+  auto* listing = list->parentItem()->parentItem();
   ASSERT_NE(gutter, nullptr);
   ASSERT_NE(gutterHeader, nullptr);
   ASSERT_NE(icon, nullptr);
@@ -259,13 +259,14 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
         QTest::qWaitFor([&] { return window->width() == width && qFuzzyCompare(row->width(), list->width()); }));
     QTest::qWait(20);  // let both RowLayouts finish polishing at the new width
     EXPECT_EQ(icon->width(), 20) << width;
-    EXPECT_NEAR(nameHeader->mapToScene(QPointF()).x(), name->mapToScene(QPointF()).x(), 1) << width;
+    // The header's Name label lines up with the icon, not the filename.
+    EXPECT_NEAR(nameHeader->mapToScene(QPointF()).x(), icon->mapToScene(QPointF()).x(), 1) << width;
     EXPECT_LT(icon->mapToScene(QPointF()).x() + icon->width(), name->mapToScene(QPointF()).x()) << width;
     // line-number-gutter REQ-F-009/010: a blank header spacer as wide as the gutter keeps every column aligned.
     const auto gutterWidth = listing->property("lineNumberGutterWidth").toReal();
     EXPECT_EQ(gutterHeader->width(), gutterWidth) << width;
     EXPECT_EQ(gutter->width(), gutterWidth) << width;
-    EXPECT_NEAR(gutter->mapToScene(QPointF()).x(), list->mapToScene(QPointF()).x(), 1) << width;
+    EXPECT_NEAR(gutter->mapToScene(QPointF()).x(), listing->mapToScene(QPointF()).x(), 1) << width;
     EXPECT_NEAR(gutterHeader->mapToScene(QPointF()).x(), gutter->mapToScene(QPointF()).x(), 1) << width;
     EXPECT_EQ(sizeHeader->isVisible(), size->isVisible()) << width;
     EXPECT_EQ(modifiedHeader->isVisible(), modified->isVisible()) << width;
@@ -278,7 +279,7 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
     // line-number-gutter REQ-F-015 (replacing main-view-icons REQ-NF-002's icon-column anchor): the row
     // now starts with the gutter, so the breadcrumb aligns with the list view's left edge instead —
     // a fixed offset that doesn't move when the gutter widens.
-    EXPECT_NEAR(breadcrumb->mapToScene(QPointF()).x(), list->mapToScene(QPointF()).x(), 1) << width;
+    EXPECT_NEAR(breadcrumb->mapToScene(QPointF()).x(), listing->mapToScene(QPointF()).x(), 1) << width;
   }
 }
 
@@ -348,7 +349,7 @@ LoadedWindow loadActiveWindow(DirectoryController& controller, const QString& pa
   controller.open(path);
   if (QTest::qWaitFor([&] { return !controller.scanning(); })) {
     loaded.list = loaded.window->findChild<QQuickItem*>("directoryListView");
-    loaded.listing = loaded.list != nullptr ? loaded.list->parentItem() : nullptr;
+    loaded.listing = loaded.list != nullptr ? loaded.list->parentItem()->parentItem() : nullptr;
   }
   return loaded;
 }
@@ -421,10 +422,13 @@ TEST(Files, LineNumberGutterHybridNumberingFollowsCursorSortAndFilter) {
   for (auto* label : labels) {
     EXPECT_EQ(label->property("font").value<QFont>().family(),
               evaluateInContext(label, "HolonightTheme.monospaceFont").toString());
-    EXPECT_EQ(label->property("horizontalAlignment").toInt(), Qt::AlignRight);
+    // The cursor row is bold and left-aligned; other rows are right-aligned.
+    const bool cursorRow = label->property("isCursorRow").toBool();
+    EXPECT_EQ(label->property("horizontalAlignment").toInt(), cursorRow ? Qt::AlignLeft : Qt::AlignRight);
+    EXPECT_EQ(label->property("font").value<QFont>().bold(), cursorRow);
     EXPECT_EQ(label->width(), loaded.listing->property("lineNumberGutterWidth").toReal());
     // REQ-F-005: flush at the row's left edge; REQ-NF-004: a visual aid only.
-    EXPECT_EQ(label->mapToItem(label->parentItem()->parentItem(), QPointF()).x(), 0);
+    EXPECT_EQ(label->mapToItem(loaded.listing, QPointF()).x(), 0);
     EXPECT_TRUE(QQmlProperty(label, QStringLiteral("Accessible.ignored"), qmlContext(label)).read().toBool());
   }
 
@@ -598,6 +602,14 @@ TEST(Files, LineNumberGutterHeaderStaysForEmptyAndUnreadableDirectories) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
   ASSERT_FALSE(controller.directoryError().isEmpty());
   EXPECT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).isEmpty(); }));
+  EXPECT_TRUE(header->isVisible());
+  EXPECT_FALSE(list->isVisible());
+
+  // REQ-F-014: clearing an error must restore the listing and its gutter.
+  controller.open(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+  ASSERT_TRUE(controller.directoryError().isEmpty());
+  EXPECT_TRUE(QTest::qWaitFor([&] { return list->isVisible() && !gutterLabels(list).isEmpty(); }));
   EXPECT_TRUE(header->isVisible());
 }
 

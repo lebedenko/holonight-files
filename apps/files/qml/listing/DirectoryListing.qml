@@ -22,13 +22,15 @@ Item {
     // font the delegate's own Modified field renders with, rather than re-deriving font metrics.
     readonly property real modifiedColumnWidth: Math.ceil(modifiedColumnMetric.implicitWidth)
     readonly property real columnSpacing: HnMetrics.internalSpacing(HnControlSize.Compact)
+    // Every non-gutter column carries this much padding on each side of its content.
+    readonly property real cellPadding: 8
     readonly property real columnPadding: HnMetrics.horizontalPadding(HnControlSize.Normal)
-    readonly property bool showSize: width >= 2 * columnPadding + 120 + columnSpacing + sizeColumnWidth
-    readonly property bool showModified: width >= 2 * columnPadding + 120 + 2 * columnSpacing + sizeColumnWidth + modifiedColumnWidth
+    readonly property bool showSize: width >= lineNumberGutterWidth + 120 + 2 * cellPadding + iconColumnWidth + columnSpacing + sizeColumnWidth + 2 * cellPadding
+    readonly property bool showModified: showSize && width >= lineNumberGutterWidth + 120 + 2 * cellPadding + iconColumnWidth + columnSpacing + sizeColumnWidth + modifiedColumnWidth + 4 * cellPadding
     // Vim-hybrid line-number gutter (line-number-gutter SPEC.md REQ-F-004/REQ-C-004): wide enough
     // for at least "999", growing with the row count (listView.count includes an o/O placeholder).
     readonly property int lineNumberGutterDigits: lineNumberGutterDigitsFor(listView.count)
-    // Measured text width plus 8px leading and 8px trailing padding inside the gutter cell (REQ-C-002).
+    // Measured text width plus 8px leading and 8px trailing padding; the gutter itself is flush with the sidebar.
     readonly property real lineNumberGutterWidth: Math.ceil(lineNumberGutterMetric.implicitWidth) + 16
 
     // String length rather than log10 so exact powers of ten never round wrong.
@@ -68,8 +70,8 @@ Item {
             anchors.fill: parent
             // The gutter spacer replaces the leading padding, matching the delegates' leftPadding: 0.
             anchors.leftMargin: 0
-            anchors.rightMargin: HnMetrics.horizontalPadding(HnControlSize.Normal)
-            spacing: root.columnSpacing
+            anchors.rightMargin: 0
+            spacing: 0
 
             // Blank: no label and no separator above the line-number gutter (REQ-F-009).
             Item {
@@ -85,18 +87,21 @@ Item {
                 rawText: qsTr("Name")
                 elide: Text.ElideRight
                 Layout.fillWidth: true
-                Layout.leftMargin: root.iconColumnWidth + root.columnSpacing
+                // Aligned with the delegates' icon, not their filename.
+                Layout.leftMargin: root.cellPadding
+                Layout.rightMargin: root.cellPadding
             }
             HnLabel {
                 id: sizeHeader
                 objectName: "sizeColumnHeader"
                 role: HnTypographyRole.Body
                 rawText: qsTr("Size")
-                horizontalAlignment: Text.AlignRight
                 visible: root.showSize
-                Layout.minimumWidth: root.sizeColumnWidth
-                Layout.preferredWidth: root.sizeColumnWidth
-                Layout.maximumWidth: root.sizeColumnWidth
+                leftPadding: root.cellPadding
+                rightPadding: root.cellPadding
+                Layout.minimumWidth: root.sizeColumnWidth + 2 * root.cellPadding
+                Layout.preferredWidth: root.sizeColumnWidth + 2 * root.cellPadding
+                Layout.maximumWidth: root.sizeColumnWidth + 2 * root.cellPadding
                 Layout.fillHeight: true
                 verticalAlignment: Text.AlignVCenter
             }
@@ -106,9 +111,11 @@ Item {
                 role: HnTypographyRole.Body
                 rawText: qsTr("Modified")
                 visible: root.showModified
-                Layout.minimumWidth: root.modifiedColumnWidth
-                Layout.preferredWidth: root.modifiedColumnWidth
-                Layout.maximumWidth: root.modifiedColumnWidth
+                leftPadding: root.cellPadding
+                rightPadding: root.cellPadding
+                Layout.minimumWidth: root.modifiedColumnWidth + 2 * root.cellPadding
+                Layout.preferredWidth: root.modifiedColumnWidth + 2 * root.cellPadding
+                Layout.maximumWidth: root.modifiedColumnWidth + 2 * root.cellPadding
                 Layout.fillHeight: true
                 verticalAlignment: Text.AlignVCenter
             }
@@ -119,7 +126,7 @@ Item {
             objectName: "sizeColumnDivider"
             orientation: Qt.Vertical
             visible: root.showSize
-            x: headerCells.x + sizeHeader.x - root.columnSpacing / 2
+            x: headerCells.x + sizeHeader.x
             anchors.top: parent.top
             anchors.bottom: columnHeaderDivider.top
         }
@@ -128,7 +135,7 @@ Item {
             objectName: "modifiedColumnDivider"
             orientation: Qt.Vertical
             visible: root.showModified
-            x: headerCells.x + modifiedHeader.x - root.columnSpacing / 2
+            x: headerCells.x + modifiedHeader.x
             anchors.top: parent.top
             anchors.bottom: columnHeaderDivider.top
         }
@@ -146,249 +153,49 @@ Item {
         }
     }
 
-    ListView {
-        id: listView
-        objectName: "directoryListView"
-
+    // Clips the gutter numbers, which the delegates draw to the left of the list view proper.
+    Item {
+        id: listArea
+        clip: true
         anchors {
             top: columnHeader.bottom
             left: parent.left
             right: parent.right
             bottom: parent.bottom
         }
-        clip: true
-        focus: true
-        Controls.ScrollBar.vertical: Controls.ScrollBar {}
         visible: !root.controller || root.controller.directoryError.length === 0
-        model: root.controller ? root.controller.listing : null
-        currentIndex: root.controller ? root.controller.cursorRow : -1
-        onCurrentIndexChanged: {
-            if (currentIndex >= 0)
-                positionViewAtIndex(currentIndex, ListView.Contain);
-        }
 
-        Keys.priority: Keys.BeforeItem
-        Keys.onShortcutOverride: event => {
-            if (InspectionKeys.overrideShortcut(event.key, false, root.controller.vim.currentMode === VimModeController.Visual))
-                event.accepted = true;
-        }
-        Keys.onPressed: event => {
-            if (InspectionKeys.press(event.key, event.text, event.modifiers, event.isAutoRepeat, root.controller, false))
-                event.accepted = true;
-        }
-        Keys.onReleased: event => {
-            if (InspectionKeys.release(event.key))
-                event.accepted = true;
-        }
-        Connections {
-            target: root.controller
-            function onNavigated(): void {
-                // j/k inside Quick Look also reach a new file; focus must stay in the modal popup.
-                if (!root.controller.quickLookOpen)
-                    listView.forceActiveFocus();
-            }
-            function onChanged(): void {
-                if (root.previousQuickLookOpen && !root.controller.quickLookOpen)
-                    listView.forceActiveFocus();
-                root.previousQuickLookOpen = root.controller.quickLookOpen;
-
-                const mode = root.controller.vim.currentMode;
-                if (root.previousMode !== VimModeController.Normal && mode === VimModeController.Normal) {
-                    listView.forceActiveFocus();
-                    Qt.callLater(() => {
-                        if (root.controller.vim.currentMode === VimModeController.Normal)
-                            listView.forceActiveFocus();
-                    });
-                }
-                root.previousMode = mode;
+        // Solid gutter strip: flush with the sidebar, from the header rule to the footer, regardless of row count.
+        Rectangle {
+            id: gutterStrip
+            objectName: "lineNumberGutterStrip"
+            color: HoloniightPalette.surfaceRaised
+            width: root.lineNumberGutterWidth
+            anchors {
+                top: parent.top
+                bottom: parent.bottom
+                left: parent.left
             }
         }
-        Component.onCompleted: forceActiveFocus()
 
-        delegate: HnListDelegate {
-            id: delegate
+        ListView {
+            id: listView
+            objectName: "directoryListView"
 
-            required property int index
-            required property string name
-            required property bool isDir
-            required property real size
-            required property var modified
-            required property bool statFailed
-            required property string statError
-            required property string iconName
-            required property bool isParent
-
-            readonly property bool editingThis: root.controller.vim.currentMode === VimModeController.Insert && root.controller.vim.editingRow === delegate.index
-
-            objectName: "directoryEntryDelegate"
-            width: listView.width
-            // The gutter sits flush at the row's left edge; the selection background spans the whole
-            // delegate regardless of padding, so it still covers the gutter (REQ-F-005).
-            leftPadding: 0
-            highlighted: ListView.isCurrentItem || (root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(delegate.index))
-            title: name
-            subtitle: statFailed ? statError : (isParent ? qsTr("Parent folder") : (isDir ? qsTr("Folder") : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm")))
-            metadata: isDir ? "" : SizeFormat.formatSize(size)
-            trailingContent: statFailed ? errorIndicator : null
-
-            contentItem: RowLayout {
-                spacing: root.columnSpacing
-                HnLabel {
-                    readonly property bool isCursorRow: delegate.index === root.controller.cursorRow
-
-                    objectName: "lineNumberGutterField"
-                    role: HnTypographyRole.Code
-                    textFormat: Text.PlainText
-                    // Vim hybrid numbering: absolute on the cursor row, relative distance elsewhere.
-                    rawText: isCursorRow ? String(delegate.index + 1) : String(Math.abs(delegate.index - root.controller.cursorRow))
-                    color: isCursorRow ? HoloniightPalette.accentViolet : HoloniightPalette.textMuted
-                    horizontalAlignment: Text.AlignRight
-                    verticalAlignment: Text.AlignVCenter
-                    leftPadding: 8
-                    rightPadding: 8
-                    Layout.minimumWidth: root.lineNumberGutterWidth
-                    Layout.preferredWidth: root.lineNumberGutterWidth
-                    Layout.maximumWidth: root.lineNumberGutterWidth
-                    Layout.fillHeight: true
-                    Accessible.ignored: true
-                }
-                Item {
-                    id: iconCell
-                    objectName: "iconColumnField"
-                    Layout.minimumWidth: root.iconColumnWidth
-                    Layout.preferredWidth: root.iconColumnWidth
-                    Layout.maximumWidth: root.iconColumnWidth
-                    Layout.fillHeight: true
-
-                    // Deliberately not reactive to later failures: it only spares rows created after
-                    // an earlier row's miss from repeating the request (IconFallbacks).
-                    readonly property bool knownUnresolved: IconFallbacks.isUnresolved(delegate.iconName)
-                    // Once this row's own request fails, stop re-requesting (e.g. on a device pixel
-                    // ratio change) until the row's chain itself changes.
-                    property string failedChain
-                    readonly property bool skipRequest: knownUnresolved || failedChain === delegate.iconName
-                    readonly property bool showFallback: skipRequest || themeIcon.hasError
-
-                    // Theme icon, untinted in its own colours (REQ-F-003). The chain in iconName is
-                    // walked by the C++ image provider; a total miss surfaces as hasError.
-                    HnIcon {
-                        id: themeIcon
-                        objectName: "themeFileIcon"
-                        anchors.centerIn: parent
-                        size: root.iconColumnWidth
-                        source: iconCell.skipRequest ? "" : "image://icon/" + delegate.iconName
-                        rendering: HnIcon.Original
-                        visible: !iconCell.showFallback
-                        onHasErrorChanged: if (hasError) {
-                            const chain = delegate.iconName;
-                            IconFallbacks.markUnresolved(chain);
-                            // Deferred: the failure is reported from inside the source assignment itself.
-                            Qt.callLater(() => iconCell.failedChain = chain);
-                        }
-                    }
-                    // Bundled glyph, tinted with the palette (REQ-F-016/017); sourced only after a miss.
-                    HnIcon {
-                        id: fallbackIcon
-                        objectName: "fallbackFileIcon"
-                        anchors.centerIn: parent
-                        size: root.iconColumnWidth
-                        source: !iconCell.showFallback ? "" : delegate.isDir ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
-                        visible: iconCell.showFallback
-                    }
-                    // Keep a visible marker even if the packaged SVG cannot be decoded.
-                    Rectangle {
-                        objectName: "iconFailurePlaceholder"
-                        anchors.centerIn: parent
-                        width: root.iconColumnWidth
-                        height: root.iconColumnWidth
-                        radius: 3
-                        color: "transparent"
-                        border.color: HoloniightPalette.textMuted
-                        visible: iconCell.showFallback && fallbackIcon.hasError
-                        Text {
-                            anchors.centerIn: parent
-                            text: "?"
-                            color: HoloniightPalette.textMuted
-                            font.pixelSize: 14
-                        }
-                    }
-                }
-                Item {
-                    objectName: "nameColumnField"
-                    Layout.fillWidth: true
-                    implicitHeight: filenameRuns.implicitHeight
-                    clip: true
-                    Row {
-                        id: filenameRuns
-                        width: Math.max(0, parent.width - (statErrorIndicator.active ? statErrorIndicator.width + root.columnSpacing : 0))
-                        clip: true
-                        Repeater {
-                            model: {
-                                const positions = root.controller.vim.currentMode === VimModeController.Search && root.controller.cursorRow === delegate.index ? root.controller.vim.searchMatchPositions : [];
-                                const runs = [];
-                                for (let i = 0; i < delegate.name.length; ++i) {
-                                    const matched = positions.indexOf(i) !== -1;
-                                    if (runs.length && runs[runs.length - 1].matched === matched)
-                                        runs[runs.length - 1].text += delegate.name[i];
-                                    else
-                                        runs.push({
-                                            text: delegate.name[i],
-                                            matched: matched
-                                        });
-                                }
-                                return runs;
-                            }
-                            HnLabel {
-                                required property var modelData
-                                objectName: "filenameRun"
-                                role: HnTypographyRole.Body
-                                rawText: modelData.text
-                                textFormat: Text.PlainText
-                                color: modelData.matched ? HoloniightPalette.accentCyan : HoloniightPalette.textPrimary
-                                font.weight: modelData.matched ? Font.Bold : Font.Normal
-                                Accessible.ignored: true
-                            }
-                        }
-                    }
-                    Loader {
-                        id: statErrorIndicator
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        active: delegate.statFailed
-                        visible: active
-                        sourceComponent: errorIndicator
-                    }
-                }
-                HnLabel {
-                    objectName: "sizeColumnField"
-                    role: HnTypographyRole.Caption
-                    rawText: delegate.isDir ? "" : SizeFormat.formatSize(delegate.size)
-                    color: HoloniightPalette.textSecondary
-                    horizontalAlignment: Text.AlignRight
-                    visible: root.showSize
-                    Layout.minimumWidth: root.sizeColumnWidth
-                    Layout.preferredWidth: root.sizeColumnWidth
-                    Layout.maximumWidth: root.sizeColumnWidth
-                }
-                HnLabel {
-                    objectName: "modifiedColumnField"
-                    role: HnTypographyRole.Caption
-                    rawText: delegate.statFailed ? delegate.statError : (delegate.isParent ? "" : Qt.formatDateTime(delegate.modified, "yyyy-MM-dd HH:mm"))
-                    color: delegate.statFailed ? HoloniightPalette.error : HoloniightPalette.textMuted
-                    elide: Text.ElideRight
-                    visible: root.showModified
-                    Layout.minimumWidth: root.modifiedColumnWidth
-                    Layout.preferredWidth: root.modifiedColumnWidth
-                    Layout.maximumWidth: root.modifiedColumnWidth
-                }
+            anchors {
+                top: parent.top
+                left: gutterStrip.right
+                right: parent.right
+                bottom: parent.bottom
             }
-
-            Component {
-                id: errorIndicator
-
-                HnStatusIndicator {
-                    status: HnStatusIndicator.Warning
-                }
+            clip: false
+            focus: true
+            Controls.ScrollBar.vertical: Controls.ScrollBar {}
+            model: root.controller ? root.controller.listing : null
+            currentIndex: root.controller ? root.controller.cursorRow : -1
+            onCurrentIndexChanged: {
+                if (currentIndex >= 0)
+                    positionViewAtIndex(currentIndex, ListView.Contain);
             }
 
             Keys.priority: Keys.BeforeItem
@@ -404,54 +211,288 @@ Item {
                 if (InspectionKeys.release(event.key))
                     event.accepted = true;
             }
+            Connections {
+                target: root.controller
+                function onNavigated(): void {
+                    // j/k inside Quick Look also reach a new file; focus must stay in the modal popup.
+                    if (!root.controller.quickLookOpen)
+                        listView.forceActiveFocus();
+                }
+                function onChanged(): void {
+                    if (root.previousQuickLookOpen && !root.controller.quickLookOpen)
+                        listView.forceActiveFocus();
+                    root.previousQuickLookOpen = root.controller.quickLookOpen;
 
-            onClicked: root.controller.openEntry(delegate.index)
+                    const mode = root.controller.vim.currentMode;
+                    if (root.previousMode !== VimModeController.Normal && mode === VimModeController.Normal) {
+                        listView.forceActiveFocus();
+                        Qt.callLater(() => {
+                            if (root.controller.vim.currentMode === VimModeController.Normal)
+                                listView.forceActiveFocus();
+                        });
+                    }
+                    root.previousMode = mode;
+                }
+            }
+            Component.onCompleted: forceActiveFocus()
 
-            // INSERT-mode inline rename/create editor (SPEC.md REQ-F-006 through REQ-F-017): an
-            // opaque-background TextField overlaid on this delegate, covering its label, rather
-            // than a separate floating popup — it scrolls/clips with the delegate for free
-            // (docs/sdd/vim-modal-editing/DESIGN.md).
-            Controls.TextField {
-                id: inlineEditor
-                objectName: "inlineNameEditor"
+            delegate: HnListDelegate {
+                id: delegate
 
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                // Starts after the gutter so line numbers stay visible while editing (REQ-F-011).
-                anchors.leftMargin: root.lineNumberGutterWidth
-                anchors.rightMargin: 8
-                visible: delegate.editingThis
-                text: root.controller.vim.insertText
-                Binding {
-                    target: inlineEditor
-                    property: "hasError"
-                    value: !root.controller.vim.insertValid
-                    when: "hasError" in inlineEditor
+                required property int index
+                required property string name
+                required property bool isDir
+                required property real size
+                required property var modified
+                required property bool statFailed
+                required property string statError
+                required property string iconName
+                required property bool isParent
+
+                readonly property bool editingThis: root.controller.vim.currentMode === VimModeController.Insert && root.controller.vim.editingRow === delegate.index
+
+                objectName: "directoryEntryDelegate"
+                width: listView.width
+                // The gutter sits flush at the row's left edge; the selection background spans the whole
+                // delegate regardless of padding, so it still covers the gutter (REQ-F-005).
+                leftPadding: 0
+                rightPadding: 0
+                highlighted: ListView.isCurrentItem || (root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(delegate.index))
+                title: name
+                subtitle: statFailed ? statError : (isParent ? qsTr("Parent folder") : (isDir ? qsTr("Folder") : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm")))
+                metadata: isDir ? "" : SizeFormat.formatSize(size)
+                trailingContent: statFailed ? errorIndicator : null
+
+                // Numbers live in the strip left of the list view; the delegate's own selection fill
+                // therefore never covers the gutter.
+                HnLabel {
+                    readonly property bool isCursorRow: delegate.index === root.controller.cursorRow
+
+                    objectName: "lineNumberGutterField"
+                    role: HnTypographyRole.Code
+                    textFormat: Text.PlainText
+                    font.weight: isCursorRow ? Font.Bold : Font.Normal
+                    // Vim hybrid numbering: absolute on the cursor row, relative distance elsewhere.
+                    rawText: isCursorRow ? String(delegate.index + 1) : String(Math.abs(delegate.index - root.controller.cursorRow))
+                    color: isCursorRow ? HoloniightPalette.accentViolet : HoloniightPalette.textMuted
+                    horizontalAlignment: isCursorRow ? Text.AlignLeft : Text.AlignRight
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 8
+                    rightPadding: 8
+                    x: -root.lineNumberGutterWidth
+                    width: root.lineNumberGutterWidth
+                    height: delegate.height
+                    Accessible.ignored: true
+                }
+
+                contentItem: RowLayout {
+                    spacing: 0
+                    Item {
+                        id: iconCell
+                        objectName: "iconColumnField"
+                        Layout.minimumWidth: root.iconColumnWidth
+                        Layout.preferredWidth: root.iconColumnWidth
+                        Layout.maximumWidth: root.iconColumnWidth
+                        Layout.leftMargin: root.cellPadding
+                        Layout.fillHeight: true
+
+                        // Deliberately not reactive to later failures: it only spares rows created after
+                        // an earlier row's miss from repeating the request (IconFallbacks).
+                        readonly property bool knownUnresolved: IconFallbacks.isUnresolved(delegate.iconName)
+                        // Once this row's own request fails, stop re-requesting (e.g. on a device pixel
+                        // ratio change) until the row's chain itself changes.
+                        property string failedChain
+                        readonly property bool skipRequest: knownUnresolved || failedChain === delegate.iconName
+                        readonly property bool showFallback: skipRequest || themeIcon.hasError
+
+                        // Theme icon, untinted in its own colours (REQ-F-003). The chain in iconName is
+                        // walked by the C++ image provider; a total miss surfaces as hasError.
+                        HnIcon {
+                            id: themeIcon
+                            objectName: "themeFileIcon"
+                            anchors.centerIn: parent
+                            size: root.iconColumnWidth
+                            source: iconCell.skipRequest ? "" : "image://icon/" + delegate.iconName
+                            rendering: HnIcon.Original
+                            visible: !iconCell.showFallback
+                            onHasErrorChanged: if (hasError) {
+                                const chain = delegate.iconName;
+                                IconFallbacks.markUnresolved(chain);
+                                // Deferred: the failure is reported from inside the source assignment itself.
+                                Qt.callLater(() => iconCell.failedChain = chain);
+                            }
+                        }
+                        // Bundled glyph, tinted with the palette (REQ-F-016/017); sourced only after a miss.
+                        HnIcon {
+                            id: fallbackIcon
+                            objectName: "fallbackFileIcon"
+                            anchors.centerIn: parent
+                            size: root.iconColumnWidth
+                            source: !iconCell.showFallback ? "" : delegate.isDir ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
+                            visible: iconCell.showFallback
+                        }
+                        // Keep a visible marker even if the packaged SVG cannot be decoded.
+                        Rectangle {
+                            objectName: "iconFailurePlaceholder"
+                            anchors.centerIn: parent
+                            width: root.iconColumnWidth
+                            height: root.iconColumnWidth
+                            radius: 3
+                            color: "transparent"
+                            border.color: HoloniightPalette.textMuted
+                            visible: iconCell.showFallback && fallbackIcon.hasError
+                            Text {
+                                anchors.centerIn: parent
+                                text: "?"
+                                color: HoloniightPalette.textMuted
+                                font.pixelSize: 14
+                            }
+                        }
+                    }
+                    Item {
+                        objectName: "nameColumnField"
+                        Layout.fillWidth: true
+                        Layout.leftMargin: root.columnSpacing
+                        Layout.rightMargin: root.cellPadding
+                        implicitHeight: filenameRuns.implicitHeight
+                        clip: true
+                        Row {
+                            id: filenameRuns
+                            width: Math.max(0, parent.width - (statErrorIndicator.active ? statErrorIndicator.width + root.columnSpacing : 0))
+                            clip: true
+                            Repeater {
+                                model: {
+                                    const positions = root.controller.vim.currentMode === VimModeController.Search && root.controller.cursorRow === delegate.index ? root.controller.vim.searchMatchPositions : [];
+                                    const runs = [];
+                                    for (let i = 0; i < delegate.name.length; ++i) {
+                                        const matched = positions.indexOf(i) !== -1;
+                                        if (runs.length && runs[runs.length - 1].matched === matched)
+                                            runs[runs.length - 1].text += delegate.name[i];
+                                        else
+                                            runs.push({
+                                                text: delegate.name[i],
+                                                matched: matched
+                                            });
+                                    }
+                                    return runs;
+                                }
+                                HnLabel {
+                                    required property var modelData
+                                    objectName: "filenameRun"
+                                    role: HnTypographyRole.Body
+                                    rawText: modelData.text
+                                    textFormat: Text.PlainText
+                                    color: modelData.matched ? HoloniightPalette.accentCyan : HoloniightPalette.textPrimary
+                                    font.weight: modelData.matched ? Font.Bold : Font.Normal
+                                    Accessible.ignored: true
+                                }
+                            }
+                        }
+                        Loader {
+                            id: statErrorIndicator
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            active: delegate.statFailed
+                            visible: active
+                            sourceComponent: errorIndicator
+                        }
+                    }
+                    HnLabel {
+                        objectName: "sizeColumnField"
+                        role: HnTypographyRole.Caption
+                        rawText: delegate.isDir ? "" : SizeFormat.formatSize(delegate.size)
+                        color: HoloniightPalette.textSecondary
+                        visible: root.showSize
+                        rightPadding: root.cellPadding
+                        leftPadding: root.cellPadding
+                        Layout.minimumWidth: root.sizeColumnWidth + 2 * root.cellPadding
+                        Layout.preferredWidth: root.sizeColumnWidth + 2 * root.cellPadding
+                        Layout.maximumWidth: root.sizeColumnWidth + 2 * root.cellPadding
+                    }
+                    HnLabel {
+                        objectName: "modifiedColumnField"
+                        role: HnTypographyRole.Caption
+                        rawText: delegate.statFailed ? delegate.statError : (delegate.isParent ? "" : Qt.formatDateTime(delegate.modified, "yyyy-MM-dd HH:mm"))
+                        color: delegate.statFailed ? HoloniightPalette.error : HoloniightPalette.textMuted
+                        elide: Text.ElideRight
+                        visible: root.showModified
+                        leftPadding: root.cellPadding
+                        rightPadding: root.cellPadding
+                        Layout.minimumWidth: root.modifiedColumnWidth + 2 * root.cellPadding
+                        Layout.preferredWidth: root.modifiedColumnWidth + 2 * root.cellPadding
+                        Layout.maximumWidth: root.modifiedColumnWidth + 2 * root.cellPadding
+                    }
+                }
+
+                Component {
+                    id: errorIndicator
+
+                    HnStatusIndicator {
+                        status: HnStatusIndicator.Warning
+                    }
                 }
 
                 Keys.priority: Keys.BeforeItem
                 Keys.onShortcutOverride: event => {
-                    if (event.key === Qt.Key_Escape)
+                    if (InspectionKeys.overrideShortcut(event.key, false, root.controller.vim.currentMode === VimModeController.Visual))
                         event.accepted = true;
                 }
-                Keys.onReturnPressed: root.controller.commitInsertEditing()
-                Keys.onEnterPressed: root.controller.commitInsertEditing()
-                Keys.onEscapePressed: root.controller.cancelInsertEditing()
+                Keys.onPressed: event => {
+                    if (InspectionKeys.press(event.key, event.text, event.modifiers, event.isAutoRepeat, root.controller, false))
+                        event.accepted = true;
+                }
+                Keys.onReleased: event => {
+                    if (InspectionKeys.release(event.key))
+                        event.accepted = true;
+                }
 
-                // Controller-driven binding updates must not echo back and emit changed again.
-                onTextChanged: if (delegate.editingThis && text !== root.controller.vim.insertText)
-                    root.controller.updateInsertText(text)
-                onVisibleChanged: if (visible) {
-                    forceActiveFocus();
-                    Qt.callLater(() => {
-                        if (delegate.editingThis) {
-                            forceActiveFocus();
-                            cursorPosition = root.controller.vim.insertCursorPosition;
-                        }
-                    });
-                } else {
-                    focus = false;
+                onClicked: root.controller.openEntry(delegate.index)
+
+                // INSERT-mode inline rename/create editor (SPEC.md REQ-F-006 through REQ-F-017): an
+                // opaque-background TextField overlaid on this delegate, covering its label, rather
+                // than a separate floating popup — it scrolls/clips with the delegate for free
+                // (docs/sdd/vim-modal-editing/DESIGN.md).
+                Controls.TextField {
+                    id: inlineEditor
+                    objectName: "inlineNameEditor"
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    // The gutter lies outside the list view, so line numbers stay visible while editing (REQ-F-011).
+                    anchors.rightMargin: 8
+                    visible: delegate.editingThis
+                    text: root.controller.vim.insertText
+                    Binding {
+                        target: inlineEditor
+                        property: "hasError"
+                        value: !root.controller.vim.insertValid
+                        when: "hasError" in inlineEditor
+                    }
+
+                    Keys.priority: Keys.BeforeItem
+                    Keys.onShortcutOverride: event => {
+                        if (event.key === Qt.Key_Escape)
+                            event.accepted = true;
+                    }
+                    Keys.onReturnPressed: root.controller.commitInsertEditing()
+                    Keys.onEnterPressed: root.controller.commitInsertEditing()
+                    Keys.onEscapePressed: root.controller.cancelInsertEditing()
+
+                    // Controller-driven binding updates must not echo back and emit changed again.
+                    onTextChanged: if (delegate.editingThis && text !== root.controller.vim.insertText)
+                        root.controller.updateInsertText(text)
+                    onVisibleChanged: if (visible) {
+                        forceActiveFocus();
+                        Qt.callLater(() => {
+                            if (delegate.editingThis) {
+                                forceActiveFocus();
+                                cursorPosition = root.controller.vim.insertCursorPosition;
+                            }
+                        });
+                    } else {
+                        focus = false;
+                    }
                 }
             }
         }
