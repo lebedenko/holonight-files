@@ -115,8 +115,11 @@ in-memory jump list and restore the cursor on return. See the
 Sharp previews use on-demand freedesktop 128/256/512/1024px tiers, adequate
 memory/disk reuse and direct decoding above 1024px. Native scaling and latency
 acceptance remain tracked in [verification](sdd/sharp-previews/VERIFICATION.md).
-Broader reuse of other applications' thumbnails remains deferred; strict Files
-revision validation is retained. No eager cache migration or deletion is needed.
+Files and Viewer share the freedesktop disk thumbnail cache through
+`holonight-thumbnails`. Standard external raster entries are reusable when their
+metadata validates; SVG entries require a matching rendering policy. No eager
+cache migration or deletion is needed. See the
+[shared thumbnail cache SDD](sdd/shared-thumbnail-cache/README.md).
 
 The compact Places sidebar adds themed icons, keyboard activation and optional
 `~/Projects`; acceptance evidence is in [Places verification](sdd/places/VERIFICATION.md).

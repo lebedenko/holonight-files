@@ -6,7 +6,6 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
-#include <QImageReader>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
@@ -71,8 +70,7 @@ TEST(ThumbnailService, ModifiedSourceInvalidatesCachedThumbnail) {
   const auto path = writeJpegWithExif(sourceDir);
   ThumbnailService::lookupOrDecode(path);
   const auto cachePath = cachePathFor(cacheHome.dir.path(), path);
-  // QImageReader::text()/canRead() only header-peeks and does not reliably surface PNG tEXt
-  // chunks (see thumbnail_service.cpp's cacheEntryValid()); a full QImage load does.
+  // PNG tEXt chunks are available after a full image decode.
   const QImage firstCached(cachePath);
   ASSERT_FALSE(firstCached.isNull());
   const auto firstMtime = firstCached.text(QStringLiteral("Thumb::MTime"));
@@ -167,9 +165,9 @@ TEST(ThumbnailService, OnlySelectedTierIsWrittenAndLargerTierIsReused) {
   EXPECT_EQ(lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled).value().image.size(), QSize(512, 256));
   EXPECT_FALSE(lookup(file, path, "changed", Tier::Large, {200, 100}, cancelled));
   EXPECT_FALSE(lookup(file, path, "revision", Tier::XXLarge, {600, 300}, cancelled));
-  // Disk lookup remains usable without a readable source descriptor: no original image decode.
+  // Disk lookup requires metadata from the verified open source descriptor.
   file.close();
-  EXPECT_EQ(lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled).value().image.size(), QSize(512, 256));
+  EXPECT_FALSE(lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled));
 }
 
 TEST(ThumbnailService, RejectsUndersizedCorruptAndIncorrectMetadata) {
@@ -253,7 +251,7 @@ TEST_P(ThumbnailOrientation, AppliesCornersRectangularBoundsAndNoUpscaling) {
   EXPECT_TRUE(source.isOpen());
 }
 
-TEST_P(ThumbnailOrientation, MigratesLegacyCacheAndReusesOrientedPixelsAcrossTiers) {
+TEST_P(ThumbnailOrientation, RejectsConflictingPolicyAndReusesOrientedPixelsAcrossTiers) {
   FakeCacheHome home;
   QTemporaryDir dir(fixturePattern("orientation-cache"));
   const auto path = files_test::writeFile(dir, "image.jpg", files_test::orientationJpeg({2400, 1200}, GetParam()));
@@ -273,34 +271,44 @@ TEST_P(ThumbnailOrientation, MigratesLegacyCacheAndReusesOrientedPixelsAcrossTie
     expectCorners(cold, GetParam());
     const QImage marked(cachePath);
     ASSERT_EQ(marked.text("Files::OrientationPolicy"), "applied-v1");
-    // Valid legacy identity/resolution cannot establish orientation, especially for mirrors.
-    for (const auto& marker : {QString(), QString("different-v1")}) {
-      QImageReader storedReader(path);
-      storedReader.setAutoTransform(false);
-      QImage legacy = storedReader.read().scaled(required);
-      for (const auto& key : marked.textKeys()) {
-        if (key != "Files::OrientationPolicy") {
-          legacy.setText(key, marked.text(key));
-        }
-      }
-      if (!marker.isEmpty()) {
-        legacy.setText("Files::OrientationPolicy", marker);
-      }
-      ASSERT_TRUE(legacy.save(cachePath));
-      EXPECT_FALSE(lookup(source, path, "revision", tier, required, cancelled));
-      EXPECT_FALSE(lookup(source, path, {}, tier, required, cancelled));
-      const auto regenerated = lookupOrDecode(source, path, "revision", tier, required, cancelled).image;
-      expectCorners(regenerated, GetParam());
-      const QImage persisted(cachePath);
-      EXPECT_EQ(persisted.text("Files::OrientationPolicy"), "applied-v1");
-      source.close();  // Reuse without source decode, with no second transform.
-      const auto warm = lookup(source, path, "revision", tier, required, cancelled).value().image;
-      EXPECT_EQ(warm, persisted);
-      expectCorners(warm, GetParam());
-      ASSERT_TRUE(source.open(QIODevice::ReadOnly));
-    }
+    QImage invalid = marked;
+    invalid.setText("Files::OrientationPolicy", "different-v1");
+    ASSERT_TRUE(invalid.save(cachePath));
+    EXPECT_FALSE(lookup(source, path, "revision", tier, required, cancelled));
+    const auto regenerated = lookupOrDecode(source, path, "revision", tier, required, cancelled).image;
+    expectCorners(regenerated, GetParam());
+    const QImage persisted(cachePath);
+    EXPECT_EQ(persisted.text("Files::OrientationPolicy"), "applied-v1");
+    source.close();
+    ASSERT_TRUE(source.open(QIODevice::ReadOnly));  // Reuse without source decode, with no second transform.
+    const auto warm = lookup(source, path, "revision", tier, required, cancelled).value().image;
+    EXPECT_EQ(warm, persisted);
+    expectCorners(warm, GetParam());
     EXPECT_EQ(QDir(home.dir.path() + "/thumbnails").entryList(QDir::Dirs | QDir::NoDotAndDotDot).size(), index);
   }
+}
+
+TEST(ThumbnailService, ReusesExternalRasterWithStandardMetadata) {
+  FakeCacheHome home;
+  QTemporaryDir dir(fixturePattern("external-raster"));
+  const auto path = files_test::writeFile(dir, "image.jpg", renderJpegBytes({1000, 500}));
+  QFile source(path);
+  ASSERT_TRUE(source.open(QIODevice::ReadOnly));
+  const std::atomic_bool cancelled{false};
+  using namespace ThumbnailService;
+  ASSERT_FALSE(lookupOrDecode(source, path, "revision", Tier::Large, {200, 100}, cancelled).image.isNull());
+  const auto cachePath = cachePathFor(home.dir.path(), path).replace("/normal/", "/large/");
+  const QImage generated(cachePath);
+  ASSERT_FALSE(generated.isNull());
+  QImage external(generated.size(), QImage::Format_RGB32);
+  external.fill(Qt::magenta);
+  for (const auto& key : {"Thumb::URI", "Thumb::MTime", "Thumb::Size"}) {
+    external.setText(key, generated.text(key));
+  }
+  ASSERT_TRUE(external.save(cachePath, "PNG"));
+  const auto hit = lookup(source, path, "revision", Tier::Large, {200, 100}, cancelled);
+  ASSERT_TRUE(hit);
+  EXPECT_EQ(hit->image.pixelColor(0, 0), QColor(Qt::magenta));
 }
 
 INSTANTIATE_TEST_SUITE_P(ExifValues, ThumbnailOrientation, testing::Range(1, 9));
@@ -450,6 +458,7 @@ TEST(ThumbnailService, SvgPolicyMarkerRejectsLegacyThumbnailsAndRevisionMismatch
   ASSERT_FALSE(legacy.isNull());
   EXPECT_EQ(legacy.text("Files::SvgPolicy"), "self-contained-static-v1");
   legacy.setText("Files::SvgPolicy", {});
+  legacy.setText("X-HoloNight::SvgPolicy", {});
   ASSERT_TRUE(legacy.save(cachePath, "PNG"));
   EXPECT_FALSE(lookup("revision").has_value());
 }

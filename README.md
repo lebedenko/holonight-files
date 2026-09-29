@@ -387,8 +387,8 @@ Each UI executable owns a HolonightFiles QML module and calls `initializeFilesEn
 [Alignment specification and verification](docs/sdd/holonight-alignment/README.md) records the onboarding work.
 
 For isolated runtime checks with verified existing provider artifacts, `scripts/prepare-runtime-check.sh`
-accepts `HOLONIGHT_CONFIG_BUILD`, `HOLONIGHT_QT_BUILD`, `HOLONIGHT_IMAGES_BUILD` and
-`HOLONIGHT_SYSTEM_SERVICES_BUILD`; defaults remain `build/deps/<provider>`.
+accepts `HOLONIGHT_CONFIG_BUILD`, `HOLONIGHT_QT_BUILD`, `HOLONIGHT_IMAGES_BUILD`,
+`HOLONIGHT_THUMBNAILS_BUILD` and `HOLONIGHT_SYSTEM_SERVICES_BUILD`; defaults remain `build/deps/<provider>`.
 Verify provider revisions, build options and the exact Qt package versions against the runtime image first.
 
 CI runs a separate `isolation` job for both cross-filesystem executables. It sets
@@ -409,9 +409,16 @@ See [migration SDD](docs/sdd/shared-image-architecture/DESIGN.md).
 Raster outcomes retain distinct translated errors, while metadata status remains internal and quiet.
 See the [shared image outcomes cycle](docs/sdd/shared-image-outcomes/SPEC.md).
 
+Build and install `holonight-thumbnails` before configuring, or use `task deps` with a sibling
+checkout (`HOLONIGHT_THUMBNAILS_SOURCE` overrides its location). `find_package(HolonightThumbnails CONFIG REQUIRED)`
+provides `HolonightThumbnails::Thumbnails`. Files retains source inspection, decoding and preview scheduling;
+the provider owns freedesktop disk cache lookup and storage. See the
+[shared thumbnail cache SDD](docs/sdd/shared-thumbnail-cache/README.md).
+
 Image previews and thumbnails apply intrinsic EXIF orientation, including mirrors.
 The pane and Quick Look show oriented full-resolution dimensions. Legacy disk
-thumbnails regenerate lazily; see the [image orientation cycle](docs/sdd/image-orientation/SPEC.md).
+thumbnails with conflicting orientation markers regenerate lazily; see the
+[image orientation cycle](docs/sdd/image-orientation/SPEC.md).
 
 ### Preview performance measurements
 

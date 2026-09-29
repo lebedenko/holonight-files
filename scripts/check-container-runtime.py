@@ -47,7 +47,7 @@ def main():
     sources = work / "work"
     sources.mkdir()
     snapshot(ROOT, sources / "files")
-    for provider in ("config", "qt", "images", "system-services"):
+    for provider in ("config", "qt", "images", "thumbnails", "system-services"):
         variable = "HOLONIGHT_" + provider.upper().replace("-", "_") + "_SOURCE"
         source = Path(os.environ.get(variable, ROOT.parent / f"holonight-{provider}")).resolve()
         snapshot(source, sources / f"holonight-{provider}")
@@ -62,7 +62,7 @@ def main():
          "task build PRESET=release; bash scripts/prepare-runtime-check.sh"])
     context = sources / "files" / (sources / "files/build/runtime-check-context").read_text().strip()
     runtime_id = work / "runtime-image-id"
-    run(["docker", "build", "-t", "holonight-files-runtime-check", "--build-arg", f"CI_IMAGE={image}",
+    run(["docker", "build", "-t", "holonight-files-runtime-check", "--build-arg", "CI_IMAGE=files-ci",
          "--iidfile", str(runtime_id), str(context)])
     run(["docker", "run", "--rm", "--network", "none", runtime_id.read_text().strip()])
     print(f"Runtime acceptance passed. Evidence: {work}", flush=True)
