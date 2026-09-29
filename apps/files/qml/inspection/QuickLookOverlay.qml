@@ -46,8 +46,8 @@ Controls.Popup {
             return "";
         if (root.preview.mimeType === "inode/directory")
             return qsTr("Dir");
-        if (root.preview.previewErrorKind !== PreviewService.None)
-            return root.preview.previewErrorMessage;
+        if (root.preview.quickLookErrorKind !== PreviewService.None)
+            return root.preview.quickLookErrorMessage;
         if (root.preview.mimeType.length === 0)
             return SizeFormat.formatSize(root.preview.size);
         if (root.preview.mimeType.indexOf("image/") === 0) {
@@ -57,11 +57,11 @@ Controls.Popup {
         }
         if (root.preview.hasText)
             return root.preview.textTruncated ? qsTr("%1 · truncated").arg(SizeFormat.formatSize(root.preview.size)) : SizeFormat.formatSize(root.preview.size);
-        if (root.preview.busy)
+        if (root.preview.quickLookBusy)
             return SizeFormat.formatSize(root.preview.size);
         return root.preview.mimeTypeDescription.length > 0 ? root.preview.mimeTypeDescription : root.preview.mimeType;
     }
-    readonly property color metadataColor: root.preview.previewErrorKind !== PreviewService.None ? HoloniightPalette.error : HoloniightPalette.textMuted
+    readonly property color metadataColor: root.preview.quickLookErrorKind !== PreviewService.None ? HoloniightPalette.error : HoloniightPalette.textMuted
 
     parent: Controls.Overlay.overlay
     x: parent ? Math.round((parent.width - width) / 2) : 0
@@ -134,7 +134,7 @@ Controls.Popup {
 
             Rectangle {
                 anchors.fill: parent
-                visible: root.preview.hasText
+                visible: presentation.kind === QuickLookPresentationModel.Text
                 color: HoloniightPalette.background
                 border.width: HnMetrics.borderWidth
                 border.color: HoloniightPalette.borderSubtle
@@ -258,7 +258,7 @@ Controls.Popup {
                 anchors.centerIn: parent
                 width: HnMetrics.iconSize(HnControlSize.Hero)
                 height: width
-                visible: root.preview.busy && !root.preview.hasImage && !root.preview.hasText
+                visible: root.preview.quickLookBusy && !root.preview.hasImage && !root.preview.hasText
                 running: visible
             }
         }

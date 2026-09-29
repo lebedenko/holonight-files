@@ -317,6 +317,7 @@ TEST(DirectoryController, QuickLookStaysPinnedToItsFileWhileJKAndArrowsMoveTheCu
   EXPECT_TRUE(controller.handleKey("j"));
   ASSERT_TRUE(quickLookReady(controller));
   ASSERT_TRUE(controller.handleKey(" "));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.preview()->quickLookBusy(); }));
   ASSERT_TRUE(controller.quickLookOpen());
   const auto pinnedName = controller.preview()->name();
   const auto pinnedRow = controller.cursorRow();
@@ -351,6 +352,7 @@ TEST(DirectoryController, QuickLookLineMovementClampsAndDoesNotEmitListingChange
   EXPECT_TRUE(controller.handleKey("j"));
   ASSERT_TRUE(quickLookReady(controller));
   ASSERT_TRUE(controller.handleKey(" "));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.preview()->quickLookBusy(); }));
   QSignalSpy changed(&controller, &DirectoryController::changed);
   for (int i = 0; i < 5; ++i) {
     EXPECT_TRUE(controller.handleKey("k"));
@@ -375,6 +377,7 @@ TEST(DirectoryController, QuickLookSwallowsEveryOtherKeyWithoutMovingAnything) {
   ASSERT_TRUE(quickLookReady(controller));
   ASSERT_TRUE(controller.handleKey("3"));  // a pending count typed before opening is discarded
   ASSERT_TRUE(controller.handleKey(" "));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.preview()->quickLookBusy(); }));
   const auto pinnedName = controller.preview()->name();
   for (const auto* key : {"G", "g", "h", "l", "Return", "v", "/", ".", "s", "y", "d", "5"}) {
     SCOPED_TRACE(key);

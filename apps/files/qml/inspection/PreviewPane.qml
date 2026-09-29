@@ -27,8 +27,10 @@ Item {
     }
 
     property bool fallbackDelayElapsed: false
+    property string displayedFallbackIdentity
+    property bool fallbackDisplayed: false
     property var displayedImage: undefined
-    readonly property bool showIconFallback: root.preview.hasEntry && !root.preview.hasImage && (!root.preview.busy || root.preview.previewErrorKind !== PreviewService.None || root.fallbackDelayElapsed)
+    readonly property bool showIconFallback: root.preview.hasEntry && !root.preview.hasImage && (!root.preview.busy || root.preview.previewErrorKind !== PreviewService.None || root.fallbackDelayElapsed || (root.fallbackDisplayed && root.displayedFallbackIdentity === root.preview.iconName))
 
     function discardThumbnail(): void {
         thumbnailFade.stop();
@@ -37,6 +39,13 @@ Item {
     }
 
     function updateThumbnail(): void {
+        if (!root.visible || !root.preview.hasEntry || root.preview.hasImage) {
+            root.fallbackDisplayed = false;
+            root.displayedFallbackIdentity = "";
+        } else if (!root.preview.busy || root.preview.previewErrorKind !== PreviewService.None || root.fallbackDelayElapsed || (root.fallbackDisplayed && root.displayedFallbackIdentity === root.preview.iconName)) {
+            root.displayedFallbackIdentity = root.preview.iconName;
+            root.fallbackDisplayed = true;
+        }
         if (!root.visible || !root.preview.hasEntry || root.preview.previewErrorKind !== PreviewService.None) {
             root.discardThumbnail();
         } else if (root.preview.hasImage) {
@@ -61,12 +70,13 @@ Item {
     function resetFallbackDelay(): void {
         fallbackDelay.stop();
         root.fallbackDelayElapsed = false;
-        if (root.preview.busy && !root.preview.hasImage)
+        if (root.visible && root.preview.busy && !root.preview.hasImage)
             fallbackDelay.start();
     }
 
     Timer {
         id: fallbackDelay
+        objectName: "previewFallbackDelay"
         interval: 150
         onTriggered: {
             root.fallbackDelayElapsed = true;
@@ -77,6 +87,8 @@ Item {
     Connections {
         target: root.preview
         function onSelectionChanged(): void {
+            if (!root.preview.hasEntry || root.displayedFallbackIdentity !== root.preview.iconName)
+                root.fallbackDisplayed = false;
             root.resetFallbackDelay();
             root.updateThumbnail();
             if (root.displayedImage !== undefined && !root.preview.hasImage && !thumbnailFade.running)
@@ -92,7 +104,10 @@ Item {
         root.resetFallbackDelay();
         root.updateThumbnail();
     }
-    onVisibleChanged: root.updateThumbnail()
+    onVisibleChanged: {
+        root.resetFallbackDelay();
+        root.updateThumbnail();
+    }
     onPreviewDevicePixelRatioChanged: root.reportImageAreaSize()
 
     function formatModified(value): string {

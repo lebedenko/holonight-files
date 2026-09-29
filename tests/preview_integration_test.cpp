@@ -1,9 +1,12 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
 #include "preview_fixtures.h"
+#include "preview_service_test_access.h"
 
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QScopeGuard>
+#include <QSemaphore>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -20,7 +23,7 @@ bool settled(const DirectoryController& controller) {
   return QTest::qWaitFor([&] { return !controller.scanning(); });
 }
 bool previewSettled(DirectoryController& controller) {
-  return QTest::qWaitFor([&] { return !controller.preview()->busy(); }, 5000);
+  return QTest::qWaitFor([&] { return !controller.preview()->quickLookBusy(); }, 5000);
 }
 }  // namespace
 
@@ -45,16 +48,24 @@ TEST(PreviewIntegration, CursorMovementThroughMixedFileTypesUpdatesThePreviewLiv
 
   controller.handleKey("j");
   ASSERT_TRUE(previewSettled(controller));
+  controller.handleKey(" ");
+  ASSERT_TRUE(previewSettled(controller));
   EXPECT_TRUE(controller.preview()->hasText());
   EXPECT_FALSE(controller.preview()->textTruncated());
   EXPECT_FALSE(controller.preview()->hasImage());
+  controller.handleKey("Escape");
 
   controller.handleKey("j");
   ASSERT_TRUE(previewSettled(controller));
+  controller.handleKey(" ");
+  ASSERT_TRUE(previewSettled(controller));
   EXPECT_TRUE(controller.preview()->hasText());
   EXPECT_TRUE(controller.preview()->textTruncated());  // 03-log.txt is the ~200KB fixture
+  controller.handleKey("Escape");
 
   controller.handleKey("j");
+  ASSERT_TRUE(previewSettled(controller));
+  controller.handleKey(" ");
   ASSERT_TRUE(previewSettled(controller));
   EXPECT_TRUE(controller.preview()->hasText());
   bool foundJapanese = false;
@@ -122,6 +133,7 @@ TEST(PreviewIntegration, QuickLookOpensPinnedToItsFileAndJMovesTheCurrentLineNot
   EXPECT_EQ(controller.preview()->name(), QStringLiteral("02-notes.txt"));
   ASSERT_TRUE(controller.handleKey(" "));
   ASSERT_TRUE(controller.quickLookOpen());
+  ASSERT_TRUE(previewSettled(controller));
   EXPECT_TRUE(controller.preview()->hasText());
   EXPECT_GT(controller.preview()->textLineCount(), 1);
   EXPECT_EQ(controller.preview()->currentLineIndex(), 0);
@@ -182,3 +194,41 @@ TEST(PreviewIntegration, SelectedFileEditsPermissionsReplacementRenameAndDeletio
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->name() == parentName; }));
   EXPECT_FALSE(controller.quickLookOpen());
 }
+
+class PendingQuickLook : public testing::TestWithParam<bool> {};
+
+TEST_P(PendingQuickLook, EarlySpaceOpensPinnedLoadingThenResolvesSupportedOrUnsupported) {
+  QTemporaryDir dir(fixturePattern("pending-quicklook"));
+  ASSERT_TRUE(dir.isValid());
+  files_test::writeBytes(dir, GetParam() ? "a.txt" : "a.md", "hello\nworld\n");
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  QSemaphore entered;
+  QSemaphore release;
+  const auto guard = qScopeGuard([&] { release.release(); });
+  PreviewServiceTestAccess::beforeDispatch(*controller.preview(), [&] {
+    entered.release();
+    release.acquire();
+  });
+  controller.handleKey("j");
+  ASSERT_TRUE(entered.tryAcquire(1, 2000));
+  ASSERT_TRUE(controller.handleKey(" "));
+  EXPECT_TRUE(controller.quickLookOpen());
+  EXPECT_TRUE(controller.preview()->quickLookBusy());
+  const auto row = controller.cursorRow();
+  controller.handleKey("j");
+  EXPECT_EQ(controller.cursorRow(), row);
+  EXPECT_EQ(controller.preview()->currentLineIndex(), -1);
+  release.release();
+  ASSERT_TRUE(previewSettled(controller));
+  EXPECT_TRUE(controller.quickLookOpen());
+  EXPECT_EQ(controller.preview()->hasText(), GetParam());
+  EXPECT_EQ(controller.preview()->quickLookErrorKind(),
+            GetParam() ? PreviewService::PreviewErrorKind::None : PreviewService::PreviewErrorKind::Unsupported);
+  controller.handleKey("Escape");
+  EXPECT_FALSE(controller.quickLookOpen());
+  EXPECT_EQ(controller.preview()->textLineCount(), 0);
+}
+
+INSTANTIATE_TEST_SUITE_P(Classification, PendingQuickLook, testing::Bool());

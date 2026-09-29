@@ -49,6 +49,9 @@ class PreviewService : public QObject {
   enum class PreviewConsumer { Pane, QuickLook };
   Q_ENUM(PreviewConsumer)
 
+  enum class QuickLookEligibility { Checking, Supported, Unsupported };
+  Q_ENUM(QuickLookEligibility)
+
   struct PreviewError {
     PreviewErrorKind kind = PreviewErrorKind::None;
     QString message;
@@ -78,6 +81,11 @@ class PreviewService : public QObject {
   Q_PROPERTY(QString exifFocalLength READ exifFocalLength NOTIFY changed)
   Q_PROPERTY(QString exifLensModel READ exifLensModel NOTIFY changed)
   Q_PROPERTY(QString exifAperture READ exifAperture NOTIFY changed)
+  Q_PROPERTY(QuickLookEligibility quickLookEligibility READ quickLookEligibility NOTIFY changed)
+  Q_PROPERTY(bool quickLookBusy READ quickLookBusy NOTIFY changed)
+  Q_PROPERTY(bool quickLookText READ quickLookText NOTIFY changed)
+  Q_PROPERTY(PreviewErrorKind quickLookErrorKind READ quickLookErrorKind NOTIFY changed)
+  Q_PROPERTY(QString quickLookErrorMessage READ quickLookErrorMessage NOTIFY changed)
   Q_PROPERTY(bool hasText READ hasText NOTIFY changed)
   Q_PROPERTY(bool textTruncated READ textTruncated NOTIFY changed)
   Q_PROPERTY(qint64 textTotalSize READ textTotalSize NOTIFY changed)
@@ -116,6 +124,11 @@ class PreviewService : public QObject {
   QString exifFocalLength() const { return exif_.focalLength; }
   QString exifLensModel() const { return exif_.lensModel; }
   QString exifAperture() const { return exif_.aperture; }
+  QuickLookEligibility quickLookEligibility() const;
+  bool quickLookBusy() const { return busy_ || text_busy_; }
+  bool quickLookText() const;
+  PreviewErrorKind quickLookErrorKind() const { return quick_look_error_.kind; }
+  QString quickLookErrorMessage() const { return quick_look_error_.message; }
   bool hasText() const { return has_text_; }
   bool textTruncated() const { return text_.wasTruncated; }
   qint64 textTotalSize() const { return text_.totalSize; }
@@ -135,9 +148,7 @@ class PreviewService : public QObject {
   // Moves the current line by delta, clamped to the loaded lines. No-op (no signal) when there are no
   // lines or the index would not change.
   void moveCurrentLine(int delta);
-  // Quick Look gate: images and text/plain (plus application/x-zerosize so an empty file without a .txt
-  // extension opens as one empty line). False until the worker has reported a MIME, for directories and
-  // for stat-failed entries. Deliberately not a Q_PROPERTY: QML never gates (REQ-C-007).
+  // Pending inspection may open a pinned loading overlay.
   bool quickLookEligible() const;
   Q_INVOKABLE void moveCurrentLineDown() { moveCurrentLine(1); }
   Q_INVOKABLE void moveCurrentLineUp() { moveCurrentLine(-1); }
@@ -155,6 +166,8 @@ class PreviewService : public QObject {
  private:
   friend struct PreviewServiceTestAccess;
   static PreviewError rasterError(HolonightImages::Outcome outcome);
+  void dispatchText();
+  void cancelText();
   void dispatch();
   void startJob();
   void updateRequestedSize();
@@ -170,6 +183,11 @@ class PreviewService : public QObject {
   // before_open_for_test_ seam).
   ThumbnailService::StageCallback thumbnail_stage_for_test_;
   std::function<void()> before_dispatch_for_test_;
+  std::function<void()> before_text_for_test_;
+  quint64 text_request_ = 0;
+  bool text_busy_ = false;
+  PreviewError quick_look_error_;
+  std::shared_ptr<std::atomic_bool> text_cancellation_;
   std::function<void()> before_full_decode_for_test_;
   std::shared_ptr<PreviewWorkerCache> cache_;
   bool active_job_ = false;

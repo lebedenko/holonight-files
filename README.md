@@ -57,8 +57,9 @@ cut off. The sidebar scrolls vertically when its content exceeds the window heig
 Size text matches the listing exactly, and folders show `Dir`. The
 sidebar no longer shows text content or permissions; press `Space` to open
 Quick Look, a centered card over the dimmed window (at most 92% of it). It opens
-only for images and `text/plain` files; on directories, archives and other types
-(including JSON and Markdown) `Space` does nothing. Images are framed at their own
+for images and `text/plain` files, or as a pinned loading view while type detection
+is pending. On directories and already classified unsupported types (including JSON
+and Markdown), `Space` does nothing. Text is loaded only while Quick Look is open. Images are framed at their own
 aspect ratio. Text files get a read-only monospace line viewer with a line-number
 gutter and a highlighted current line: at most the first 100 KiB is loaded (the
 caption then adds `· truncated`), `LF`, `CRLF` and `CR` all end a line, invalid
@@ -491,3 +492,8 @@ appear immediately at full opacity. See the [thumbnail fade verification](docs/s
 Slower loads show the existing icon after 150 ms until the image arrives. Folders and completed or failed previews without images show icons
 immediately. The delay is internal, with no new setting. See the
 [sidebar icon delay verification](docs/sdd/sidebar-icon-delay/VERIFICATION.md).
+
+Sidebar fallbacks stay visible across selections with the same complete icon candidate chain.
+Browsing inspects selected-file metadata but does not load text. Quick Look loads supported
+text on demand and discards it on close; Space during type detection opens a pinned loading
+view. See [the demand-text cycle](docs/sdd/sidebar-icons-demand-text/SPEC.md).

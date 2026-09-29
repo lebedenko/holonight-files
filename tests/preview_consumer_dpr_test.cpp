@@ -9,6 +9,7 @@
 #include <QMetaProperty>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickRenderControl>
 #include <QQuickRenderTarget>
@@ -114,9 +115,9 @@ TEST(PreviewConsumers, SidebarDelaysEveryFallbackAndResetsForEachSelection) {
   // A folder gives a real selection and no worker. Synthetic worker states isolate timer behavior.
   preview.setTarget("/folder", true, -1, {}, 0040755, false, {}, "folder");
   EXPECT_TRUE(fallback());
+  int revision = 0;
   const auto begin = [&] {
-    PreviewServiceTestAccess::presentationState(preview, true);
-    emit preview.selectionChanged();
+    PreviewServiceTestAccess::presentationSelection(preview, "new-" + QString::number(++revision));
     EXPECT_FALSE(fallback());
     hidden();
   };
@@ -347,3 +348,62 @@ TEST(PreviewConsumers, SidebarFadesOutgoingThumbnailWithoutRestoringStalePixels)
   EXPECT_EQ(pixels(), blue);
   EXPECT_EQ(thumbnail->opacity(), 1);
 }
+
+class SidebarFallbackContinuity : public testing::TestWithParam<int> {};
+
+TEST_P(SidebarFallbackContinuity, MatchingChainsSurviveRapidNavigationAcrossEveryTier) {
+  DirectoryController controller;
+  auto& preview = *controller.preview();
+  QQuickWindow window;
+  window.resize(400, 700);
+  window.show();
+  QQmlEngine engine;
+  initializeFilesEngine(engine);
+  QQmlComponent component(&engine);
+  component.setData("import QtQuick\nimport HolonightFiles\nPreviewPane { width: 320; height: 600 }", QUrl());
+  std::unique_ptr<QObject> pane(
+      component.createWithInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}}));
+  ASSERT_NE(pane, nullptr);
+  qobject_cast<QQuickItem*>(pane.get())->setParentItem(window.contentItem());
+  preview.setTarget("/folder", true, -1, {}, 0040755, false, {}, "folder");
+  auto* theme = pane->findChild<QQuickItem*>("previewThemeIcon");
+  auto* fallback = pane->findChild<QQuickItem*>("previewFallbackIcon");
+  auto* placeholder = pane->findChild<QQuickItem*>("previewIconFailurePlaceholder");
+  ASSERT_NE(theme, nullptr);
+  ASSERT_NE(fallback, nullptr);
+  ASSERT_NE(placeholder, nullptr);
+  if (GetParam() > 0) {
+    QQmlProperty::write(theme, "source", QUrl("qrc:/missing-theme.svg"));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return fallback->isVisible(); }));
+  }
+  if (GetParam() > 1) {
+    QQmlProperty::write(fallback, "source", QUrl("qrc:/missing-fallback.svg"));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return placeholder->isVisible(); }));
+  }
+  const QList<QQuickItem*> tiers{theme, fallback, placeholder};
+  auto* tier = tiers.at(GetParam());
+  ASSERT_TRUE(tier->isVisible());
+  QSignalSpy visibility(tier, &QQuickItem::visibleChanged);
+  for (int i = 0; i < 5; ++i) {
+    PreviewServiceTestAccess::presentationSelection(preview, "folder");
+    EXPECT_TRUE(tier->isVisible());
+    EXPECT_FALSE(pane->property("fallbackDelayElapsed").toBool());
+    EXPECT_TRUE(preview.mimeTypeDescription().isEmpty());
+  }
+  EXPECT_TRUE(visibility.empty());
+  auto* item = qobject_cast<QQuickItem*>(pane.get());
+  item->setVisible(false);
+  EXPECT_FALSE(pane->property("fallbackDisplayed").toBool());
+  item->setVisible(true);
+  EXPECT_FALSE(pane->property("showIconFallback").toBool());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return pane->property("showIconFallback").toBool(); }))
+      << "visible=" << item->isVisible() << " elapsed=" << pane->property("fallbackDelayElapsed").toBool()
+      << " running=" << pane->findChild<QObject*>("previewFallbackDelay")->property("running").toBool()
+      << " busy=" << preview.busy();
+  PreviewServiceTestAccess::presentationSelection(preview, "folder/different-chain");
+  EXPECT_FALSE(pane->property("showIconFallback").toBool());
+  preview.clear();
+  EXPECT_FALSE(pane->property("fallbackDisplayed").toBool());
+}
+
+INSTANTIATE_TEST_SUITE_P(AllTiers, SidebarFallbackContinuity, testing::Values(0, 1, 2));

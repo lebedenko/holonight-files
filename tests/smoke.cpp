@@ -1794,10 +1794,11 @@ void loadQuickLookHarness(QuickLookHarness& harness, const QString& path, QSize 
 }
 
 void openQuickLook(QuickLookHarness& harness) {
-  // Quick Look only opens for images and text/plain, whose MIME the worker reports asynchronously.
+  // Opening is asynchronous for both classification and text content.
   ASSERT_TRUE(QTest::qWaitFor([&] { return harness.controller.preview()->quickLookEligible(); }, 5000));
   QTest::keyClick(harness.window, Qt::Key_Space);
   ASSERT_TRUE(QTest::qWaitFor([&] { return harness.popup->property("opened").toBool(); }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !harness.controller.preview()->quickLookBusy(); }));
 }
 
 void closeQuickLook(QuickLookHarness& harness) {

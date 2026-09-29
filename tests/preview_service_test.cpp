@@ -35,7 +35,7 @@ using files_test::writeSmallText;
 
 namespace {
 bool settled(const PreviewService& service) {
-  return QTest::qWaitFor([&] { return !service.busy(); }, 5000);
+  return QTest::qWaitFor([&] { return !service.quickLookBusy(); }, 5000);
 }
 void setTargetFromFile(PreviewService& service, const QString& path) {
   const QFileInfo info(path);
@@ -54,7 +54,7 @@ TEST(PreviewService, SetTargetUpdatesGenericMetadataSynchronously) {
   EXPECT_EQ(service.name(), QFileInfo(path).fileName());
   EXPECT_EQ(service.size(), QFileInfo(path).size());
   ASSERT_TRUE(settled(service));
-  EXPECT_TRUE(service.hasText());
+  EXPECT_FALSE(service.hasText());
 }
 
 TEST(PreviewService, ClearResetsToThePlaceholderState) {
@@ -117,7 +117,7 @@ TEST(PreviewService, ANewTargetAfterATimeoutClearsTheTimedOutFlag) {
   setTargetFromFile(service, fast);
   ASSERT_TRUE(settled(service));
   EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::None);
-  EXPECT_TRUE(service.hasText());
+  EXPECT_FALSE(service.hasText());
 }
 
 TEST(PreviewService, DirectoryTargetSetsInodeDirectoryMimeTypeWithNoWorkerDispatch) {
@@ -293,7 +293,7 @@ TEST(PreviewService, TimeoutDuringAdequateDecodeNeverPublishesPixels) {
   setTargetFromFile(service, path);
   QTest::qWait(150);
   EXPECT_FALSE(service.hasImage());
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !service.busy(); }, 4000));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !service.quickLookBusy(); }, 4000));
   EXPECT_FALSE(service.hasImage());
   EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::DecodeTimeout);
   QTest::qWait(500);
@@ -380,7 +380,7 @@ TEST(PreviewService, SpecialFilesAndReplacementCannotBlockWorkerOrShutdown) {
   const auto normal = writeSmallText(dir);
   setTargetFromFile(service, normal);
   ASSERT_TRUE(settled(service));
-  EXPECT_TRUE(service.hasText());
+  EXPECT_FALSE(service.hasText());
   const auto replaced = writeSmallText(dir, "replaced.txt");
   PreviewServiceTestAccess::beforeDispatch(service, [&] {
     QFile::remove(replaced);
@@ -393,7 +393,7 @@ TEST(PreviewService, SpecialFilesAndReplacementCannotBlockWorkerOrShutdown) {
   PreviewServiceTestAccess::beforeDispatch(service, {});
   setTargetFromFile(service, normal);
   ASSERT_TRUE(settled(service));
-  EXPECT_TRUE(service.hasText());
+  EXPECT_FALSE(service.hasText());
   const auto imagePath = writeJpegWithExif(dir);
   PreviewServiceTestAccess::beforeFullDecode(service, [&] {
     QFile::remove(imagePath);
@@ -495,7 +495,7 @@ TEST(PreviewService, RegularSymlinkAndPermissionDeniedRecovery) {
   PreviewService service;
   setTargetFromFile(service, link);
   ASSERT_TRUE(settled(service));
-  EXPECT_TRUE(service.hasText());
+  EXPECT_FALSE(service.hasText());
   if (::geteuid() == 0) {
     GTEST_SKIP() << "Permission denial requires non-root";
   }
@@ -506,7 +506,7 @@ TEST(PreviewService, RegularSymlinkAndPermissionDeniedRecovery) {
   ASSERT_TRUE(QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
-  EXPECT_TRUE(service.hasText());
+  EXPECT_FALSE(service.hasText());
 }
 
 class PreviewOrientation : public testing::TestWithParam<int> {};
@@ -583,6 +583,7 @@ TEST(PreviewService, CurrentLineStartsAtTheFirstLineOnceTextLoads) {
   QTemporaryDir dir(fixturePattern("preview-line-init"));
   ASSERT_TRUE(dir.isValid());
   PreviewService service;
+  service.setQuickLookActive(true);
   EXPECT_EQ(service.currentLineIndex(), -1);
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 5));
   EXPECT_EQ(service.currentLineIndex(), -1);  // nothing loaded yet
@@ -595,6 +596,7 @@ TEST(PreviewService, MoveCurrentLineClampsAtBothEnds) {
   QTemporaryDir dir(fixturePattern("preview-line-clamp"));
   ASSERT_TRUE(dir.isValid());
   PreviewService service;
+  service.setQuickLookActive(true);
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 5));
   ASSERT_TRUE(settled(service));
   service.moveCurrentLineUp();
@@ -617,6 +619,7 @@ TEST(PreviewService, CurrentLineSignalFiresOncePerActualChange) {
   QTemporaryDir dir(fixturePattern("preview-line-signal"));
   ASSERT_TRUE(dir.isValid());
   PreviewService service;
+  service.setQuickLookActive(true);
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 3));
   ASSERT_TRUE(settled(service));
   QSignalSpy spy(&service, &PreviewService::currentLineIndexChanged);
@@ -636,6 +639,7 @@ TEST(PreviewService, EmptyFileShowsOneEmptyLineThatCannotMove) {
   QTemporaryDir dir(fixturePattern("preview-line-empty"));
   ASSERT_TRUE(dir.isValid());
   PreviewService service;
+  service.setQuickLookActive(true);
   setTargetFromFile(service, files_test::writeEmptyText(dir));
   ASSERT_TRUE(settled(service));
   EXPECT_EQ(service.textLineCount(), 1);
@@ -651,6 +655,7 @@ TEST(PreviewService, NoLinesMeansMinusOneAndMovesAreIgnored) {
   QTemporaryDir dir(fixturePattern("preview-line-none"));
   ASSERT_TRUE(dir.isValid());
   PreviewService service;
+  service.setQuickLookActive(true);
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 3));
   ASSERT_TRUE(settled(service));
   service.moveCurrentLineDown();
@@ -688,22 +693,21 @@ TEST(PreviewService, UnreadableTextFileHasNoLinesButStaysEligible) {
 
 TEST(PreviewService, OpeningQuickLookResetsTheCurrentLineToTheFirst) {
   QTemporaryDir dir(fixturePattern("preview-line-open"));
-  ASSERT_TRUE(dir.isValid());
   PreviewService service;
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 6));
   ASSERT_TRUE(settled(service));
-  service.moveCurrentLine(3);
-  ASSERT_EQ(service.currentLineIndex(), 3);
-  QSignalSpy spy(&service, &PreviewService::currentLineIndexChanged);
+  EXPECT_EQ(service.currentLineIndex(), -1);
   service.setQuickLookActive(true);
+  ASSERT_TRUE(settled(service));
   EXPECT_EQ(service.currentLineIndex(), 0);
-  EXPECT_EQ(spy.count(), 1);
   service.moveCurrentLine(2);
-  service.setQuickLookActive(true);  // already active: not an open transition
+  service.setQuickLookActive(true);
   EXPECT_EQ(service.currentLineIndex(), 2);
   service.setQuickLookActive(false);
-  EXPECT_EQ(service.currentLineIndex(), 2);
+  EXPECT_EQ(service.currentLineIndex(), -1);
+  EXPECT_EQ(service.textLineCount(), 0);
   service.setQuickLookActive(true);
+  ASSERT_TRUE(settled(service));
   EXPECT_EQ(service.currentLineIndex(), 0);
 }
 
@@ -712,6 +716,7 @@ TEST(PreviewService, SamePathReloadKeepsAndClampsTheCurrentLineButANewPathResets
   ASSERT_TRUE(dir.isValid());
   const auto path = writeNumberedLines(dir, "a.txt", 10);
   PreviewService service;
+  service.setQuickLookActive(true);
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   service.moveCurrentLine(7);
@@ -746,7 +751,7 @@ TEST(PreviewService, QuickLookEligibilityFollowsTheMimeGate) {
   };
   const auto text = writeNumberedLines(dir, "a.txt", 2);
   setTargetFromFile(service, text);
-  EXPECT_FALSE(service.quickLookEligible());  // MIME not resolved yet
+  EXPECT_TRUE(service.quickLookEligible());  // Pending inspection can open a loading overlay
   ASSERT_TRUE(settled(service));
   EXPECT_TRUE(service.quickLookEligible());
 
@@ -771,6 +776,7 @@ TEST(PreviewService, LoadingTextNeverBlocksTheUiThread) {
   QTemporaryDir dir(fixturePattern("preview-line-offthread"));
   ASSERT_TRUE(dir.isValid());
   PreviewService service;
+  service.setQuickLookActive(true);
   // The hook runs on the worker: the UI thread must keep dispatching timer events while it blocks.
   PreviewServiceTestAccess::beforeDispatch(service, [] { QThread::msleep(400); });
   int ticks = 0;
@@ -1075,7 +1081,7 @@ TEST(PreviewService, SvgRetargetDuringRenderSuppressesStalePixelsAndCacheWrite) 
   setTargetFromFile(service, text);
   release.release();
   ASSERT_TRUE(settled(service));
-  EXPECT_TRUE(service.hasText());
+  EXPECT_FALSE(service.hasText());
   EXPECT_FALSE(service.hasImage());
   EXPECT_FALSE(service.vectorImage());
   EXPECT_EQ(commits.load(), 0);
@@ -1132,3 +1138,147 @@ TEST(PreviewService, SelectionNotificationPublishesBusyAtomicallyAndTracksRefres
   EXPECT_TRUE(service.busy());
   ASSERT_TRUE(settled(service));
 }
+
+TEST(PreviewService, BrowsingNeverDispatchesTextAndReopeningReloadsIt) {
+  QTemporaryDir dir(fixturePattern("demand-text"));
+  PreviewService service;
+  std::atomic_int loads = 0;
+  PreviewServiceTestAccess::beforeText(service, [&] { ++loads; });
+  for (const auto& name : {"a.txt", "b.md"}) {
+    setTargetFromFile(service, writeBytes(dir, name, "plain words\n"));
+    ASSERT_TRUE(settled(service));
+    EXPECT_FALSE(service.hasText());
+    EXPECT_EQ(service.textLineCount(), 0);
+    EXPECT_EQ(loads.load(), 0);
+  }
+  setTargetFromFile(service, dir.filePath("a.txt"));
+  ASSERT_TRUE(settled(service));
+  for (int count = 1; count <= 2; ++count) {
+    service.setQuickLookActive(true);
+    ASSERT_TRUE(settled(service));
+    EXPECT_TRUE(service.hasText());
+    EXPECT_EQ(loads.load(), count);
+    service.setQuickLookActive(false);
+    EXPECT_FALSE(service.hasText());
+    EXPECT_EQ(service.textLineCount(), 0);
+  }
+}
+
+TEST(PreviewService, ClosingDuringInspectionPreservesInspectionWithoutLoadingText) {
+  QTemporaryDir dir(fixturePattern("demand-inspection"));
+  PreviewService service;
+  QSemaphore entered;
+  QSemaphore release;
+  const auto guard = qScopeGuard([&] { release.release(); });
+  std::atomic_int loads = 0;
+  PreviewServiceTestAccess::beforeDispatch(service, [&] {
+    entered.release();
+    release.acquire();
+  });
+  PreviewServiceTestAccess::beforeText(service, [&] { ++loads; });
+  setTargetFromFile(service, writeSmallText(dir));
+  ASSERT_TRUE(entered.tryAcquire(1, 2000));
+  EXPECT_EQ(service.quickLookEligibility(), PreviewService::QuickLookEligibility::Checking);
+  service.setQuickLookActive(true);
+  EXPECT_TRUE(service.quickLookBusy());
+  service.moveCurrentLineDown();
+  EXPECT_EQ(service.currentLineIndex(), -1);
+  service.setQuickLookActive(false);
+  EXPECT_TRUE(service.busy());
+  release.release();
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.mimeType(), "text/plain");
+  EXPECT_EQ(loads.load(), 0);
+}
+
+TEST(PreviewService, ClosingBlockedTextThenReopeningRejectsOldRequest) {
+  QTemporaryDir dir(fixturePattern("demand-reopen"));
+  PreviewService service;
+  setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 3));
+  ASSERT_TRUE(settled(service));
+  QSemaphore entered;
+  QSemaphore release;
+  const auto guard = qScopeGuard([&] { release.release(); });
+  PreviewServiceTestAccess::beforeText(service, [&] {
+    entered.release();
+    release.acquire();
+  });
+  service.setQuickLookActive(true);
+  ASSERT_TRUE(entered.tryAcquire(1, 2000));
+  EXPECT_FALSE(service.busy());
+  EXPECT_TRUE(service.quickLookBusy());
+  service.setQuickLookActive(false);
+  PreviewServiceTestAccess::beforeText(service, {});
+  service.setQuickLookActive(true);
+  release.release();
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.textLineCount(), 3);
+  EXPECT_EQ(service.currentLineIndex(), 0);
+}
+
+TEST(PreviewService, TextReopenRevalidatesReplacementAndKeepsSidebarErrorSeparate) {
+  QTemporaryDir dir(fixturePattern("demand-replace"));
+  PreviewService service;
+  const auto path = writeSmallText(dir, "a.txt");
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  QSemaphore entered;
+  QSemaphore release;
+  const auto guard = qScopeGuard([&] { release.release(); });
+  PreviewServiceTestAccess::beforeText(service, [&] {
+    entered.release();
+    release.acquire();
+  });
+  service.setQuickLookActive(true);
+  ASSERT_TRUE(entered.tryAcquire(1, 2000));
+  writeBytes(dir, "a.txt", QByteArray(100, '\0'));
+  release.release();
+  ASSERT_TRUE(settled(service));
+  EXPECT_FALSE(service.hasText());
+  EXPECT_EQ(service.quickLookErrorKind(), PreviewService::PreviewErrorKind::Unsupported);
+  EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::None);
+}
+
+class ObsoleteTextRequest : public testing::TestWithParam<int> {};
+
+TEST_P(ObsoleteTextRequest, RefreshRetargetAndShutdownInvalidateBlockedResults) {
+  QTemporaryDir dir(fixturePattern("obsolete-text"));
+  PreviewService service;
+  const auto path = writeNumberedLines(dir, "a.txt", 3);
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  QSemaphore entered;
+  QSemaphore release;
+  QSignalSpy stopped(&service, &PreviewService::shutdownFinished);
+  const auto guard = qScopeGuard([&] {
+    service.shutdown();
+    release.release();
+    EXPECT_TRUE(QTest::qWaitFor([&] { return !stopped.empty(); }));
+  });
+  PreviewServiceTestAccess::beforeText(service, [&] {
+    entered.release();
+    release.acquire();
+  });
+  service.setQuickLookActive(true);
+  ASSERT_TRUE(entered.tryAcquire(1, 2000));
+  PreviewServiceTestAccess::beforeText(service, {});
+  if (GetParam() == 0) {
+    writeNumberedLines(dir, "a.txt", 6);
+    setTargetFromFile(service, path);
+  } else if (GetParam() == 1) {
+    setTargetFromFile(service, writeNumberedLines(dir, "b.txt", 6));
+  } else {
+    service.shutdown();
+  }
+  release.release();
+  ASSERT_TRUE(settled(service));
+  if (GetParam() == 2) {
+    EXPECT_FALSE(service.hasText());
+    EXPECT_EQ(service.textLineCount(), 0);
+  } else {
+    EXPECT_TRUE(service.hasText());
+    EXPECT_EQ(service.textLineCount(), 6);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(Invalidation, ObsoleteTextRequest, testing::Values(0, 1, 2));

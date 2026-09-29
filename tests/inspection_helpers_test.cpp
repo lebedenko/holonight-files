@@ -140,10 +140,10 @@ TEST(InspectionKeys, ArrowKeysReachTheQuickLookLineMoverOnlyInPopups) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
   ASSERT_TRUE(controller.handleKey("j"));
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }, 5000));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->currentLineIndex() == 0; }, 5000));
   EXPECT_FALSE(keys.press(Qt::Key_Down, "", 0, false, &controller, false));  // listing: not a bound key
   ASSERT_TRUE(keys.press(Qt::Key_Space, " ", 0, false, &controller, false));
   ASSERT_TRUE(controller.quickLookOpen());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->currentLineIndex() == 0; }, 5000));
   EXPECT_TRUE(keys.press(Qt::Key_Down, "", 0, false, &controller, true));
   EXPECT_EQ(controller.preview()->currentLineIndex(), 1);
   EXPECT_TRUE(keys.press(Qt::Key_Down, "", 0, true, &controller, true));  // held-key repeat is allowed

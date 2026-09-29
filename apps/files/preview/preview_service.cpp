@@ -259,8 +259,8 @@ PreviewResult decodeSvg(QFile& file, const QString& path, const QString& identit
 PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::shared_ptr<std::atomic_bool>& cancel,
                             QSize requestedSize, PreviewWorkerCache& cache,
                             const std::function<void(const PreviewResult&)>& publish,
-                            const std::function<void()>& beforeFullDecode,
-                            const ThumbnailService::StageCallback& stage) {
+                            const std::function<void()>& beforeFullDecode, const ThumbnailService::StageCallback& stage,
+                            bool textOnly = false) {
   PreviewResult result;
   result.generation = generation;
   if (cancel->load()) {
@@ -309,6 +309,21 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
   result.mime_type = mime.name();
   result.gate_mime = mime.name();
   result.mime_type_description = mime.comment();
+  if (textOnly) {
+    const bool supported =
+        mime.name() == QLatin1String("text/plain") || mime.name() == QLatin1String("application/x-zerosize");
+    if (!supported || TextPreviewService::looksBinary(sniff)) {
+      result.error = {.kind = PreviewService::PreviewErrorKind::Unsupported,
+                      .message = QObject::tr("No preview available")};
+    } else if (!cancel->load()) {
+      result.text = TextPreviewService::readHead(file, kTextViewerMaxBytes);
+      result.has_text = result.text.error.isEmpty();
+      if (!result.has_text) {
+        result.error = {.kind = PreviewService::PreviewErrorKind::DecodeFailed, .message = result.text.error};
+      }
+    }
+    return result;
+  }
   if (mime.name() == QLatin1String("image/svg+xml") ||
       QFileInfo(path).suffix().compare(QLatin1String("svg"), Qt::CaseInsensitive) == 0) {
     return decodeSvg(file, path, identity, result, cancel, requestedSize, cache, beforeFullDecode, stage);
@@ -320,13 +335,6 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
   }
   if (mime.name().startsWith(QStringLiteral("image/"))) {
     return decodeImage(file, path, identity, result, cancel, requestedSize, cache, publish, beforeFullDecode, stage);
-  }
-  if (!TextPreviewService::looksBinary(sniff)) {
-    result.text = TextPreviewService::readHead(file, kTextViewerMaxBytes);
-    result.has_text = result.text.error.isEmpty();
-    if (!result.has_text) {
-      result.error = {.kind = PreviewService::PreviewErrorKind::DecodeFailed, .message = result.text.error};
-    }
   }
   return result;
 }
@@ -350,6 +358,7 @@ PreviewService::PreviewService(QObject* parent)
     pending_job_ = false;
     resetDisplayState();
     error_ = {.kind = PreviewErrorKind::DecodeTimeout, .message = tr("Cannot decode image")};
+    quick_look_error_ = error_;
     notifyChanged();
   });
   resize_debounce_timer_.setSingleShot(true);
@@ -366,6 +375,7 @@ PreviewService::PreviewService(QObject* parent)
 }
 
 PreviewService::~PreviewService() {
+  cancelText();
   if (cancellation_) {
     cancellation_->store(true);
   }
@@ -419,6 +429,7 @@ void PreviewService::setTarget(const QString& path, bool isDir, qint64 size, con
   } else {
     busy_ = !stopping_;
   }
+  quick_look_error_ = error_;
   // Reset presentation before property notifications, with the complete initial state readable.
   emit selectionChanged();
   if (busy_) {
@@ -456,13 +467,74 @@ void PreviewService::setRequestedSize(PreviewConsumer consumer, QSize pixels) {
 }
 
 void PreviewService::setQuickLookActive(bool active) {
-  if (active && !quick_look_active_) {
-    retained_line_ = 0;
-    current_line_ = text_lines_.rowCount() > 0 ? 0 : -1;
-    notifyCurrentLine();
+  if (active == quick_look_active_) {
+    return;
   }
+  cancelText();
   quick_look_active_ = active;
+  quick_look_error_ = error_;
+  retained_line_ = 0;
+  if (active) {
+    dispatchText();
+  }
+  notifyChanged();
   updateRequestedSize();
+}
+
+void PreviewService::cancelText() {
+  ++text_request_;
+  if (text_cancellation_) {
+    text_cancellation_->store(true);
+  }
+  text_cancellation_.reset();
+  text_busy_ = false;
+  has_text_ = false;
+  text_ = {};
+  text_lines_.clear();
+  current_line_ = -1;
+  quick_look_error_ = {};
+}
+
+void PreviewService::dispatchText() {
+  if (stopping_ || !quick_look_active_ || busy_ || !quickLookText() || text_busy_ || has_text_) {
+    return;
+  }
+  text_busy_ = true;
+  const auto request = ++text_request_;
+  const auto generation = generation_;
+  const auto revision = revision_;
+  const auto path = path_;
+  const auto cancel = std::make_shared<std::atomic_bool>(false);
+  text_cancellation_ = cancel;
+  const auto beforeText = before_text_for_test_;
+  QMetaObject::invokeMethod(
+      worker_,
+      [this, request, generation, revision, path, cancel, beforeText] {
+        if (!cancel->load() && beforeText) {
+          beforeText();
+        }
+        const auto result = runPreviewJob(path, generation, cancel, {}, *cache_, {}, {}, {}, true);
+        if (cancel->load()) {
+          return;
+        }
+        QMetaObject::invokeMethod(
+            this,
+            [this, request, revision, result] {
+              if (stopping_ || !quick_look_active_ || request != text_request_ || revision != revision_ ||
+                  result.generation != generation_) {
+                return;
+              }
+              text_busy_ = false;
+              quick_look_error_ = result.error;
+              has_text_ = result.has_text;
+              text_ = result.text;
+              text_lines_.setLines(text_.lines);
+              current_line_ = has_text_ ? qMin(retained_line_, static_cast<int>(text_.lines.size()) - 1) : -1;
+              notifyChanged();
+            },
+            Qt::QueuedConnection);
+      },
+      Qt::QueuedConnection);
 }
 
 void PreviewService::updateRequestedSize() {
@@ -572,16 +644,14 @@ void PreviewService::applyResult(const PreviewResult& result) {
   document_size_ = result.document_size;
   image_kind_ = result.image_kind;
   exif_ = result.exif;
-  has_text_ = result.has_text;
-  text_ = result.text;
-  if (has_text_) {
-    text_lines_.setLines(text_.lines);
-    current_line_ = qMin(retained_line_, static_cast<int>(text_.lines.size()) - 1);
-  } else {
-    text_lines_.clear();
-    current_line_ = -1;
-  }
   error_ = result.raster_outcome ? rasterError(*result.raster_outcome) : result.error;
+  quick_look_error_ = error_;
+  if (result.final && quick_look_active_) {
+    if (quickLookEligibility() == QuickLookEligibility::Unsupported && error_.kind == PreviewErrorKind::None) {
+      quick_look_error_ = {.kind = PreviewErrorKind::Unsupported, .message = tr("No preview available")};
+    }
+    dispatchText();
+  }
   notifyChanged();
   if (result.final && mime_type_.startsWith(QStringLiteral("image/")) && !display_image_.isNull()) {
     resize_debounce_timer_.start(kResizeDebounceMs);
@@ -589,6 +659,7 @@ void PreviewService::applyResult(const PreviewResult& result) {
 }
 
 void PreviewService::cancelInFlight() {
+  cancelText();
   ++generation_;
   pending_job_ = false;
   if (cancellation_) {
@@ -627,13 +698,22 @@ void PreviewService::notifyCurrentLine() {
   }
 }
 
-bool PreviewService::quickLookEligible() const {
-  if (!has_entry_ || stat_failed_ || is_dir_) {
-    return false;
-  }
-  return gate_mime_.startsWith(QStringLiteral("image/")) || gate_mime_ == QStringLiteral("text/plain") ||
-         gate_mime_ == QStringLiteral("application/x-zerosize");
+bool PreviewService::quickLookText() const {
+  return gate_mime_ == QStringLiteral("text/plain") || gate_mime_ == QStringLiteral("application/x-zerosize");
 }
+
+PreviewService::QuickLookEligibility PreviewService::quickLookEligibility() const {
+  if (!has_entry_ || stat_failed_ || is_dir_) {
+    return QuickLookEligibility::Unsupported;
+  }
+  if (busy_ && gate_mime_.isEmpty()) {
+    return QuickLookEligibility::Checking;
+  }
+  return gate_mime_.startsWith(QStringLiteral("image/")) || quickLookText() ? QuickLookEligibility::Supported
+                                                                            : QuickLookEligibility::Unsupported;
+}
+
+bool PreviewService::quickLookEligible() const { return quickLookEligibility() != QuickLookEligibility::Unsupported; }
 
 void PreviewService::moveCurrentLine(int delta) {
   const int count = text_lines_.rowCount();

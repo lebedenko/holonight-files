@@ -17,6 +17,12 @@ struct PreviewServiceTestAccess {
     }
     service.notifyChanged();
   }
+  static void presentationSelection(PreviewService& service, const QString& chain) {
+    service.icon_name_ = chain;
+    service.name_ += QStringLiteral("x");
+    service.mime_type_description_.clear();
+    presentationState(service, true, {}, PreviewService::PreviewErrorKind::None, true);
+  }
   static auto rasterError(HolonightImages::Outcome outcome) { return PreviewService::rasterError(outcome); }
   static auto exif(const PreviewService& service) { return service.exif_; }
   static void thumbnailStage(PreviewService& service, ThumbnailService::StageCallback callback) {
@@ -26,6 +32,9 @@ struct PreviewServiceTestAccess {
 
   static void beforeFullDecode(PreviewService& service, std::function<void()> callback) {
     service.before_full_decode_for_test_ = std::move(callback);
+  }
+  static void beforeText(PreviewService& service, std::function<void()> callback) {
+    service.before_text_for_test_ = std::move(callback);
   }
   static void beforeDispatch(PreviewService& service, std::function<void()> callback) {
     service.before_dispatch_for_test_ = std::move(callback);

@@ -1,5 +1,7 @@
 # Sidebar icon delay
 
+The [sidebar-icons-demand-text cycle](../sidebar-icons-demand-text/SPEC.md) supersedes the unconditional fallback reset in REQ-F-005: matching displayed icon identities retain continuity. The 150 ms delay remains for other transitions.
+
 Status: implemented; automated project checks passed; isolated runtime and manual native acceptance remain open.
 
 Approved scope: user-provided implementation plan, 2026-09-28. Internal delay: 150 ms; no setting.

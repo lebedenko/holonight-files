@@ -151,10 +151,11 @@ QSizeF QuickLookPresentationModel::previewBounds() const {
 }
 
 void QuickLookPresentationModel::updateGeometry() {
-  const auto kind = preview_ != nullptr
-                        ? classify(preview_->hasEntry(), preview_->busy(), preview_->mimeType(), preview_->hasText(),
-                                   preview_->previewErrorKind() != PreviewService::PreviewErrorKind::None)
-                        : Kind::None;
+  const auto kind =
+      preview_ != nullptr
+          ? classify(preview_->hasEntry(), preview_->quickLookBusy(), preview_->mimeType(), preview_->quickLookText(),
+                     preview_->quickLookErrorKind() != PreviewService::PreviewErrorKind::None)
+          : Kind::None;
   if (kind != Kind::Pending && kind != Kind::None) {
     retained_kind_ = kind;
     retained_source_size_ = preview_->documentSize();

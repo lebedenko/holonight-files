@@ -1,5 +1,7 @@
 # SDD Spec — quick-look-text-viewer
 
+The [sidebar-icons-demand-text cycle](../sidebar-icons-demand-text/SPEC.md) supersedes selection-time text loading and the requirement to finish MIME detection before opening. Early Space opens a pinned loading overlay; text loads only for active Quick Look and is discarded on close. Supported types and line-viewer behavior remain unchanged.
+
 ## Overview
 
 This specification defines a text viewer feature in Quick Look, enabling keyboard-driven inspection of plain-text files directly from the file listing. The feature replaces the existing wrapping text panel in `QuickLookOverlay.qml` with a line-number gutter, current-line highlighting, and arrow-key/vim navigation. The implementation gates Quick Look triggering to image files and `text/plain` MIME type only, pins the overlay to a single file (preventing j/k from navigating to other files), and caps file loading at 100 KiB to protect against pathologically large text files.

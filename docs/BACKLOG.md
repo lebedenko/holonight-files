@@ -144,8 +144,8 @@ layout while loading, refitting it when the window resizes. Review remediation
 and pending native 1.5× rendering/latency acceptance are tracked in
 [Quick Look verification](sdd/quick-look-redesign/VERIFICATION.md).
 
-Quick Look is now a pinned text/image viewer: `Space` opens it only for images and
-`text/plain`, `j`/`k`/arrows move a current line in a 100 KiB-capped line viewer, and the
+Quick Look is now a pinned text/image viewer: `Space` opens it for images,
+`text/plain`, or pending type detection, `j`/`k`/arrows move a current line in a 100 KiB-capped line viewer, and the
 previewed file no longer follows the listing cursor. This supersedes the live-update-on-`j`/`k`
 behavior recorded in the two Quick Look verification documents above. Spec, design and
 tasks: [quick-look-text-viewer](sdd/quick-look-text-viewer/SPEC.md). The user confirmed native
@@ -225,3 +225,7 @@ The approved 120 ms outgoing-thumbnail fade is implemented with immediate new-im
 delivery and the existing 150 ms icon delay. Automated checks passed and the user accepted
 the native timing. The isolated runtime publication gate remains blocked; see
 [verification](sdd/sidebar-thumbnail-fade/VERIFICATION.md).
+
+Stable matching sidebar icons and on-demand text loading supersede unconditional fallback
+resets and selection-time text parsing. Early Space opens a pinned loading overlay. Automated
+and manual acceptance are tracked in [verification](sdd/sidebar-icons-demand-text/VERIFICATION.md).
