@@ -7,10 +7,14 @@
 struct PreviewServiceTestAccess {
   // Drive presentation states without timing worker I/O; service transitions have separate tests.
   static void presentationState(PreviewService& service, bool busy, const QImage& image = {},
-                                PreviewService::PreviewErrorKind error = PreviewService::PreviewErrorKind::None) {
+                                PreviewService::PreviewErrorKind error = PreviewService::PreviewErrorKind::None,
+                                bool selection = false) {
     service.busy_ = busy;
     service.display_image_ = image;
     service.error_.kind = error;
+    if (selection) {
+      emit service.selectionChanged();
+    }
     service.notifyChanged();
   }
   static auto rasterError(HolonightImages::Outcome outcome) { return PreviewService::rasterError(outcome); }

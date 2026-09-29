@@ -7,7 +7,7 @@ import QtQuick.Window
 import Holonight.Core
 import Holonight.Controls
 
-// Docked sidebar, always visible (REQ-F-001), reactive purely through property bindings to
+// Docked sidebar, with local thumbnail transition state and metadata bindings to
 // controller.preview. Shares its decoder and cached thumbnail data with QuickLookOverlay.qml —
 // both bind to the same controller.preview instance rather than owning a second pipeline.
 Item {
@@ -27,7 +27,36 @@ Item {
     }
 
     property bool fallbackDelayElapsed: false
+    property var displayedImage: undefined
     readonly property bool showIconFallback: root.preview.hasEntry && !root.preview.hasImage && (!root.preview.busy || root.preview.previewErrorKind !== PreviewService.None || root.fallbackDelayElapsed)
+
+    function discardThumbnail(): void {
+        thumbnailFade.stop();
+        root.displayedImage = undefined;
+        thumbnail.opacity = 1;
+    }
+
+    function updateThumbnail(): void {
+        if (!root.visible || !root.preview.hasEntry || root.preview.previewErrorKind !== PreviewService.None) {
+            root.discardThumbnail();
+        } else if (root.preview.hasImage) {
+            root.discardThumbnail();
+            root.displayedImage = root.preview.image;
+        } else if (!root.preview.busy || root.fallbackDelayElapsed) {
+            root.discardThumbnail();
+        }
+    }
+
+    NumberAnimation {
+        id: thumbnailFade
+        objectName: "previewThumbnailFade"
+        target: thumbnail
+        property: "opacity"
+        to: 0
+        duration: 120
+        easing.type: Easing.InQuad
+        onFinished: root.discardThumbnail()
+    }
 
     function resetFallbackDelay(): void {
         fallbackDelay.stop();
@@ -39,20 +68,31 @@ Item {
     Timer {
         id: fallbackDelay
         interval: 150
-        onTriggered: root.fallbackDelayElapsed = true
+        onTriggered: {
+            root.fallbackDelayElapsed = true;
+            root.updateThumbnail();
+        }
     }
 
     Connections {
         target: root.preview
         function onSelectionChanged(): void {
             root.resetFallbackDelay();
+            root.updateThumbnail();
+            if (root.displayedImage !== undefined && !root.preview.hasImage && !thumbnailFade.running)
+                thumbnailFade.start();
+        }
+        function onChanged(): void {
+            root.updateThumbnail();
         }
     }
 
     Component.onCompleted: {
         root.reportImageAreaSize();
         root.resetFallbackDelay();
+        root.updateThumbnail();
     }
+    onVisibleChanged: root.updateThumbnail()
     onPreviewDevicePixelRatioChanged: root.reportImageAreaSize()
 
     function formatModified(value): string {
@@ -209,10 +249,11 @@ Item {
                 readonly property bool isFolderIconName: root.preview.iconName === "folder" || root.preview.iconName.startsWith("folder/")
 
                 PreviewImageItem {
+                    id: thumbnail
                     objectName: "previewThumbnail"
                     anchors.fill: parent
-                    image: root.preview.image
-                    visible: root.preview.hasImage
+                    image: root.displayedImage !== undefined ? root.displayedImage : root.preview.image
+                    visible: root.preview.hasImage || root.displayedImage !== undefined
                     radius: HnAppearance.roundedRadius(HnSurfaceRole.Card, width, height, HnAppearance.revision)
                 }
                 HnIcon {

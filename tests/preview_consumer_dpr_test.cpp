@@ -6,6 +6,7 @@
 #include "quick_look_presentation_model.h"
 
 #include <QGuiApplication>
+#include <QMetaProperty>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -230,4 +231,119 @@ TEST(PreviewConsumers, SidebarWorkerThumbnailIsVisibleBeforeMetadataAndOnCacheRe
   EXPECT_TRUE(thumbnail->isVisible());
   EXPECT_TRUE(selections.empty());
   ASSERT_TRUE(QTest::qWaitFor([&] { return !preview.busy(); }));
+}
+
+TEST(PreviewConsumers, SidebarFadesOutgoingThumbnailWithoutRestoringStalePixels) {
+  DirectoryController controller;
+  auto& preview = *controller.preview();
+  QQmlEngine engine;
+  initializeFilesEngine(engine);
+  QQmlComponent component(&engine);
+  component.setData(R"(
+    import QtQuick
+    import HolonightFiles
+    PreviewPane { width: 320; height: 600 }
+  )",
+                    QUrl());
+  QQuickItem host;
+  std::unique_ptr<QObject> pane(
+      component.createWithInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}}));
+  ASSERT_NE(pane, nullptr) << component.errorString().toStdString();
+  auto* item = qobject_cast<QQuickItem*>(pane.get());
+  auto* thumbnail = pane->findChild<QQuickItem*>("previewThumbnail");
+  ASSERT_NE(item, nullptr);
+  ASSERT_NE(thumbnail, nullptr);
+  item->setParentItem(&host);
+  QImage red(32, 32, QImage::Format_RGB32);
+  red.fill(Qt::red);
+  QImage blue(64, 64, QImage::Format_RGB32);
+  blue.fill(Qt::blue);
+  const auto pixels = [&] { return thumbnail->property("image").value<QImage>(); };
+  const auto retained = [&] { return pane->property("displayedImage").isValid(); };
+  const auto select = [&] {
+    PreviewServiceTestAccess::presentationState(preview, true, {}, PreviewService::PreviewErrorKind::None, true);
+  };
+  int delivery = 0;
+  const auto show = [&](const QImage& image) {
+    SCOPED_TRACE(++delivery);
+    PreviewServiceTestAccess::presentationState(preview, true, image);
+    EXPECT_EQ(pixels(), image);
+    EXPECT_EQ(thumbnail->opacity(), 1);
+    EXPECT_TRUE(thumbnail->isVisible()) << " root=" << item->isVisible()
+                                        << " parent=" << thumbnail->parentItem()->isVisible()
+                                        << " hasEntry=" << preview.hasEntry();
+  };
+  const auto discarded = [&] {
+    EXPECT_FALSE(retained());
+    EXPECT_TRUE(pixels().isNull());
+    EXPECT_FALSE(thumbnail->isVisible());
+  };
+  preview.setTarget("/folder", true, -1, {}, 0040755, false, {}, "folder");
+  show(red);
+  select();
+  EXPECT_EQ(pixels(), red);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return thumbnail->opacity() < 1; }, 100));
+  EXPECT_GT(thumbnail->opacity(), 0);
+  auto* fade = pane->findChild<QObject*>("previewThumbnailFade");
+  ASSERT_NE(fade, nullptr);
+  EXPECT_EQ(fade->property("duration").toInt(), 120);
+  const auto runningProperty = fade->metaObject()->property(fade->metaObject()->indexOfProperty("running"));
+  QSignalSpy runningChanges(fade, runningProperty.notifySignal());
+  ASSERT_TRUE(runningChanges.isValid());
+  const auto opacity = thumbnail->opacity();
+  select();  // Rapid navigation must not restore opacity or restart the fade.
+  EXPECT_EQ(thumbnail->opacity(), opacity);
+  EXPECT_TRUE(runningChanges.empty());
+  EXPECT_EQ(pixels(), red);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !retained(); }, 200));
+  discarded();
+  select();  // An exhausted transition cannot resurrect pixels on later navigation.
+  discarded();
+
+  show(red);
+  select();
+  QTest::qWait(40);
+  show(blue);  // Early delivery cancels the outgoing fade, even while metadata is busy.
+  QTest::qWait(160);
+  EXPECT_EQ(pixels(), blue);
+  EXPECT_EQ(thumbnail->opacity(), 1);
+  item->setWidth(480);
+  show(red);  // Same-selection resolution replacement has no fade.
+  QTest::qWait(160);
+  EXPECT_EQ(pixels(), red);
+  EXPECT_EQ(thumbnail->opacity(), 1);
+
+  select();
+  preview.clear();
+  discarded();
+  preview.setTarget("/folder", true, -1, {}, 0040755, false, {}, "folder");
+  discarded();
+  for (const auto error :
+       {PreviewService::PreviewErrorKind::DecodeFailed, PreviewService::PreviewErrorKind::DecodeTimeout}) {
+    show(red);
+    select();
+    PreviewServiceTestAccess::presentationState(preview, true, {}, error);
+    discarded();
+    EXPECT_TRUE(pane->property("showIconFallback").toBool());
+  }
+  show(red);
+  select();
+  PreviewServiceTestAccess::presentationState(preview, false);  // Text/non-image completion.
+  discarded();
+  show(red);
+  preview.setTarget("/another-folder", true, -1, {}, 0040755, false, {}, "folder");
+  discarded();
+  EXPECT_EQ(pane->findChild<QObject*>("previewFileName")->property("rawText").toString(), "another-folder");
+  EXPECT_EQ(pane->property("sizeText").toString(), "Dir");
+
+  show(red);
+  select();
+  item->setVisible(false);
+  discarded();
+  item->setVisible(true);
+  discarded();
+  show(blue);
+  QTest::qWait(160);
+  EXPECT_EQ(pixels(), blue);
+  EXPECT_EQ(thumbnail->opacity(), 1);
 }

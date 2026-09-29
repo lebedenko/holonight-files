@@ -218,3 +218,10 @@ resource validation and policy-marked thumbnails. Full and native acceptance sta
 The sidebar suppresses brief fallback flashes with a 150 ms selection-local delay.
 Automated and pending native acceptance are tracked in
 [verification](sdd/sidebar-icon-delay/VERIFICATION.md).
+
+## Sidebar thumbnail fade
+
+The approved 120 ms outgoing-thumbnail fade is implemented with immediate new-image
+delivery and the existing 150 ms icon delay. Automated checks passed and the user accepted
+the native timing. The isolated runtime publication gate remains blocked; see
+[verification](sdd/sidebar-thumbnail-fade/VERIFICATION.md).

@@ -485,8 +485,9 @@ displayed filesystem is unmounted or removed, Files returns Home with an explana
 
 Development builds also require the sibling `holonight-system-services` repository; `task deps` installs its Storage component without Audio/libpulse.
 
-Sidebar previews reserve an empty square for up to 150 ms while a new selection loads.
-Thumbnails appear as soon as available; slower loads show the existing icon until the
-image arrives. Folders and completed or failed previews without images show icons
+Sidebar previews fade the outgoing thumbnail over 120 ms while a new selection loads,
+then reserve the empty square until the existing 150 ms icon deadline. New thumbnails
+appear immediately at full opacity. See the [thumbnail fade verification](docs/sdd/sidebar-thumbnail-fade/VERIFICATION.md).
+Slower loads show the existing icon after 150 ms until the image arrives. Folders and completed or failed previews without images show icons
 immediately. The delay is internal, with no new setting. See the
 [sidebar icon delay verification](docs/sdd/sidebar-icon-delay/VERIFICATION.md).
