@@ -178,6 +178,11 @@ same-named folder elsewhere or a symlink to a place keeps the generic folder ico
 never change a listing icon. The list is read once at startup. See the
 [named folder icons specification](docs/sdd/named-folder-icons/SPEC.md).
 
+Entry names are also styled by type: folders render bold, symlinks render italic in the secondary
+text color regardless of what they point at (a symlinked folder is styled as a symlink, not a
+folder), and regular files are unchanged. This also applies to the `..` row. See the
+[entry name styling spec](docs/sdd/entry-type-name-styling/SPEC.md).
+
 Navigation history works like Vim's jump list: `Ctrl+O` goes back and `Ctrl+I` goes forward
 through previously visited folders (count prefixes such as `3 Ctrl+O` work), as do the back/forward
 arrow buttons at the left of the header. Returning to a folder puts the cursor back on the entry it

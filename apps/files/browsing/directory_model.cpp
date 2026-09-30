@@ -39,6 +39,10 @@ DirectoryEntry readEntry(const QString& path, const QString& name, const PlaceLi
   entry.name = name;
   entry.absolute_path = QDir(path).absoluteFilePath(name);
   const auto encoded = QFile::encodeName(entry.absolute_path);
+  // One lstat() per entry, ahead of the target-resolving stat() below, so both the success and
+  // failure branches can read entry.is_symlink without a second syscall (REQ-F-010/011/012/013).
+  struct stat linkInfo{};
+  entry.is_symlink = ::lstat(encoded.constData(), &linkInfo) == 0 && S_ISLNK(linkInfo.st_mode);
   struct stat info{};
   if (::stat(encoded.constData(), &info) == 0) {
     entry.is_dir = S_ISDIR(info.st_mode);
@@ -55,9 +59,7 @@ DirectoryEntry readEntry(const QString& path, const QString& name, const PlaceLi
     entry.stat_failed = true;
     // A dangling link's own extension says nothing about a target that doesn't exist (REQ-F-006).
     entry.icon_name = IconNameResolver::genericFallbackName(false);
-    struct stat linkInfo{};
-    const bool dangling = (error == ENOENT || error == ENOTDIR) && ::lstat(encoded.constData(), &linkInfo) == 0 &&
-                          S_ISLNK(linkInfo.st_mode);
+    const bool dangling = (error == ENOENT || error == ENOTDIR) && entry.is_symlink;
     entry.stat_error =
         dangling ? DirectoryModel::tr("Broken symbolic link") : QString::fromLocal8Bit(std::strerror(error));
   }
@@ -187,6 +189,8 @@ QVariant DirectoryModel::data(const QModelIndex& index, int role) const {
       return entry.icon_name;
     case IsParentRole:
       return entry.is_parent;
+    case IsSymlinkRole:
+      return entry.is_symlink;
     default:
       return {};
   }
@@ -198,7 +202,7 @@ QHash<int, QByteArray> DirectoryModel::roleNames() const {
       {ModifiedRole, "modified"},   {ModeRole, "mode"},
       {IsHiddenRole, "isHidden"},   {StatFailedRole, "statFailed"},
       {StatErrorRole, "statError"}, {IconNameRole, "iconName"},
-      {IsParentRole, "isParent"},
+      {IsParentRole, "isParent"},   {IsSymlinkRole, "isSymlink"},
   };
 }
 DirectoryEntry DirectoryModel::syntheticParentEntry(const QString& path, const PlaceList::IconMap* places) {

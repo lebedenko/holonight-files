@@ -615,6 +615,124 @@ TEST(Files, LineNumberGutterHeaderStaysForEmptyAndUnreadableDirectories) {
 }
 
 namespace {
+// Every filenameRun HnLabel under the delegate whose "name" property equals entryName
+// (entry-type-name-styling REQ-F-016/018: every character run gets identical type styling).
+// Repeater-instantiated items are reparented visually (QQuickItem::childItems()), not as QObject
+// children, so a recursive visual walk is required — findChildren() would find none of them.
+QList<QQuickItem*> filenameRunsFor(QQuickItem* list, const QString& entryName) {
+  for (auto* delegate : list->property("contentItem").value<QQuickItem*>()->childItems()) {
+    if (delegate->objectName() != "directoryEntryDelegate" || delegate->property("name").toString() != entryName) {
+      continue;
+    }
+    QList<QQuickItem*> runs;
+    QList<QQuickItem*> pending{delegate};
+    for (int index = 0; index < pending.size(); ++index) {
+      for (auto* child : pending[index]->childItems()) {
+        if (child->objectName() == "filenameRun") {
+          runs.append(child);
+        }
+        pending.append(child);
+      }
+    }
+    return runs;
+  }
+  return {};
+}
+}  // namespace
+
+// entry-type-name-styling: symlinks render italic + secondary color (REQ-F-001), folders render
+// bold (REQ-F-002), regular files are unchanged (REQ-F-003), and the ".." row follows the folder
+// rule (REQ-F-004) — a symlink-to-directory renders as a symlink, not a folder (REQ-F-001 wins).
+TEST(Files, EntryNameStylingReflectsFolderSymlinkAndFile) {
+  QTemporaryDir dir(files_test::fixturePattern("name-styling"));
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_FALSE(files_test::writeFile(dir, "plain.txt").isEmpty());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
+  ASSERT_TRUE(QFile::link(dir.filePath("plain.txt"), dir.filePath("file-link")));
+  ASSERT_TRUE(QFile::link(dir.filePath("folder"), dir.filePath("folder-link")));
+  DirectoryController controller;
+  auto loaded = loadActiveWindow(controller, dir.path());
+  ASSERT_NE(loaded.list, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && loaded.list->property("count").toInt() == 5; }));
+  // Delegate instantiation lags one event-loop turn behind the count change.
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !filenameRunsFor(loaded.list, QStringLiteral("plain.txt")).isEmpty(); }));
+
+  struct Expectation {
+    QString name;
+    bool italic;
+    bool bold;
+  };
+  for (const auto& expectation : {
+           Expectation{.name = "..", .italic = false, .bold = true},
+           Expectation{.name = "plain.txt", .italic = false, .bold = false},
+           Expectation{.name = "folder", .italic = false, .bold = true},
+           Expectation{.name = "file-link", .italic = true, .bold = false},
+           Expectation{.name = "folder-link", .italic = true, .bold = false},
+       }) {
+    const auto runs = filenameRunsFor(loaded.list, expectation.name);
+    ASSERT_FALSE(runs.isEmpty()) << expectation.name.toStdString();
+    const auto expectedColor = evaluateInContext(
+        runs.first(), expectation.italic ? "HoloniightPalette.textSecondary" : "HoloniightPalette.textPrimary");
+    for (auto* run : runs) {
+      const auto font = run->property("font").value<QFont>();
+      EXPECT_EQ(font.italic(), expectation.italic) << expectation.name.toStdString();
+      EXPECT_EQ(font.bold(), expectation.bold) << expectation.name.toStdString();
+      EXPECT_EQ(run->property("color"), expectedColor) << expectation.name.toStdString();
+    }
+  }
+}
+
+TEST(Files, EntryNameSearchOverridesColorAndWeightWhilePreservingItalic) {
+  for (const auto& kind : {QStringLiteral("file"), QStringLiteral("folder"), QStringLiteral("file-link"),
+                           QStringLiteral("folder-link"), QStringLiteral("dangling-link")}) {
+    SCOPED_TRACE(kind.toStdString());
+    QTemporaryDir dir(files_test::fixturePattern("name-search-styling"));
+    ASSERT_TRUE(dir.isValid());
+    const auto name = QStringLiteral("entry-name");
+    const bool symlink = kind.endsWith("-link");
+    const bool folder = kind.startsWith("folder");
+    if (folder) {
+      ASSERT_TRUE(QDir(dir.path()).mkdir(symlink ? "target" : name));
+    } else if (kind != "dangling-link") {
+      ASSERT_FALSE(files_test::writeFile(dir, symlink ? "target" : name).isEmpty());
+    }
+    if (symlink) {
+      ASSERT_TRUE(QFile::link(dir.filePath("target"), dir.filePath(name)));
+    }
+    DirectoryController controller;
+    auto loaded = loadActiveWindow(controller, dir.path());
+    ASSERT_NE(loaded.list, nullptr);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !filenameRunsFor(loaded.list, name).isEmpty(); }));
+    for (int round = 0; round < 2; ++round) {
+      ASSERT_TRUE(controller.handleKey("/"));
+      controller.updateSearchQuery("entry");
+      ASSERT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Search);
+      ASSERT_TRUE(QTest::qWaitFor([&] { return filenameRunsFor(loaded.list, name).size() == 2; }));
+      const auto runs = filenameRunsFor(loaded.list, name);
+      for (auto* run : runs) {
+        const bool matched = run->property("rawText").toString() == "entry";
+        EXPECT_EQ(run->property("rawText").toString(), matched ? "entry" : "-name");
+        const auto font = run->property("font").value<QFont>();
+        EXPECT_EQ(font.italic(), symlink);
+        EXPECT_EQ(font.weight(), matched || (folder && !symlink) ? QFont::Bold : QFont::Normal);
+        EXPECT_EQ(run->property("color"), evaluateInContext(run, matched   ? "HoloniightPalette.accentCyan"
+                                                                 : symlink ? "HoloniightPalette.textSecondary"
+                                                                           : "HoloniightPalette.textPrimary"));
+      }
+      controller.commitSearchEditing();
+      ASSERT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+      ASSERT_TRUE(QTest::qWaitFor([&] { return filenameRunsFor(loaded.list, name).size() == 1; }));
+      auto* run = filenameRunsFor(loaded.list, name).first();
+      const auto font = run->property("font").value<QFont>();
+      EXPECT_EQ(font.italic(), symlink);
+      EXPECT_EQ(font.weight(), folder && !symlink ? QFont::Bold : QFont::Normal);
+      EXPECT_EQ(run->property("color"),
+                evaluateInContext(run, symlink ? "HoloniightPalette.textSecondary" : "HoloniightPalette.textPrimary"));
+    }
+  }
+}
+
+namespace {
 // A one-icon theme providing only "folder", so a test can observe both the theme path and the
 // bundled-glyph path in one listing regardless of the icon themes installed on the machine.
 bool writeFolderOnlyTheme(const QTemporaryDir& root) {

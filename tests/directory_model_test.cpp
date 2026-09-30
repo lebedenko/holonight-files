@@ -133,11 +133,15 @@ TEST(DirectoryModel, PerEntryStatFailuresAreIncludedNotDropped) {
   ASSERT_GE(danglingRow, 0);
   EXPECT_TRUE(model.data(model.index(danglingRow), DirectoryModel::StatFailedRole).toBool());
   EXPECT_EQ(model.data(model.index(danglingRow), DirectoryModel::StatErrorRole).toString(), "Broken symbolic link");
+  // REQ-F-006/012: a stat-failure (dangling target) doesn't stop lstat() from still identifying
+  // the entry itself as a symlink.
+  EXPECT_TRUE(model.data(model.index(danglingRow), DirectoryModel::IsSymlinkRole).toBool());
   if (!runningAsRoot()) {
     ASSERT_GE(brokenPermRow, 0);
     EXPECT_TRUE(model.data(model.index(brokenPermRow), DirectoryModel::StatFailedRole).toBool());
     EXPECT_FALSE(model.data(model.index(brokenPermRow), DirectoryModel::StatErrorRole).toString().isEmpty());
     EXPECT_NE(model.data(model.index(brokenPermRow), DirectoryModel::StatErrorRole).toString(), "Broken symbolic link");
+    EXPECT_TRUE(model.data(model.index(brokenPermRow), DirectoryModel::IsSymlinkRole).toBool());
   }
 }
 
@@ -358,9 +362,13 @@ TEST(DirectoryModel, MetadataFollowsValidSymlinkTargetsAndCanStatUnreadableFile)
     }
     const auto name = model.data(index, DirectoryModel::NameRole).toString();
     const bool folder = name.startsWith("folder");
+    const bool link = name.endsWith("-link");
     EXPECT_FALSE(model.data(index, DirectoryModel::StatFailedRole).toBool());
     EXPECT_EQ(model.data(index, DirectoryModel::IsDirRole).toBool(), folder);
     EXPECT_EQ(model.data(index, DirectoryModel::SizeRole).toLongLong(), folder ? -1 : 11);
+    // is_dir/mode stay target-resolved (folder-link still reports isDir); is_symlink is the
+    // independent, entry-itself fact — true only for the two *-link rows.
+    EXPECT_EQ(model.data(index, DirectoryModel::IsSymlinkRole).toBool(), link);
   }
 }
 

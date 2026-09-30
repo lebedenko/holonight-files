@@ -269,8 +269,15 @@ Item {
                 required property string statError
                 required property string iconName
                 required property bool isParent
+                required property bool isSymlink
 
                 readonly property bool editingThis: root.controller.vim.currentMode === VimModeController.Insert && root.controller.vim.editingRow === delegate.index
+                // Name styling precedence (symlink > folder > file): a symlink always renders
+                // italic in the secondary color regardless of what it points at; a plain
+                // directory renders bold; a regular file is unchanged.
+                readonly property bool typeItalic: delegate.isSymlink
+                readonly property int typeWeight: !delegate.isSymlink && delegate.isDir ? Font.Bold : Font.Normal
+                readonly property color typeColor: delegate.isSymlink ? HoloniightPalette.textSecondary : HoloniightPalette.textPrimary
 
                 objectName: "directoryEntryDelegate"
                 width: listView.width
@@ -403,8 +410,11 @@ Item {
                                     role: HnTypographyRole.Body
                                     rawText: modelData.text
                                     textFormat: Text.PlainText
-                                    color: modelData.matched ? HoloniightPalette.accentCyan : HoloniightPalette.textPrimary
-                                    font.weight: modelData.matched ? Font.Bold : Font.Normal
+                                    color: modelData.matched ? HoloniightPalette.accentCyan : delegate.typeColor
+                                    font.weight: modelData.matched ? Font.Bold : delegate.typeWeight
+                                    // Italic tracks isSymlink alone, never the search match state
+                                    // (REQ-F-009): a symlink's name stays italic in every run.
+                                    font.italic: delegate.typeItalic
                                     Accessible.ignored: true
                                 }
                             }

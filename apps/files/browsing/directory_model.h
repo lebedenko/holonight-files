@@ -32,6 +32,10 @@ struct DirectoryEntry {
   // insertPlaceholderRow()/removePlaceholderRow().
   bool is_placeholder = false;
   bool is_parent = false;
+  // True when the entry's own listed path is a symlink (via lstat()), regardless of whether its
+  // target resolves or what type the target is. Independent of is_dir/mode, which stay
+  // target-resolved so icon resolution and directories-first sort are unaffected.
+  bool is_symlink = false;
   bool operator==(const DirectoryEntry&) const = default;
 };
 
@@ -55,6 +59,7 @@ class DirectoryModel : public QAbstractListModel {
     // QML only as "image://icon/" + iconName and split apart only by IconImageProvider.
     IconNameRole,
     IsParentRole,
+    IsSymlinkRole,
   };
   explicit DirectoryModel(QObject* parent = nullptr);
   ~DirectoryModel() override;
