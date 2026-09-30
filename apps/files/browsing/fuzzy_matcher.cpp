@@ -12,11 +12,11 @@ constexpr int kBaseScore = 1;
 constexpr int kNegInf = std::numeric_limits<int>::min() / 2;
 
 bool isSeparator(QChar character) {
-  return character == u'.' || character == u'_' || character == u'-' || character == u' ';
+  return character == u'.' || character == u'_' || character == u'-' || character == u' ' || character == u'/';
 }
 
 // Cheap subsequence existence pre-filter (case-insensitive): most keystrokes against most rows
-// don't match at all, so bail before the O(query·candidate^2) scoring DP runs (see
+// don't match at all, so bail before the O(query·candidate) scoring DP runs (see
 // docs/sdd/vim-modal-editing/DESIGN.md Known Risks re: fuzzy-match cost at scale).
 bool isSubsequence(const QString& foldedQuery, const QString& foldedCandidate) {
   int queryIndex = 0;
@@ -27,6 +27,15 @@ bool isSubsequence(const QString& foldedQuery, const QString& foldedCandidate) {
     }
   }
   return queryIndex == foldedQuery.size();
+}
+
+QString foldCharacters(const QString& value) {
+  QString folded;
+  folded.reserve(value.size());
+  for (const auto character : value) {
+    folded.append(character.toCaseFolded());
+  }
+  return folded;
 }
 
 // Fills row (dpAll[0]): best score for matching just the first query character, for every
@@ -49,32 +58,30 @@ void seedFirstRow(const QString& foldedQuery, const QString& foldedCandidate, co
 // predecessor in parentRow so the caller can reconstruct the matched positions afterward.
 void extendRow(const QString& foldedQuery, const QString& foldedCandidate, const QString& candidate, int queryIndex,
                const QVector<int>& previousRow, QVector<int>& row, QVector<int>& parentRow) {
+  int bestGapped = kNegInf;
+  int bestGappedIndex = -1;
   for (int j = queryIndex; j < foldedCandidate.size(); ++j) {
+    const int predecessor = j - 1;
+    if (previousRow[predecessor] > kNegInf &&
+        previousRow[predecessor] + (kGapPenaltyPerChar * predecessor) > bestGapped) {
+      bestGapped = previousRow[predecessor] + (kGapPenaltyPerChar * predecessor);
+      bestGappedIndex = predecessor;
+    }
     if (foldedQuery.at(queryIndex) != foldedCandidate.at(j)) {
       continue;
     }
-    int best = kNegInf;
-    int bestPredecessor = -1;
-    for (int k = queryIndex - 1; k < j; ++k) {
-      if (previousRow[k] <= kNegInf) {
-        continue;
-      }
-      const int gap = j - k - 1;
-      int score = previousRow[k] + kBaseScore - (gap * kGapPenaltyPerChar);
-      if (gap == 0) {
-        score += kConsecutiveBonus;
+    if (bestGappedIndex >= 0) {
+      int score = bestGapped + kBaseScore - (kGapPenaltyPerChar * (j - 1));
+      int winner = bestGappedIndex;
+      if (previousRow[predecessor] > kNegInf && previousRow[predecessor] + kBaseScore + kConsecutiveBonus > score) {
+        score = previousRow[predecessor] + kBaseScore + kConsecutiveBonus;
+        winner = predecessor;
       }
       if (isSeparator(candidate.at(j - 1))) {
         score += kWordBoundaryBonus;
       }
-      if (score > best) {
-        best = score;
-        bestPredecessor = k;
-      }
-    }
-    if (best > kNegInf) {
-      row[j] = best;
-      parentRow[j] = bestPredecessor;
+      row[j] = score;
+      parentRow[j] = winner;
     }
   }
 }
@@ -98,8 +105,8 @@ FuzzyMatch fuzzyMatch(const QString& query, const QString& candidate) {
     return result;
   }
 
-  const QString foldedQuery = query.toCaseFolded();
-  const QString foldedCandidate = candidate.toCaseFolded();
+  const QString foldedQuery = foldCharacters(query);
+  const QString foldedCandidate = foldCharacters(candidate);
   if (!isSubsequence(foldedQuery, foldedCandidate)) {
     return result;
   }

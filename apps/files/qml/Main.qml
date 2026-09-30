@@ -32,29 +32,29 @@ HnApplicationWindow {
 
     Shortcut {
         sequence: "F"
-        enabled: !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
+        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.toggleFullscreen()
     }
     Shortcut {
         sequence: "Escape"
-        enabled: !window.controller.tasks.hasPrompt
+        enabled: !window.controller.tasks.hasPrompt && !pathFinder.visible
         onActivated: window.leaveFullscreen()
     }
     Shortcut {
         sequence: "Q"
-        enabled: !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
+        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.close()
     }
     Shortcut {
         // navigation-history REQ-F-020: matched by key code, so Ctrl+I is never mistaken for Tab.
         // Window context reaches it from the listing, a delegate editor or Quick Look alike.
         sequence: "Ctrl+O"
-        enabled: !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
+        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.controller.navigateHistoryBack()
     }
     Shortcut {
         sequence: "Ctrl+I"
-        enabled: !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
+        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.controller.navigateHistoryForward()
     }
     Shortcut {
@@ -63,6 +63,21 @@ HnApplicationWindow {
         // chain can't guarantee without special-casing every mode (see DESIGN.md Interfaces).
         sequence: "Ctrl+C"
         onActivated: window.controller.tasks.cancelCurrentTask()
+    }
+    Shortcut {
+        sequence: "Ctrl+G"
+        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && !window.controller.quickLookOpen && window.controller.vim.currentMode === VimModeController.Normal
+        onActivated: pathFinder.start(true)
+    }
+    Shortcut {
+        sequence: "Ctrl+P"
+        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && !window.controller.quickLookOpen && window.controller.vim.currentMode === VimModeController.Normal
+        onActivated: pathFinder.start(false)
+    }
+
+    PathFinderPopup {
+        id: pathFinder
+        controller: window.controller
     }
 
     ColumnLayout {

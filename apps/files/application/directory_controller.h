@@ -7,6 +7,7 @@
 #include "file_command_router.h"
 #include "jump_list.h"
 #include "navigation_session.h"
+#include "path_finder_model.h"
 #include "places_model.h"
 #include "preview_selection.h"
 #include "preview_service.h"
@@ -41,6 +42,7 @@ class DirectoryController : public QObject {
   Q_PROPERTY(int cursorRow READ cursorRow NOTIFY changed)
   Q_PROPERTY(DirectoryProxyModel* listing READ listing CONSTANT)
   Q_PROPERTY(PlacesModel* places READ places CONSTANT)
+  Q_PROPERTY(PathFinderModel* finder READ finder CONSTANT)
   Q_PROPERTY(DevicesModel* devices READ devices CONSTANT)
   Q_PROPERTY(SidebarNavigator* sidebarNavigator READ sidebarNavigator CONSTANT)
   // Sidebar rows may be activated or removed: Normal mode, no task prompt, no Quick Look
@@ -65,6 +67,7 @@ class DirectoryController : public QObject {
   int cursorRow() const { return navigation_.cursor_row_; }
   DirectoryProxyModel* listing() { return &navigation_.proxy_; }
   PlacesModel* places() { return &places_; }
+  PathFinderModel* finder() { return &finder_; }
   DevicesModel* devices() { return devices_; }
   SidebarNavigator* sidebarNavigator() { return &navigator_; }
   bool sidebarActivationEnabled() const;
@@ -75,6 +78,7 @@ class DirectoryController : public QObject {
   bool canGoBack() const { return navigation_.jump_list_.canGoBack(); }
   bool canGoForward() const { return navigation_.jump_list_.canGoForward(); }
   Q_INVOKABLE void open(const QString& path, const QString& fallbackReason = {});
+  Q_INVOKABLE bool acceptFinderResult(int row);
   // Bookmark activation entry point (SPEC.md REQ-F-022): PlaceRow calls this instead of open()
   // for origin === Bookmark rows. Home/XDG rows keep calling open(path) directly (unchanged --
   // both are guaranteed available whenever shown, REQ-C-005/REQ-C-006).
@@ -155,6 +159,7 @@ class DirectoryController : public QObject {
   void requestTrash(bool wholeVisualSelection);
 
   PlacesModel places_;
+  PathFinderModel finder_;
   DevicesModel* devices_;
   SidebarNavigator navigator_{&places_, devices_};  // After both models it walks.
   PreviewService preview_;

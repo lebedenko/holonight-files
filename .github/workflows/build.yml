@@ -39,6 +39,11 @@ jobs:
           repository: lebedenko/holonight-system-services
           ref: f93ae00fcb850426c433e4e9f97b569979f330d6
           path: holonight-system-services
+      - uses: actions/checkout@v4
+        with:
+          repository: lebedenko/holonight-search
+          ref: d12e441c06d1df87450514136c5a2d458d985ed3
+          path: holonight-search
       - name: Build CI image locally
         shell: bash
         run: |
@@ -54,7 +59,7 @@ jobs:
           mkdir -p files/build
           docker run --rm -v "$GITHUB_WORKSPACE:/work" files-ci \
             bash -euc 'trap "chown -R $(stat -c %u:%g /work/files) /work/files/build" EXIT;
-            for source in /work/files /work/holonight-config /work/holonight-qt /work/holonight-images /work/holonight-thumbnails /work/holonight-system-services; do
+            for source in /work/files /work/holonight-config /work/holonight-qt /work/holonight-images /work/holonight-thumbnails /work/holonight-system-services /work/holonight-search; do
               git config --system --add safe.directory "$source";
             done;
             task deps;
@@ -88,7 +93,7 @@ jobs:
           set -euo pipefail
           docker run --rm -v "$GITHUB_WORKSPACE:/work" files-ci \
             bash -euc 'trap "chown -R $(stat -c %u:%g /work/files) /work/files/build" EXIT;
-            for source in /work/files /work/holonight-config /work/holonight-qt /work/holonight-images /work/holonight-thumbnails /work/holonight-system-services; do
+            for source in /work/files /work/holonight-config /work/holonight-qt /work/holonight-images /work/holonight-thumbnails /work/holonight-system-services /work/holonight-search; do
               git config --system --add safe.directory "$source";
             done;
             task deps;

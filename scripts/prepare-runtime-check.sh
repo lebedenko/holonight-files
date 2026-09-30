@@ -3,7 +3,7 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 context=$(mktemp -d "$root/build/runtime-check.XXXXXX")
-for provider in holonight-config holonight-qt holonight-images holonight-thumbnails holonight-system-services; do
+for provider in holonight-config holonight-qt holonight-images holonight-thumbnails holonight-system-services holonight-search; do
   provider_build="$root/build/deps/$provider"
   if [[ "$provider" == holonight-config ]]; then
     provider_build=${HOLONIGHT_CONFIG_BUILD:-$provider_build}
@@ -13,6 +13,8 @@ for provider in holonight-config holonight-qt holonight-images holonight-thumbna
     provider_build=${HOLONIGHT_IMAGES_BUILD:-$provider_build}
   elif [[ "$provider" == holonight-thumbnails ]]; then
     provider_build=${HOLONIGHT_THUMBNAILS_BUILD:-$provider_build}
+  elif [[ "$provider" == holonight-search ]]; then
+    provider_build=${HOLONIGHT_SEARCH_BUILD:-$provider_build}
   else
     provider_build=${HOLONIGHT_SYSTEM_SERVICES_BUILD:-$provider_build}
   fi

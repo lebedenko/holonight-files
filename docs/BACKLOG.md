@@ -1,5 +1,15 @@
 # Backlog
 
+## Finder shared-engine adoption
+
+The recursive finder passed native UI, button, keyboard, and selection checks,
+but its ranking and speed failed acceptance. It is retained as a
+[UI prototype](sdd/fast-fuzzy-finding/VERIFICATION.md). The separate
+[ranking](sdd/finder-ranking-quality/README.md) and
+[performance](sdd/finder-performance/README.md) follow-ups are superseded by
+[shared search adoption](sdd/shared-search-adoption/README.md), coordinated in
+the umbrella shared search initiative.
+
 The [shared image outcomes cycle](sdd/shared-image-outcomes/SPEC.md) preserves raster categories
 and quiet metadata status. Local automated verification is recorded in its
 [verification report](sdd/shared-image-outcomes/VERIFICATION.md); local automated/native acceptance passed, including T5. The umbrella ledger

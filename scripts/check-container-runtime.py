@@ -47,7 +47,7 @@ def main():
     sources = work / "work"
     sources.mkdir()
     snapshot(ROOT, sources / "files")
-    for provider in ("config", "qt", "images", "thumbnails", "system-services"):
+    for provider in ("config", "qt", "images", "thumbnails", "system-services", "search"):
         variable = "HOLONIGHT_" + provider.upper().replace("-", "_") + "_SOURCE"
         source = Path(os.environ.get(variable, ROOT.parent / f"holonight-{provider}")).resolve()
         snapshot(source, sources / f"holonight-{provider}")

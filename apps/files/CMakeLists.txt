@@ -27,6 +27,10 @@ add_library(files-private STATIC
   browsing/directory_proxy_model.h
   browsing/fuzzy_matcher.cpp
   browsing/fuzzy_matcher.h
+  browsing/path_finder_model.cpp
+  browsing/path_finder_model.h
+  browsing/path_scanner.cpp
+  browsing/path_scanner.h
   browsing/jump_list.cpp
   browsing/jump_list.h
   browsing/location_classifier.cpp
@@ -95,7 +99,7 @@ target_include_directories(files-private PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/state"
   "${CMAKE_CURRENT_SOURCE_DIR}/places"
 )
-target_link_libraries(files-private PUBLIC HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images HolonightThumbnails::Thumbnails PRIVATE tomlplusplus::tomlplusplus)
+target_link_libraries(files-private PUBLIC HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images HolonightThumbnails::Thumbnails HolonightSearch::Search PRIVATE tomlplusplus::tomlplusplus)
 
 qt_extract_metatypes(files-private)
 
@@ -104,6 +108,7 @@ function(add_files_application target)
   set(module_qml)
   foreach(file
     qml/Main.qml
+    qml/PathFinderPopup.qml
     qml/AppHeaderBar.qml
     qml/listing/DirectoryListing.qml
     qml/places/PlacesPanel.qml

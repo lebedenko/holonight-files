@@ -3,6 +3,7 @@
 #include "devices_model.h"
 #include "directory_controller.h"
 #include "directory_proxy_model.h"
+#include "path_finder_model.h"
 #include "places_model.h"
 #include "preview_service.h"
 #include "sidebar_navigator.h"
@@ -36,6 +37,13 @@ struct PlacesModelRegistration {
   Q_GADGET
   QML_FOREIGN(PlacesModel)
   QML_NAMED_ELEMENT(PlacesModel)
+  QML_UNCREATABLE("Created by the application")
+};
+
+struct PathFinderModelRegistration {
+  Q_GADGET
+  QML_FOREIGN(PathFinderModel)
+  QML_NAMED_ELEMENT(PathFinderModel)
   QML_UNCREATABLE("Created by the application")
 };
 

@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFileInfo>
 
 DirectoryController::DirectoryController(QObject* parent) : DirectoryController(nullptr, parent) {}
 DirectoryController::DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
@@ -78,6 +79,23 @@ bool DirectoryController::sidebarActivationEnabled() const {
 }
 void DirectoryController::open(const QString& path, const QString& fallbackReason) {
   openInternal(path, fallbackReason, /*restoreName=*/{}, /*recordHistory=*/true);
+}
+bool DirectoryController::acceptFinderResult(int row) {
+  const auto path = finder_.pathAt(row);
+  if (path.isEmpty()) {
+    return false;
+  }
+  const QFileInfo info(path);
+  if (!info.exists() || info.isDir() != finder_.isDirectoryAt(row)) {
+    finder_.reportMissing(path);
+    return false;
+  }
+  if (info.isDir()) {
+    open(path);
+  } else {
+    openInternal(info.absolutePath(), {}, info.fileName(), true);
+  }
+  return true;
 }
 void DirectoryController::openInternal(const QString& requestedPath, const QString& fallbackReason,
                                        const QString& restoreName, bool recordHistory) {

@@ -104,7 +104,19 @@ machine. `v`/`V` enters VISUAL for range selection (`j`/`k`/`gg`/`G` extend it, 
 status-bar counter tracks the count; no operation consumes the selection yet).
 `/` enters SEARCH: a live fuzzy jump-to-match with substring highlighting, `n`/`N`
 to cycle committed matches (with wraparound) in NORMAL after `Enter`; SEARCH accepts
-literal n/N. `Escape` restores the original entry by filename identity. `i`/`I`/`a`/`A` rename the selected entry
+literal n/N. `Escape` restores the original entry by filename identity.
+`Ctrl+G` opens Jump to Directory and `Ctrl+P` opens Find File. Each searches recursively
+from Home or the folder visible when the finder opened; choose the root in the popup.
+Type a name or path, use Up/Down to choose, and press Enter. A file result opens its
+parent folder and selects the file. Hidden entries are skipped unless Include hidden
+is selected; symlinked folders are never traversed. Space-separated terms match
+in either order, and uppercase characters make the query case-sensitive.
+Results appear during the scan and cached results appear when a root is reopened.
+`/` continues to search only the visible listing.
+The initial finder popup is retained while its backend moves to the
+[shared search engine](docs/sdd/shared-search-adoption/README.md).
+
+`i`/`I`/`a`/`A` rename the selected entry
 in place (cursor at the start/end); pressing `Enter` with the name unchanged just
 touches its modification time, a changed name renames it, `Escape` discards the
 edit with no side effect. `o`/`O` create a new file or folder inline, positioned
