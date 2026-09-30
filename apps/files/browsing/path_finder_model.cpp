@@ -131,14 +131,19 @@ void PathFinderModel::setRoot(const QString& rootPath) {
   ++rank_serial_;
   root_path_ = QDir::cleanPath(rootPath);
   error_.clear();
-  scanning_ = true;
-  refresh_started_ = false;
-  indexed_count_ = 0;
-  missing_paths_.clear();
+  const auto& cache = include_hidden_ ? hidden_cache_ : visible_cache_;
+  const auto& completeRoots = include_hidden_ ? complete_hidden_roots_ : complete_visible_roots_;
+  const auto cached = cache.value(root_path_);
+  const bool complete = cached && completeRoots.contains(root_path_);
+  scanning_ = !complete;
+  refresh_started_ = complete;
+  indexed_count_ = complete ? static_cast<int>(cached->size()) : 0;
   replaceRows({});
   emit stateChanged();
   rank_timer_.start(0);  // Show any cached paths immediately.
-  scan();
+  if (!complete) {
+    scan();
+  }
 }
 
 void PathFinderModel::setIncludeHidden(bool includeHidden) {
@@ -214,6 +219,9 @@ void PathFinderModel::finishScan(const QString& root, quint64 serial, bool inclu
   }
   if (!refresh_started_) {
     (includeHidden ? hidden_cache_ : visible_cache_).insert(root, index);
+  }
+  if (available) {
+    (includeHidden ? complete_hidden_roots_ : complete_visible_roots_).insert(root);
   }
   error_ = available ? QString{} : tr("Search root is unavailable or unreadable");
   scanning_ = false;

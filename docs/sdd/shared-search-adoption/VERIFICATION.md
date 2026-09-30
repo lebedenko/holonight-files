@@ -6,7 +6,8 @@ Date: 2026-09-30. Provider baseline: published and pinned `holonight-search` `d1
 
 - `task deps`: installed the exact provider revision in Files' dependency prefix.
 - `cmake --build build/test --target files-smoke`: passed.
-- `files-smoke --gtest_filter='PathFinderModel.*'` with offscreen/software Qt: 11 tests passed, covering both term orders, cross-field paths, smart case, filename highlights, hidden opt-in, partial results during a paused scan, directory/file filtering, stale query/root cancellation, cache refresh, and navigation.
+- `files-smoke --gtest_filter='PathFinderModel.*'` with offscreen/software Qt: 11 tests passed in the initial provider adoption, covering both term orders, cross-field paths, smart case, filename highlights, hidden opt-in, partial results during a paused scan, directory/file filtering, stale query/root cancellation, cache refresh, and navigation.
+- The session-cache correction passed 12 focused `PathFinderModel.*` tests: reopening either finder and switching between file and directory mode reuse a completed scan; an interrupted scan retries. `task format-check`, focused clang-tidy, and the Release `hn-files` build passed. Native confirmation is pending.
 - `bash tests/shared_provider_revisions_test.sh .`: passed after adding the provider to revision tracking.
 - `files-smoke --gtest_filter='FuzzyMatcher.*:VimModeController.*'`: 27 listing-search and modal regression tests passed.
 - Debug and Release application builds, `task format-check`, `task qml-import-check`, `task qml-lint`, `task qmltypes-check`, full `task tidy`, `task license-check`, and `task install-check` passed. Focused tidy passed after the final finder correction.

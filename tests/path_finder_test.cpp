@@ -128,6 +128,7 @@ TEST(PathFinderModel, HiddenPathsRequireExplicitOptIn) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return model.rowCount() == 1; }, 5000));
   EXPECT_EQ(model.pathAt(0), directory.path() + "/.private/audit.txt");
   model.setIncludeHidden(false);
+  EXPECT_FALSE(model.scanning());
   ASSERT_TRUE(settled(model));
   ASSERT_TRUE(QTest::qWaitFor([&] { return model.rowCount() == 0; }, 5000));
 }
@@ -172,24 +173,66 @@ TEST(PathFinderModel, FileAcceptanceOpensParentAndRestoresSelection) {
   EXPECT_TRUE(QTest::qWaitFor([&] { return controller.finder()->rowCount() == 0; }, 5000));
 }
 
-TEST(PathFinderModel, DirectoryFilteringAndWarmCacheRefresh) {
+TEST(PathFinderModel, ReopeningAndSwitchingModesReuseCompletedScan) {
   QTemporaryDir directory;
   ASSERT_TRUE(directory.isValid());
   ASSERT_TRUE(QDir(directory.path()).mkdir("project"));
   ASSERT_TRUE(touch(directory.path() + "/project.txt"));
-  PathFinderModel model;
-  model.start(directory.path(), true);
+  std::atomic_int scanCount = 0;
+  PathScanFunction scanner = [&scanCount](const QString& root, bool, const std::atomic_bool&,
+                                          const PathBatchReady& batchReady) {
+    ++scanCount;
+    batchReady({{.path = root + "/project", .relativePath = "project", .directory = true},
+                {.path = root + "/project.txt", .relativePath = "project.txt", .directory = false}});
+    return true;
+  };
+  PathFinderModel model(scanner);
+  model.start(directory.path(), false);
   model.setQuery("project");
   ASSERT_TRUE(settled(model));
   ASSERT_TRUE(hasResults(model));
+  EXPECT_FALSE(model.isDirectoryAt(0));
+  EXPECT_EQ(model.indexedCount(), 2);
+  model.stop();
+  model.start(directory.path(), true);
+  EXPECT_FALSE(model.scanning());
+  EXPECT_EQ(model.indexedCount(), 2);
+  model.setQuery("project");
+  ASSERT_TRUE(hasResults(model));
   EXPECT_TRUE(model.isDirectoryAt(0));
   model.stop();
-  ASSERT_TRUE(QDir(directory.path()).mkdir("project-two"));
-  model.start(directory.path(), true);
+  model.start(directory.path(), false);
   model.setQuery("project");
-  ASSERT_TRUE(hasResults(model));  // Cached result is available before refresh settles.
+  ASSERT_TRUE(hasResults(model));
+  EXPECT_FALSE(model.scanning());
+  EXPECT_EQ(scanCount.load(), 1);
+}
+
+TEST(PathFinderModel, InterruptedScanRestartsOnReopen) {
+  QSemaphore continueScan;
+  std::atomic_int scanCount = 0;
+  PathScanFunction scanner = [&continueScan, &scanCount](const QString& root, bool, const std::atomic_bool&,
+                                                         const PathBatchReady& batchReady) {
+    const int call = ++scanCount;
+    batchReady({{.path = root + "/lambda.cpp", .relativePath = "lambda.cpp", .directory = false}});
+    if (call == 1) {
+      continueScan.acquire();
+    }
+    return true;
+  };
+  PathFinderModel model(scanner);
+  model.start(QStringLiteral("/synthetic"), false);
+  model.setQuery(QStringLiteral("lambda"));
+  const bool partial = hasResults(model);
+  const bool stillScanning = model.scanning();
+  model.stop();
+  continueScan.release();
+  EXPECT_TRUE(partial);
+  EXPECT_TRUE(stillScanning);
+  model.start(QStringLiteral("/synthetic"), false);
+  EXPECT_TRUE(model.scanning());
   ASSERT_TRUE(settled(model));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return model.rowCount() == 2; }, 5000));
+  EXPECT_EQ(scanCount.load(), 2);
 }
 
 TEST(PathFinderModel, MissingRootReportsErrorAndObsoleteQueryDoesNotReturn) {

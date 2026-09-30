@@ -111,7 +111,9 @@ Type a name or path, use Up/Down to choose, and press Enter. A file result opens
 parent folder and selects the file. Hidden entries are skipped unless Include hidden
 is selected; symlinked folders are never traversed. Space-separated terms match
 in either order, and uppercase characters make the query case-sensitive.
-Results appear during the scan and cached results appear when a root is reopened.
+Results appear during the initial scan. A completed scan is reused when either finder
+reopens or switches between file and directory mode; each root and hidden-path setting
+has its own session cache. An interrupted scan restarts when that root is reopened.
 `/` continues to search only the visible listing.
 The initial finder popup is retained while its backend moves to the
 [shared search engine](docs/sdd/shared-search-adoption/README.md).

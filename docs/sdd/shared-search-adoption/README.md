@@ -16,7 +16,7 @@ The [umbrella initiative](../../../../docs/initiatives/shared-search-engine/READ
 
 ## Design
 
-`PathScanner` remains the only filesystem traversal layer. `PathFinderModel` owns one session index per root and pushes scanned batches into it. It requests capped results from a worker thread and maps returned stable path IDs to navigation data. The source is split by path kind, so directory and file mode do not waste rank work on the other kind. A root or hidden-policy change cancels obsolete work and replaces the relevant snapshots. `PathFinderPopup.qml` keeps its interaction and layout, adding only an include-hidden control.
+`PathScanner` remains the only filesystem traversal layer. `PathFinderModel` owns one session index per root and hidden-path setting and pushes scanned batches into it. It requests capped results from a worker thread and maps returned stable path IDs to navigation data. The source is split by path kind, so directory and file mode share a completed scan without ranking the other kind. Each completed snapshot is reused for the session; an interrupted or unavailable scan is retried when reopened. A root or hidden-policy change cancels obsolete work. `PathFinderPopup.qml` keeps its interaction and layout, adding only an include-hidden control.
 
 ## Tasks
 

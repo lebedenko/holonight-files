@@ -79,6 +79,8 @@ class PathFinderModel : public QAbstractListModel {
   std::shared_ptr<std::atomic_bool> rank_cancel_;
   QHash<QString, std::shared_ptr<HolonightSearch::Index>> visible_cache_;
   QHash<QString, std::shared_ptr<HolonightSearch::Index>> hidden_cache_;
+  QSet<QString> complete_visible_roots_;
+  QSet<QString> complete_hidden_roots_;
   QSet<QString> missing_paths_;
   QVector<Row> rows_;
   QThreadPool pool_;
