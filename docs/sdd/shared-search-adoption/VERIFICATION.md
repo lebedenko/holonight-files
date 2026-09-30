@@ -7,7 +7,7 @@ Date: 2026-09-30. Provider baseline: published and pinned `holonight-search` `d1
 - `task deps`: installed the exact provider revision in Files' dependency prefix.
 - `cmake --build build/test --target files-smoke`: passed.
 - `files-smoke --gtest_filter='PathFinderModel.*'` with offscreen/software Qt: 11 tests passed in the initial provider adoption, covering both term orders, cross-field paths, smart case, filename highlights, hidden opt-in, partial results during a paused scan, directory/file filtering, stale query/root cancellation, cache refresh, and navigation.
-- The session-cache correction passed 12 focused `PathFinderModel.*` tests: reopening either finder and switching between file and directory mode reuse a completed scan; an interrupted scan retries. `task format-check`, focused clang-tidy, and the Release `hn-files` build passed. The user confirmed on 2026-09-30 that neither finder rescans after reopening with the same root. The wider native finder check remains pending.
+- The session-cache correction passed 12 focused `PathFinderModel.*` tests: reopening either finder and switching between file and directory mode reuse a completed scan; an interrupted scan retries. `task format-check`, focused clang-tidy, and the Release `hn-files` build passed. On 2026-09-30 the user confirmed that both dialogs reuse the completed scan and that the native shortcuts, roots, hidden toggle, term orders, responsiveness, and result navigation all passed.
 - `bash tests/shared_provider_revisions_test.sh .`: passed after adding the provider to revision tracking.
 - `files-smoke --gtest_filter='FuzzyMatcher.*:VimModeController.*'`: 27 listing-search and modal regression tests passed.
 - Debug and Release application builds, `task format-check`, `task qml-import-check`, `task qml-lint`, `task qmltypes-check`, full `task tidy`, `task license-check`, and `task install-check` passed. Focused tidy passed after the final finder correction.
@@ -34,10 +34,11 @@ Twenty warm samples timed from `setQuery` (final keystroke equivalent) to the mo
 | `audit lambda` | 5 ms | 5 ms |
 | `document 42` | 62 ms | 76 ms |
 
-This satisfies the model-path p95 target. It does not measure QML paint timing or native input delivery. The memory footprint is substantial relative to fzf's one-shot filter; no maximum memory target was defined. Real filesystem traversal speed and the user-performed native finder check remain pending.
+This satisfies the model-path p95 target. It does not measure QML paint timing or native input delivery. The memory footprint is substantial relative to fzf's one-shot filter; no maximum memory target was defined. Real filesystem traversal speed was not separately benchmarked; the user-performed native finder check passed.
 
 ## Remaining acceptance
 
 - [x] Complete Debug/Release builds, formatting, lint, license, install, and isolated runtime checks; the only clean-build warnings are holonight-qt's declared Qt private-header warnings.
-- [ ] User performs native finder check for popup controls, hidden toggle, both term orders, responsiveness, and navigation.
-- [ ] Publish Files only after local acceptance; then pin the published revision and run umbrella integration review.
+- [x] User performed the native finder check for popup controls, hidden toggle, both term orders, responsiveness, navigation, and scan reuse on 2026-09-30.
+- [x] Files implementation was published and pinned at `51cef84`.
+- [ ] Publish the verification update and run umbrella integration review.

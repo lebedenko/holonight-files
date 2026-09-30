@@ -1,6 +1,6 @@
 # Shared search adoption in Files
 
-Status: Implementation in progress. Provider `d12e441` is published and pinned in the umbrella.
+Status: Locally accepted. Provider `d12e441` is published and pinned in the umbrella; Files implementation is published at `51cef84`.
 
 The [umbrella initiative](../../../../docs/initiatives/shared-search-engine/README.md) owns coordination. Files owns traversal, hidden-path policy, worker scheduling, result navigation, and the existing QML popup.
 
@@ -25,6 +25,6 @@ The [umbrella initiative](../../../../docs/initiatives/shared-search-engine/READ
 | F1 | Record prototype failure and supersede Files-only follow-ups | Done |
 | F2 | Adopt published provider, stream batches, replace ranking | Done |
 | F3 | Hidden-path option, cancellation, focused regression tests | Done |
-| F4 | Required local checks and native finder acceptance | In Progress |
+| F4 | Required local checks and native finder acceptance | Done |
 
-See [verification](VERIFICATION.md) for measured results and remaining checks. The finder is not accepted until the local gates and user-performed native check pass.
+See [verification](VERIFICATION.md) for measured results and the native finder check. Umbrella integration remains separate.
