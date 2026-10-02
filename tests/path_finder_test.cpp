@@ -1,6 +1,8 @@
 #include "directory_controller.h"
+#include "directory_fixtures.h"
 #include "engine_setup.h"
 #include "path_finder_model.h"
+#include "path_index_store.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -214,7 +216,7 @@ TEST(PathFinderModel, ReopeningAndSwitchingModesReuseCompletedScan) {
   EXPECT_EQ(scanCount.load(), 1);
 }
 
-TEST(PathFinderModel, InterruptedScanRestartsOnReopen) {
+TEST(PathFinderModel, PopupClosureKeepsScanAndReopeningAttaches) {
   QSemaphore continueScan;
   std::atomic_int scanCount = 0;
   PathScanFunction scanner = [&continueScan, &scanCount](const QString& root, bool, const SearchExclusionPolicy&,
@@ -238,7 +240,7 @@ TEST(PathFinderModel, InterruptedScanRestartsOnReopen) {
   model.start(QStringLiteral("/synthetic"), false);
   EXPECT_TRUE(model.scanning());
   ASSERT_TRUE(settled(model));
-  EXPECT_EQ(scanCount.load(), 2);
+  EXPECT_EQ(scanCount.load(), 1);
 }
 
 TEST(PathFinderModel, MissingRootReportsErrorAndObsoleteQueryDoesNotReturn) {
@@ -308,4 +310,261 @@ TEST(PathFinderModel, FinderPopupLoadsInApplicationQml) {
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
   EXPECT_NE(engine.rootObjects().first()->findChild<QObject*>("pathFinderPopup"), nullptr);
+}
+
+TEST(PathFinderModel, DirtyRefreshKeepsCompleteSnapshotAndRecreatesMissingPaths) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(touch(dir.filePath("needle.txt")));
+  QSemaphore release;
+  std::atomic_int scans = 0;
+  std::atomic_bool entered = false;
+  PathFinderModel model([&](const QString& root, bool hidden, const SearchExclusionPolicy& policy,
+                            const std::atomic_bool& cancelled, const PathBatchReady& ready) {
+    if (++scans == 2) {
+      entered.store(true);
+      release.acquire();
+    }
+    return scanPaths(root, hidden, policy, cancelled, ready);
+  });
+  model.start(dir.path(), false);
+  model.setQuery("needle");
+  ASSERT_TRUE(settled(model));
+  ASSERT_TRUE(hasResults(model));
+  model.invalidatePaths({dir.path()});
+  const bool refreshing = QTest::qWaitFor([&] { return entered.load(); }, 5000);
+  const auto visibleDuringRefresh = model.pathAt(0);
+  model.reportMissing(dir.filePath("needle.txt"));
+  release.release();
+  EXPECT_TRUE(refreshing);
+  EXPECT_EQ(visibleDuringRefresh, dir.filePath("needle.txt"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return scans.load() >= 3 && !model.scanning(); }, 5000));
+  ASSERT_TRUE(hasResults(model));
+  EXPECT_EQ(model.pathAt(0), dir.filePath("needle.txt"));
+}
+
+TEST(PathFinderModel, FreshnessUsesInjectedTimeAndIdleChangesWaitForReopen) {
+  qint64 now = 1000000;
+  std::atomic_int scans = 0;
+  PathFinderModel model(
+      [&](const QString&, bool, const SearchExclusionPolicy&, const std::atomic_bool&, const PathBatchReady&) {
+        ++scans;
+        return true;
+      });
+  model.setClock([&] { return now; });
+  model.start("/synthetic", false);
+  ASSERT_TRUE(settled(model));
+  model.stop();
+  now += 299999;
+  model.start("/synthetic", false);
+  EXPECT_FALSE(model.scanning());
+  EXPECT_EQ(scans.load(), 1);
+  model.stop();
+  ++now;
+  model.start("/synthetic", false);
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(scans.load(), 2);
+  model.stop();
+  model.invalidatePaths({"/synthetic/child"});
+  EXPECT_EQ(scans.load(), 2);
+  model.start("/synthetic", false);
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(scans.load(), 3);
+  model.stop();
+  model.invalidatePaths({"/synthetic-other"});
+  model.start("/synthetic", false);
+  EXPECT_FALSE(model.scanning());
+  EXPECT_EQ(scans.load(), 3);
+}
+
+TEST(PathFinderModel, PeriodicRefreshRetriesFailuresAtIntervalAndStopsWhenClosed) {
+  std::atomic_int scans = 0;
+  PathFinderModel model(
+      [&](const QString&, bool, const SearchExclusionPolicy&, const std::atomic_bool&, const PathBatchReady&) {
+        ++scans;
+        return false;
+      });
+  model.setRefreshInterval(200);
+  model.start("/unavailable", false);
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(scans.load(), 1);
+  EXPECT_FALSE(model.error().isEmpty());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return scans.load() >= 2; }, 5000));
+  model.stop();
+  const int closedCount = scans.load();
+  // Process enough event turns to cross the selected test interval.
+  QElapsedTimer timer;
+  timer.start();
+  ASSERT_TRUE(QTest::qWaitFor([&] { return timer.elapsed() >= 250; }, 1000));
+  EXPECT_EQ(scans.load(), closedCount);
+}
+
+TEST(PathFinderModel, InvalidationDebouncesAndRejectsCancelledGeneration) {
+  QSemaphore release;
+  std::atomic_int scans = 0;
+  std::atomic_bool entered = false;
+  PathFinderModel model([&](const QString& root, bool, const SearchExclusionPolicy&, const std::atomic_bool&,
+                            const PathBatchReady& ready) {
+    const auto call = ++scans;
+    if (call == 1) {
+      entered.store(true);
+      release.acquire();
+    }
+    const QString name = call == 1 ? "obsolete.txt" : "replacement.txt";
+    ready({{.path = root + u'/' + name, .relativePath = name, .directory = false}});
+    return true;
+  });
+  model.start("/synthetic", false);
+  const bool started = QTest::qWaitFor([&] { return entered.load(); }, 5000);
+  model.invalidatePaths({"/synthetic/a"});
+  model.invalidatePaths({"/synthetic/b"});
+  model.invalidatePaths({"/synthetic/c"});
+  release.release();
+  EXPECT_TRUE(started);
+  ASSERT_TRUE(settled(model));
+  model.setQuery("obsolete");
+  QSignalSpy reset(&model, &QAbstractItemModel::modelReset);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !reset.isEmpty(); }, 5000));
+  EXPECT_EQ(model.rowCount(), 0);
+  model.setQuery("replacement");
+  ASSERT_TRUE(hasResults(model));
+  EXPECT_EQ(scans.load(), 2);
+}
+
+TEST(PathFinderModel, ShutdownIsAsynchronousAndDiscardsLateScanResults) {
+  QSemaphore release;
+  std::atomic_bool entered = false;
+  PathFinderModel model([&](const QString& root, bool, const SearchExclusionPolicy&, const std::atomic_bool&,
+                            const PathBatchReady& ready) {
+    entered.store(true);
+    release.acquire();
+    ready({{.path = root + "/obsolete.txt", .relativePath = "obsolete.txt", .directory = false}});
+    return true;
+  });
+  model.start("/synthetic", false);
+  const bool started = QTest::qWaitFor([&] { return entered.load(); }, 5000);
+  QSignalSpy finished(&model, &PathFinderModel::shutdownFinished);
+  model.shutdown();
+  EXPECT_TRUE(finished.isEmpty());
+  release.release();
+  EXPECT_TRUE(started);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !finished.isEmpty(); }, 5000));
+  EXPECT_EQ(model.rowCount(), 0);
+}
+
+namespace {
+struct FinderCacheEnvironment {
+  QTemporaryDir directory;
+  files_test::ScopedEnvironmentVariable cache{"XDG_CACHE_HOME", directory.path()};
+};
+}  // namespace
+
+TEST(PathFinderModel, HomeWarmupAttachesAndPersistsAcrossModelRestart) {
+  FinderCacheEnvironment environment;
+  QSemaphore release;
+  std::atomic_int scans = 0;
+  std::atomic_bool entered = false;
+  {
+    PathFinderModel model([&](const QString& root, bool, const SearchExclusionPolicy&, const std::atomic_bool&,
+                              const PathBatchReady& ready) {
+      ++scans;
+      entered.store(true);
+      ready({
+          {.path = root + "/project.txt", .relativePath = "project.txt", .directory = false},
+          {.path = root + "/project", .relativePath = "project", .directory = true},
+      });
+      release.acquire();
+      return true;
+    });
+    model.warmUp();
+    model.warmUp();
+    const bool started = QTest::qWaitFor([&] { return entered.load(); }, 5000);
+    model.start(PathFinderModel::homePath(), false);
+    model.setQuery("project");
+    const bool progressive = hasResults(model);
+    model.stop();
+    release.release();
+    model.start(PathFinderModel::homePath(), false);
+    EXPECT_TRUE(started);
+    EXPECT_TRUE(progressive);
+    ASSERT_TRUE(settled(model));
+    EXPECT_EQ(scans.load(), 1);
+  }
+  EXPECT_TRUE(QFile::exists(PathIndexStore::cachePath()));
+  entered.store(false);
+  PathFinderModel restored([&](const QString& root, bool, const SearchExclusionPolicy&, const std::atomic_bool&,
+                               const PathBatchReady& ready) {
+    ++scans;
+    entered.store(true);
+    release.acquire();
+    ready({{.path = root + "/new.txt", .relativePath = "new.txt", .directory = false}});
+    return true;
+  });
+  restored.warmUp();
+  restored.start(PathFinderModel::homePath(), true);
+  restored.setQuery("project");
+  const bool reused = hasResults(restored);
+  const bool directory = restored.isDirectoryAt(0);
+  const bool refreshing = restored.scanning();
+  release.release();
+  EXPECT_TRUE(reused);
+  EXPECT_TRUE(directory);
+  EXPECT_TRUE(refreshing);
+  ASSERT_TRUE(settled(restored));
+  EXPECT_EQ(scans.load(), 2);
+  restored.start(PathFinderModel::homePath(), false);
+  restored.setQuery("new");
+  ASSERT_TRUE(hasResults(restored));
+  EXPECT_EQ(restored.pathAt(0), PathFinderModel::homePath() + "/new.txt");
+}
+
+TEST(PathFinderModel, ForegroundRootPreemptsHomeAndWarmupResumes) {
+  FinderCacheEnvironment environment;
+  QSemaphore release;
+  std::atomic_int homeScans = 0;
+  std::atomic_bool entered = false;
+  std::atomic_bool homeFinished = false;
+  PathFinderModel model([&](const QString& root, bool, const SearchExclusionPolicy&, const std::atomic_bool& cancelled,
+                            const PathBatchReady& ready) {
+    if (root == PathFinderModel::homePath()) {
+      if (++homeScans == 1) {
+        entered.store(true);
+        release.acquire();
+      } else {
+        homeFinished.store(true);
+      }
+    }
+    // Deliberately emit even after cancellation to exercise the generation guard.
+    ready({{.path = root + "/needle.txt", .relativePath = "needle.txt", .directory = false}});
+    return !cancelled.load();
+  });
+  model.warmUp();
+  const bool started = QTest::qWaitFor([&] { return entered.load(); }, 5000);
+  model.start("/foreground", false);
+  model.setQuery("needle");
+  release.release();
+  EXPECT_TRUE(started);
+  ASSERT_TRUE(settled(model));
+  ASSERT_TRUE(hasResults(model));
+  EXPECT_EQ(model.pathAt(0), "/foreground/needle.txt");
+  ASSERT_TRUE(QTest::qWaitFor([&] { return homeFinished.load(); }, 5000));
+  EXPECT_EQ(homeScans.load(), 2);
+}
+
+TEST(PathFinderModel, UnavailableCachedRootClearsResultsOnReopen) {
+  QTemporaryDir parent;
+  ASSERT_TRUE(QDir(parent.path()).mkdir("root"));
+  const auto root = parent.filePath("root");
+  ASSERT_TRUE(touch(root + "/needle.txt"));
+  PathFinderModel model;
+  model.start(root, false);
+  model.setQuery("needle");
+  ASSERT_TRUE(settled(model));
+  ASSERT_TRUE(hasResults(model));
+  model.stop();
+  ASSERT_TRUE(QDir(parent.path()).rename("root", "removed"));
+  model.start(root, false);
+  model.setQuery("needle");
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !model.error().isEmpty(); }, 5000));
+  EXPECT_EQ(model.rowCount(), 0);
+  EXPECT_EQ(model.indexedCount(), 0);
 }

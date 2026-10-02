@@ -1,13 +1,19 @@
 #include "path_finder_model.h"
+#include "path_index_store.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 
 #include <algorithm>
+#include <holonight/search/index.h>
 #include <iostream>
 #include <optional>
 
@@ -74,11 +80,132 @@ std::optional<QVector<qint64>> measureQuery(PathFinderModel& model, const QStrin
   std::ranges::sort(samples);
   return samples;
 }
+void reconstructBatch(HolonightSearch::Index& index, const QVector<PathCandidate>& batch) {
+  QVector<HolonightSearch::Record> files;
+  QVector<HolonightSearch::Record> directories;
+  for (const auto& candidate : batch) {
+    HolonightSearch::Record record{
+        .id = candidate.path,
+        .fields =
+            {
+                {.name = QStringLiteral("name"), .text = QFileInfo(candidate.relativePath).fileName(), .weight = 0},
+                {.name = QStringLiteral("path"), .text = candidate.relativePath, .weight = 0},
+            },
+        .boost = 0,
+    };
+    (candidate.directory ? directories : files).append(std::move(record));
+  }
+  index.append(QStringLiteral("files"), std::move(files));
+  index.append(QStringLiteral("directories"), std::move(directories));
+}
+
+bool measureColdSearch(const QString& root) {
+  PathFinderModel cold;
+  QElapsedTimer timer;
+  timer.start();
+  cold.start(root, false);
+  if (!QTest::qWaitFor([&] { return !cold.scanning(); }, 120000)) {
+    return false;
+  }
+  std::cout << "cold_index_readiness_ms=" << timer.elapsed() << " records=" << cold.indexedCount() << '\n';
+  const auto samples = measureQuery(cold, QStringLiteral("path finder"));
+  if (!samples) {
+    return false;
+  }
+  std::cout << "cold_query_p50_ms=" << samples->at(10) << " cold_query_p95_ms=" << samples->at(18) << '\n';
+  return true;
+}
+
+int persistenceBenchmark(const QString& root) {
+  QTemporaryDir directory;
+  const auto path = directory.filePath("snapshot");
+  qputenv("XDG_CACHE_HOME", directory.filePath("cache").toUtf8());
+  qputenv("XDG_CONFIG_HOME", directory.filePath("config").toUtf8());
+  if (!measureColdSearch(root)) {
+    return 11;
+  }
+  QStringList diagnostics;
+  const auto policy = SearchExclusionPolicy::compile(SearchSettings(), diagnostics);
+  const std::atomic_bool cancelled = false;
+  QElapsedTimer timer;
+  timer.start();
+  {
+    PathIndexStore writer(path, root, policy.fingerprint());
+    if (!scanPaths(root, false, policy, cancelled,
+                   [&](const QVector<PathCandidate>& batch) { writer.append(batch); }) ||
+        !writer.commit(QDateTime::currentMSecsSinceEpoch(), cancelled)) {
+      return 6;
+    }
+  }
+  std::cout << "cold_traversal_persist_ms=" << timer.elapsed() << " disk_bytes=" << QFileInfo(path).size() << '\n';
+  qint64 reconstructionNs = 0;
+  qint64 completed = 0;
+  HolonightSearch::Index index;
+  timer.restart();
+  const bool valid = PathIndexStore::load(
+      path, root, policy.fingerprint(), cancelled,
+      [&](const QVector<PathCandidate>& batch) {
+        QElapsedTimer reconstruction;
+        reconstruction.start();
+        reconstructBatch(index, batch);
+        reconstructionNs += reconstruction.nsecsElapsed();
+      },
+      completed);
+  if (!valid) {
+    return 7;
+  }
+  std::cout << "restored_readiness_ms=" << timer.elapsed() << " reconstruction_ms=" << reconstructionNs / 1000000
+            << " records=" << index.size() << '\n';
+  timer.restart();
+  const auto results = index.search(QStringLiteral("path finder"), {
+                                                                       .limit = 96,
+                                                                       .profile = HolonightSearch::Profile::Path,
+                                                                       .cancelled = &cancelled,
+                                                                       .source = QStringLiteral("files"),
+                                                                   });
+  std::cout << "restored_query_ms=" << timer.elapsed() << " hits=" << results.size() << '\n';
+  printMemory();
+  bool first = true;
+  PathFinderModel model([&](const QString& selected, bool hidden, const SearchExclusionPolicy& exclusions,
+                            const std::atomic_bool& cancel, const PathBatchReady& ready) {
+    if (first) {
+      first = false;
+      qint64 scanTime = 0;
+      return PathIndexStore::load(path, selected, exclusions.fingerprint(), cancel, ready, scanTime);
+    }
+    return scanPaths(selected, hidden, exclusions, cancel, ready);
+  });
+  model.start(root, false);
+  if (!QTest::qWaitFor([&] { return !model.scanning(); }, 120000)) {
+    return 8;
+  }
+  std::cout << "refresh_baseline_memory:" << '\n';
+  printMemory();
+  model.invalidatePaths({root});
+  if (!QTest::qWaitFor([&] { return model.scanning(); }, 5000)) {
+    return 9;
+  }
+  const auto samples = measureQuery(model, QStringLiteral("path finder"));
+  if (!samples) {
+    return 10;
+  }
+  std::cout << "refresh_query_p50_ms=" << samples->at(10) << " refresh_query_p95_ms=" << samples->at(18) << '\n';
+  printMemory();
+  if (!QTest::qWaitFor([&] { return !model.scanning(); }, 120000)) {
+    return 12;
+  }
+  std::cout << "refresh_complete_memory:" << '\n';
+  printMemory();
+  return 0;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
   QCoreApplication app(argc, argv);
   const QStringList arguments = QCoreApplication::arguments();
+  if (arguments.size() == 3 && arguments.at(1) == QStringLiteral("--persist")) {
+    return persistenceBenchmark(QDir(arguments.at(2)).absolutePath());
+  }
   if (arguments.size() == 3 && arguments.at(1) == QStringLiteral("--traverse")) {
     const QString& root = arguments.at(2);
     QStringList diagnostics;

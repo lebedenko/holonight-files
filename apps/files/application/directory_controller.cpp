@@ -34,6 +34,7 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
           [this](const QString& path, LocationClassifier::Classification classification) {
             lifecycle_.last_location_tracker_.recordLoad(path, classification);
           });
+  connect(&finder_, &PathFinderModel::shutdownFinished, this, [this] { lifecycle_.workerFinished(&finder_); });
   connect(&preview_, &PreviewService::shutdownFinished, this, [this] { lifecycle_.workerFinished(&preview_); });
   connect(&vim_, &VimModeController::changed, this, &DirectoryController::changed);
   connect(&tasks_, &TaskManager::changed, this, [this] {
@@ -47,6 +48,7 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
   connect(&tasks_, &TaskManager::taskFinished, this, [this](const QStringList& affectedDirs) {
     // Renders through the same normalStatusLabel/statusMessage channel open()'s fallbackReason
     // already uses (REQ-F-034/035) — no new ModeStatusBar branch needed for the summary itself.
+    finder_.invalidatePaths(affectedDirs);
     status_message_ = tasks_.lastSummaryText();
     devices_->refreshCapacity();  // A copy or delete just changed free space somewhere.
     // In addition to (not instead of) the existing QFileSystemWatcher-driven refresh, so the
@@ -65,11 +67,13 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
   connect(&navigation_.proxy_, &QAbstractItemModel::modelReset, this, &DirectoryController::listingChanged);
   connect(&navigation_.proxy_, &QAbstractItemModel::layoutChanged, this, &DirectoryController::listingChanged);
   connect(&navigation_.proxy_, &QAbstractItemModel::dataChanged, this, &DirectoryController::listingChanged);
-  connect(&navigation_.watcher_, &QFileSystemWatcher::directoryChanged, this, [this] {
+  connect(&navigation_.watcher_, &QFileSystemWatcher::directoryChanged, this, [this](const QString& path) {
+    finder_.invalidatePaths({path});
     ++preview_selection_.preview_revision_;
     navigation_.model_.refresh();
   });
-  connect(&navigation_.watcher_, &QFileSystemWatcher::fileChanged, this, [this] {
+  connect(&navigation_.watcher_, &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
+    finder_.invalidatePaths({path});
     ++preview_selection_.preview_revision_;
     navigation_.model_.refresh();
   });
@@ -263,10 +267,12 @@ void DirectoryController::shutdown() { lifecycle_.shutdown(); }
 
 int DirectoryController::takeCount() { return commands_.takeCount(); }
 bool DirectoryController::handleKey(const QString& key) {
-  const auto command = commands_.route(key, {.mode = vim_.currentMode(),
-                                             .prompt = tasks_.promptKind(),
-                                             .quickLookOpen = quickLookOpen(),
-                                             .canPreview = canPreviewSelection()});
+  const auto command = commands_.route(key, {
+                                                .mode = vim_.currentMode(),
+                                                .prompt = tasks_.promptKind(),
+                                                .quickLookOpen = quickLookOpen(),
+                                                .canPreview = canPreviewSelection(),
+                                            });
   execute(command);
   return command.consumed;
 }

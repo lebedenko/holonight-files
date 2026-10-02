@@ -29,6 +29,8 @@ add_library(files-private STATIC
   browsing/fuzzy_matcher.h
   browsing/path_finder_model.cpp
   browsing/path_finder_model.h
+  browsing/path_index_store.cpp
+  browsing/path_index_store.h
   browsing/path_scanner.cpp
   browsing/path_scanner.h
   browsing/search_exclusion_policy.cpp

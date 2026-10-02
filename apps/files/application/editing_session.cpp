@@ -119,6 +119,7 @@ void EditingSession::commitInsertEditing() {
     return;
   }
 
+  controller_.finder_.invalidatePaths({controller_.navigation_.current_path_});
   const bool wasCreate = controller_.vim_.editingIsCreate();
   controller_.vim_.reportCommitSucceeded();
   if (wasCreate) {

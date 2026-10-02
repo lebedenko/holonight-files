@@ -1,6 +1,8 @@
 #include "search_exclusion_policy.h"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDataStream>
 #include <QDir>
 #include <QFileInfo>
 
@@ -83,4 +85,12 @@ bool SearchExclusionPolicy::excludes(const QString& path, bool directory, const 
     return std::ranges::any_of(expressions_, [&](const auto& expression) { return expression.match(name).hasMatch(); });
   }
   return false;
+}
+
+QByteArray SearchExclusionPolicy::fingerprint() const {
+  QByteArray bytes;
+  QDataStream stream(&bytes, QIODevice::WriteOnly);
+  stream.setVersion(QDataStream::Qt_6_0);
+  stream << paths_ << patterns_;
+  return QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
 }

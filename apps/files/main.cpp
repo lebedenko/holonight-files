@@ -11,6 +11,7 @@
 #include <QGuiApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
+#include <QQuickWindow>
 #include <QTextStream>
 #include <QTimer>
 
@@ -72,6 +73,11 @@ int main(int argc, char* argv[]) {
   engine.loadFromModule("HolonightFiles", "Main");
   if (engine.rootObjects().isEmpty()) {
     return EXIT_FAILURE;
+  }
+  if (auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first())) {
+    QObject::connect(
+        window, &QQuickWindow::frameSwapped, &controller, [&controller] { controller.finder()->warmUp(); },
+        Qt::QueuedConnection);
   }
 #ifdef FILES_NATIVE_PREVIEW_LAB
   observer.attach(engine.rootObjects().first());

@@ -20,10 +20,16 @@ void SessionLifecycle::shutdown() {
   }
   started_ = true;
   controller_.navigation_.restore_candidate_.clear();
-  pending_workers_ = {&controller_.navigation_.model_, &controller_.preview_, &controller_.tasks_};
+  pending_workers_ = {
+      &controller_.navigation_.model_,
+      &controller_.preview_,
+      &controller_.tasks_,
+      &controller_.finder_,
+  };
   controller_.navigation_.model_.shutdown();
   controller_.preview_.shutdown();
   controller_.tasks_.shutdown();
+  controller_.finder_.shutdown();
 }
 
 void SessionLifecycle::workerFinished(const QObject* worker) {

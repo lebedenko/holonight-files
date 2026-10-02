@@ -9,6 +9,7 @@
 class SearchExclusionPolicy {
  public:
   static SearchExclusionPolicy compile(const SearchSettings& settings, QStringList& diagnostics);
+  QByteArray fingerprint() const;
   bool excludes(const QString& path, bool directory, const QString& root) const;
   bool operator==(const SearchExclusionPolicy& other) const {
     return paths_ == other.paths_ && patterns_ == other.patterns_;

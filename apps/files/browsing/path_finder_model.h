@@ -47,9 +47,16 @@ class PathFinderModel : public QAbstractListModel {
   Q_INVOKABLE void stop();
   Q_INVOKABLE QString pathAt(int row) const;
   Q_INVOKABLE bool isDirectoryAt(int row) const;
+  void warmUp();
+  void invalidatePaths(const QStringList& paths);
+  void shutdown();
+  void setClock(std::function<qint64()> clock);
+  // Injectable clock/interval for deterministic freshness tests.
+  void setRefreshInterval(int milliseconds);
   void reportMissing(const QString& path);
  signals:
   void stateChanged();
+  void shutdownFinished();
 
  private:
   struct Row {
@@ -60,6 +67,16 @@ class PathFinderModel : public QAbstractListModel {
   };
   void reloadSearchSettings();
   void scan();
+  void launchScan(const QString& root, bool hidden);
+  void scheduleWork();
+  void refreshIfNeeded();
+  static QString stateKey(const QString& root, bool hidden);
+  void checkSelectedRoot(quint64 selection);
+  void clearUnavailableRoot(const QString& root, bool hidden, quint64 selection);
+  void loadSnapshot(const QString& root, quint64 serial, const SearchExclusionPolicy& policy,
+                    const std::shared_ptr<std::atomic_bool>& cancel, const QString& cachePath);
+  void runScan(const QString& root, quint64 serial, bool includeHidden, const std::shared_ptr<std::atomic_bool>& cancel,
+               const SearchExclusionPolicy& policy, bool persistent, bool load, const QString& cachePath);
   void rank();
   void publishScanBatch(const QString& root, quint64 serial, bool includeHidden,
                         const std::shared_ptr<HolonightSearch::Index>& index, int count);
@@ -73,10 +90,10 @@ class PathFinderModel : public QAbstractListModel {
   QString error_;
   QString config_error_;
   SearchExclusionPolicy policy_;
+  bool policy_loaded_ = false;
   bool directories_only_ = false;
   bool include_hidden_ = false;
   bool scanning_ = false;
-  bool refresh_started_ = false;
   int indexed_count_ = 0;
   quint64 scan_serial_ = 0;
   quint64 rank_serial_ = 0;
@@ -86,9 +103,31 @@ class PathFinderModel : public QAbstractListModel {
   QHash<QString, std::shared_ptr<HolonightSearch::Index>> hidden_cache_;
   QSet<QString> complete_visible_roots_;
   QSet<QString> complete_hidden_roots_;
-  QSet<QString> missing_paths_;
+  QHash<QString, QSet<QString>> missing_paths_;
   QVector<Row> rows_;
+  struct Freshness {
+    qint64 completed = 0;
+    bool dirty = true;
+  };
+  QHash<QString, Freshness> freshness_;
+  bool check_root_ = false;
+  quint64 selection_serial_ = 0;
+  bool active_ = false;
+  bool warming_ = false;
+  bool warmed_ = false;
+  bool shutting_down_ = false;
+  bool job_running_ = false;
+  QString job_root_;
+  bool job_hidden_ = false;
+  QString pending_root_;
+  bool pending_hidden_ = false;
+  int refresh_interval_ = 300000;
+  std::function<qint64()> clock_;
   QThreadPool pool_;
+  QThreadPool rank_pool_;
+  QTimer refresh_timer_;
+  QTimer invalidation_timer_;
+  QTimer shutdown_timer_;
   QTimer rank_timer_;
   PathScanFunction scanner_;
 };

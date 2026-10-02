@@ -326,3 +326,62 @@ TEST(DirectoryControllerFileOps, YankInterruptsPendingCutChord) {
   EXPECT_TRUE(QFile::exists(src.filePath("a.txt")));
   EXPECT_FALSE(QFile::exists(dst.filePath("a.txt")));
 }
+
+TEST(DirectoryControllerFileOps, FinderRefreshesOverlappingRootsAfterCopyMoveAndTrash) {
+  QTemporaryDir root(fixturePattern("finder-operations"));
+  QTemporaryDir data(fixturePattern("finder-trash"));
+  const ScopedXdgDataHome guard(data.path());
+  ASSERT_TRUE(QDir(root.path()).mkpath("source"));
+  ASSERT_TRUE(QDir(root.path()).mkpath("destination"));
+  const auto source = root.filePath("source/needle.txt");
+  QFile file(source);
+  ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+  file.close();
+  DirectoryController controller;
+  // Watch a different directory: task completion must invalidate search independently.
+  controller.open(data.path());
+  ASSERT_TRUE(settled(controller));
+  controller.finder()->start(root.path(), false);
+  controller.finder()->setQuery("needle");
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.finder()->rowCount() == 1; }, 5000));
+  controller.tasks()->enqueueCopy({source}, root.filePath("destination"));
+  ASSERT_TRUE(taskIdle(controller));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.finder()->rowCount() == 2; }, 5000));
+  controller.tasks()->requestTrashConfirmation({root.filePath("destination/needle.txt")});
+  controller.tasks()->respondToTrashConfirm(true, controller.tasks()->promptId());
+  ASSERT_TRUE(taskIdle(controller));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.finder()->rowCount() == 1; }, 5000));
+  controller.tasks()->enqueueMove({source}, root.filePath("destination"));
+  ASSERT_TRUE(taskIdle(controller));
+  ASSERT_TRUE(QTest::qWaitFor(
+      [&] {
+        return controller.finder()->rowCount() == 1 &&
+               controller.finder()->pathAt(0) == root.filePath("destination/needle.txt");
+      },
+      5000));
+}
+
+TEST(DirectoryControllerFileOps, FinderRefreshesAfterInlineCreateRenameAndExternalWatchChange) {
+  QTemporaryDir root(fixturePattern("finder-inline"));
+  DirectoryController controller;
+  controller.open(root.path());
+  ASSERT_TRUE(settled(controller));
+  controller.finder()->start(root.path(), false);
+  controller.finder()->setQuery("needle");
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.finder()->scanning(); }, 5000));
+  ASSERT_TRUE(controller.handleKey("o"));
+  controller.updateInsertText("needle.txt");
+  controller.commitInsertEditing();
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.finder()->rowCount() == 1; }, 5000));
+  ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("g"));
+  ASSERT_TRUE(controller.handleKey("g"));
+  ASSERT_TRUE(controller.handleKey("j"));
+  ASSERT_TRUE(controller.handleKey("i"));
+  controller.updateInsertText("needle-renamed.txt");
+  controller.commitInsertEditing();
+  ASSERT_TRUE(
+      QTest::qWaitFor([&] { return controller.finder()->pathAt(0) == root.filePath("needle-renamed.txt"); }, 5000));
+  ASSERT_FALSE(writeFile(root, "needle-external.txt").isEmpty());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.finder()->rowCount() == 2; }, 5000));
+}

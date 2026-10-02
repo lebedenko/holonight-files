@@ -113,7 +113,15 @@ is selected; symlinked folders are never traversed. Space-separated terms match
 in either order, and uppercase characters make the query case-sensitive.
 Results appear during the initial scan. A completed scan is reused when either finder
 reopens or switches between file and directory mode; each root and hidden-path setting
-has its own session cache. An interrupted scan restarts when that root is reopened.
+has its own session cache. Closing the popup leaves indexing running; reopening attaches
+to the same scan. Home warms after the first frame and its visible file/directory index is
+persisted under `$XDG_CACHE_HOME/holonight-files/search/` (fallback `~/.cache`). Cached
+results are provisional: every launch refreshes Home in the background. Other roots and
+hidden variants remain memory-only. Complete snapshots stay searchable during refresh.
+Known edits invalidate overlapping roots; active search debounces changes by 250 ms and
+refreshes every five minutes after scan completion. Closed search performs no periodic
+refresh. External changes outside watched directories are found by startup or eligible
+search refresh. Corrupt/incompatible caches fall back to scanning with diagnostics.
 `/` continues to search only the visible listing.
 The initial finder popup is retained while its backend moves to the
 [shared search engine](docs/sdd/shared-search-adoption/README.md).
@@ -576,3 +584,13 @@ while unchanged effective rules reuse completed scans. Files reads configuration
 Missing config means built-ins only. Invalid rules are diagnosed and ignored. Unreadable or malformed config retains
 the last successfully loaded search policy (initially built-ins) and displays errors in the finder and diagnostics.
 Other settings retain startup loading. A Settings page is deferred to the configuration interoperability initiative.
+
+The finder persistence benchmark can be run with
+`build/test/tests/files-finder-benchmark --persist /path/to/tree`. It uses temporary
+cache/config directories and built-in exclusions, and reports cold index readiness,
+traversal/persistence time, validated restore and reconstruction time, snapshot size,
+query latency alongside refresh, and process resident/peak memory. Filesystem cache
+warmth and tree size affect these measurements; persisted indexes still require
+validation and reconstruction before results are ready.
+
+See the [lifecycle acceptance evidence](docs/sdd/search-index-lifecycle/VERIFICATION.md) for checks and limitations.
