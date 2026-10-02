@@ -79,7 +79,9 @@ exclusions remove results; explicit excluded roots and descendants allow content
 edited `[search]` rules reload on reopening. Reply on 2026-10-02: “Verified. Works properly”.
 No pointer or focus automation was used.
 
-Implementation is committed locally and remains unpublished; no Files or search-provider pin was changed by this cycle.
-Required full lint remains blocked by baseline findings. Shared Search stays Accepted: final reacceptance requires
-an authorized published corrected revision, compatible pins and umbrella integration evidence. UDisks2 discovery
+At local verification, implementation was committed locally and unpublished; no Files or search-provider pin
+had changed. The user subsequently authorized publication and pinning on 2026-10-02 after reviewing the
+recorded baseline lint blocker. The umbrella records the exact published revision, pin and latest CI status.
+Required full lint remains blocked by baseline findings. Shared Search stays Accepted: final reacceptance
+requires compatible published pins and umbrella integration evidence. UDisks2 discovery
 review remains an independent open task; configuration interoperability is Draft and does not block exclusions.
