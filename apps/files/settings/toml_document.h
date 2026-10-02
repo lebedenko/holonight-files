@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QString>
+#include <QStringList>
 #include <QtTypes>
 
 #include <memory>
@@ -17,12 +18,13 @@ struct TomlDiagnostic {
 };
 
 struct TomlValue {
-  // Other = any TOML type the settings layer does not declare (array, table, float, date/time).
-  enum class Type { Missing, Bool, String, Integer, Other };
+  // Other = any TOML type the settings layer does not declare (mixed/non-string array, table, float, date/time).
+  enum class Type { Missing, Bool, String, Integer, StringList, Other };
   Type type = Type::Missing;
   bool bool_value = false;
   QString string_value;
   qint64 int_value = 0;
+  QStringList string_list_value;
   int line = 0;
 };
 

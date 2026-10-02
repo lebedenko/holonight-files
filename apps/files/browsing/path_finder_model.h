@@ -37,7 +37,9 @@ class PathFinderModel : public QAbstractListModel {
   bool includeHidden() const { return include_hidden_; }
   bool scanning() const { return scanning_; }
   int indexedCount() const { return indexed_count_; }
-  QString error() const { return error_; }
+  QString error() const {
+    return config_error_.isEmpty() ? error_ : config_error_ + (error_.isEmpty() ? QString{} : u'\n' + error_);
+  }
   Q_INVOKABLE void start(const QString& rootPath, bool directoriesOnly);
   Q_INVOKABLE void setRoot(const QString& rootPath);
   Q_INVOKABLE void setQuery(const QString& query);
@@ -56,6 +58,7 @@ class PathFinderModel : public QAbstractListModel {
     bool directory = false;
     QList<int> positions;
   };
+  void reloadSearchSettings();
   void scan();
   void rank();
   void publishScanBatch(const QString& root, quint64 serial, bool includeHidden,
@@ -68,6 +71,8 @@ class PathFinderModel : public QAbstractListModel {
   QString root_path_;
   QString query_;
   QString error_;
+  QString config_error_;
+  SearchExclusionPolicy policy_;
   bool directories_only_ = false;
   bool include_hidden_ = false;
   bool scanning_ = false;

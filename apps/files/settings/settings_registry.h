@@ -24,10 +24,12 @@ struct SettingInfo {
 class SettingsRegistry {
  public:
   void declare(const QString& section, const Setting<bool>& setting);
+  void declare(const QString& section, const Setting<QStringList>& setting);
   // Wrong-typed declared keys fall back to their defaults; undeclared sections and keys are
   // reported and ignored. Diagnostics are in source order.
   std::vector<TomlDiagnostic> apply(const TomlDocument& document);
   bool value(const QString& section, const Setting<bool>& setting) const;
+  QStringList value(const QString& section, const Setting<QStringList>& setting) const;
   std::vector<SettingInfo> settings() const;
 
  private:

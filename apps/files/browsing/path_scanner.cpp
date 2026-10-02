@@ -6,7 +6,8 @@
 
 namespace {
 void scanFolder(const QString& folder, const QDir& root, QVector<QString>& pending, QVector<PathCandidate>& batch,
-                bool includeHidden, const std::atomic_bool& cancelled, const PathBatchReady& batchReady) {
+                bool includeHidden, const SearchExclusionPolicy& policy, const std::atomic_bool& cancelled,
+                const PathBatchReady& batchReady) {
   auto filters = QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Readable;
   if (includeHidden) {
     filters |= QDir::Hidden;
@@ -19,9 +20,14 @@ void scanFolder(const QString& folder, const QDir& root, QVector<QString>& pendi
       continue;
     }
     const bool directory = info.isDir();
-    batch.append({.path = info.absoluteFilePath(),
-                  .relativePath = root.relativeFilePath(info.absoluteFilePath()),
-                  .directory = directory});
+    if (policy.excludes(info.absoluteFilePath(), directory, root.absolutePath())) {
+      continue;
+    }
+    batch.append({
+        .path = info.absoluteFilePath(),
+        .relativePath = root.relativeFilePath(info.absoluteFilePath()),
+        .directory = directory,
+    });
     if (directory) {
       pending.append(info.absoluteFilePath());
     }
@@ -33,8 +39,8 @@ void scanFolder(const QString& folder, const QDir& root, QVector<QString>& pendi
 }
 }  // namespace
 
-bool scanPaths(const QString& root, bool includeHidden, const std::atomic_bool& cancelled,
-               const PathBatchReady& batchReady) {
+bool scanPaths(const QString& root, bool includeHidden, const SearchExclusionPolicy& policy,
+               const std::atomic_bool& cancelled, const PathBatchReady& batchReady) {
   const QFileInfo rootInfo(root);
   if (!rootInfo.isDir() || !rootInfo.isReadable()) {
     return false;
@@ -43,7 +49,7 @@ bool scanPaths(const QString& root, bool includeHidden, const std::atomic_bool& 
   QVector<PathCandidate> batch;
   const QDir rootDirectory(root);
   while (!pending.isEmpty() && !cancelled.load()) {
-    scanFolder(pending.takeLast(), rootDirectory, pending, batch, includeHidden, cancelled, batchReady);
+    scanFolder(pending.takeLast(), rootDirectory, pending, batch, includeHidden, policy, cancelled, batchReady);
   }
   if (!cancelled.load() && !batch.isEmpty()) {
     batchReady(std::move(batch));

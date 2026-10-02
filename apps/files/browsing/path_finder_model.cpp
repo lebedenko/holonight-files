@@ -1,6 +1,9 @@
 #include "path_finder_model.h"
 
 #include "path_scanner.h"
+#include "settings/general_settings.h"
+#include "settings/warning_sink.h"
+#include "settings/xdg_paths.h"
 
 #include <QDir>
 #include <QRunnable>
@@ -26,9 +29,11 @@ RecordBatches recordsForPaths(QVector<PathCandidate> ready) {
   for (PathCandidate& candidate : ready) {
     QVector<Field> fields;
     fields.reserve(2);
-    fields.append({.name = QStringLiteral("name"),
-                   .text = candidate.relativePath.mid(candidate.relativePath.lastIndexOf(u'/') + 1),
-                   .weight = 0});
+    fields.append({
+        .name = QStringLiteral("name"),
+        .text = candidate.relativePath.mid(candidate.relativePath.lastIndexOf(u'/') + 1),
+        .weight = 0,
+    });
     fields.append({.name = QStringLiteral("path"), .text = std::move(candidate.relativePath), .weight = 0});
     Record record{.id = std::move(candidate.path), .fields = std::move(fields), .boost = 0};
     (candidate.directory ? batches.directories : batches.files).append(std::move(record));
@@ -41,6 +46,8 @@ PathFinderModel::PathFinderModel(QObject* parent) : PathFinderModel(scanPaths, p
 
 PathFinderModel::PathFinderModel(PathScanFunction scanner, QObject* parent)
     : QAbstractListModel(parent), scanner_(std::move(scanner)) {
+  QStringList diagnostics;
+  policy_ = SearchExclusionPolicy::compile(SearchSettings(), diagnostics);
   pool_.setMaxThreadCount(2);
   rank_timer_.setSingleShot(true);
   rank_timer_.setInterval(50);
@@ -83,10 +90,12 @@ QVariant PathFinderModel::data(const QModelIndex& index, int role) const {
 }
 
 QHash<int, QByteArray> PathFinderModel::roleNames() const {
-  return {{PathRole, "path"},
-          {RelativePathRole, "relativePath"},
-          {DirectoryRole, "directory"},
-          {PositionsRole, "positions"}};
+  return {
+      {PathRole, "path"},
+      {RelativePathRole, "relativePath"},
+      {DirectoryRole, "directory"},
+      {PositionsRole, "positions"},
+  };
 }
 
 QString PathFinderModel::pathAt(int row) const { return row >= 0 && row < rows_.size() ? rows_[row].path : QString{}; }
@@ -101,6 +110,7 @@ void PathFinderModel::reportMissing(const QString& path) {
 }
 
 void PathFinderModel::start(const QString& rootPath, bool directoriesOnly) {
+  reloadSearchSettings();
   directories_only_ = directoriesOnly;
   query_.clear();
   setRoot(rootPath);
@@ -179,9 +189,10 @@ void PathFinderModel::scan() {
   auto cancel = std::make_shared<std::atomic_bool>(false);
   auto index = std::make_shared<Index>();
   scan_cancel_ = cancel;
-  pool_.start(QRunnable::create([this, root, serial, includeHidden, cancel, index] {
+  const auto policy = policy_;
+  pool_.start(QRunnable::create([this, root, serial, includeHidden, cancel, index, policy] {
     const bool available = scanner_(
-        root, includeHidden, *cancel, [this, root, serial, includeHidden, index](QVector<PathCandidate> ready) {
+        root, includeHidden, policy, *cancel, [this, root, serial, includeHidden, index](QVector<PathCandidate> ready) {
           const int count = static_cast<int>(ready.size());
           auto batches = recordsForPaths(std::move(ready));
           index->append(sourceName(false), std::move(batches.files));
@@ -246,10 +257,12 @@ void PathFinderModel::rank() {
     return;
   }
   pool_.start(QRunnable::create([this, serial, cancel, index, root, query, directoriesOnly, missing] {
-    const auto hits = index->search(query, {.limit = 96,
-                                            .profile = HolonightSearch::Profile::Path,
-                                            .cancelled = cancel.get(),
-                                            .source = sourceName(directoriesOnly)});
+    const auto hits = index->search(query, {
+                                               .limit = 96,
+                                               .profile = HolonightSearch::Profile::Path,
+                                               .cancelled = cancel.get(),
+                                               .source = sourceName(directoriesOnly),
+                                           });
     if (cancel->load()) {
       return;
     }
@@ -297,4 +310,40 @@ void PathFinderModel::replaceRows(QVector<Row> rows) {
   beginResetModel();
   rows_ = std::move(rows);
   endResetModel();
+}
+
+void PathFinderModel::reloadSearchSettings() {
+  const QString path = XdgPaths::configFilePath();
+  const auto parsed = TomlDocument::parseFile(path);
+  QStringList diagnostics;
+  for (const auto& diagnostic : parsed.diagnostics) {
+    diagnostics.append(
+        QStringLiteral("%1:%2: %3")
+            .arg(path)
+            .arg(diagnostic.line)
+            .arg(
+                tr("Cannot read search configuration (%1). Retaining the last valid policy.").arg(diagnostic.message)));
+  }
+  if (parsed.diagnostics.empty()) {
+    SettingsRegistry registry;
+    GeneralSettings::declare(registry);
+    SearchSettings::declare(registry);
+    for (const auto& diagnostic : registry.apply(parsed.document)) {
+      diagnostics.append(QStringLiteral("%1:%2: %3").arg(path).arg(diagnostic.line).arg(diagnostic.message));
+    }
+    const auto policy = SearchExclusionPolicy::compile(SearchSettings::read(registry), diagnostics);
+    if (!(policy == policy_)) {
+      stop();
+      visible_cache_.clear();
+      hidden_cache_.clear();
+      complete_visible_roots_.clear();
+      complete_hidden_roots_.clear();
+      policy_ = policy;
+    }
+  }
+  StderrWarningSink warnings;
+  for (const QString& diagnostic : diagnostics) {
+    warnings.warn(diagnostic);
+  }
+  config_error_ = diagnostics.join(u'\n');
 }
