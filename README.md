@@ -551,6 +551,10 @@ Browsing inspects selected-file metadata but does not load text. Quick Look load
 text on demand and discards it on close; Space during type detection opens a pinned loading
 view. See [the demand-text cycle](docs/sdd/sidebar-icons-demand-text/SPEC.md).
 
+## Standalone developer tooling
+
+See [tooling/README.md](tooling/README.md) for presets, dependencies, editor refresh and Serena.
+
 ## Finder indexing exclusions
 
 Hidden paths are opt-in through **Include hidden**. With it enabled, `.config`, `.local/share`, `.local/state`,

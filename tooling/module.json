@@ -1,0 +1,51 @@
+{
+  "module": "holonight-files",
+  "cpp": true,
+  "qml": true,
+  "languages": [
+    "cpp",
+    "qml",
+    "python",
+    "bash"
+  ],
+  "dependencies": [
+    {
+      "module": "holonight-config",
+      "package": "HoloNightConfig",
+      "source_variable": "HOLONIGHT_CONFIG_SOURCE"
+    },
+    {
+      "module": "holonight-qt",
+      "package": "HolonightQt",
+      "source_variable": "HOLONIGHT_QT_SOURCE"
+    },
+    {
+      "module": "holonight-images",
+      "package": "HolonightImages",
+      "source_variable": "HOLONIGHT_IMAGES_SOURCE"
+    },
+    {
+      "module": "holonight-thumbnails",
+      "package": "HolonightThumbnails",
+      "source_variable": "HOLONIGHT_THUMBNAILS_SOURCE"
+    },
+    {
+      "module": "holonight-system-services",
+      "package": "HoloNightSystemServices",
+      "source_variable": "HOLONIGHT_SYSTEM_SERVICES_SOURCE",
+      "options": [
+        "-DBUILD_AUDIO=OFF",
+        "-DBUILD_STORAGE=ON"
+      ]
+    },
+    {
+      "module": "holonight-search",
+      "package": "HolonightSearch",
+      "source_variable": "HOLONIGHT_SEARCH_SOURCE"
+    }
+  ],
+  "qml_modules": [
+    "HolonightFiles"
+  ],
+  "wayland": false
+}

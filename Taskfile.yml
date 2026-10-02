@@ -1,102 +1,144 @@
 version: '3'
 vars:
   PRESET: '{{default "debug" .PRESET}}'
-  HOLONIGHT_DEPENDENCY_PREFIX: '{{default (printf "%s/build/deps/prefix" .ROOT_DIR) .HOLONIGHT_DEPENDENCY_PREFIX}}'
+  HOLONIGHT_DEPENDENCY_PREFIX: '{{default (printf "%s/build/deps/prefix" .TASKFILE_DIR) .HOLONIGHT_DEPENDENCY_PREFIX}}'
   HOLONIGHT_QML_IMPORT_PATH: '{{default (printf "%s/lib/qt6/qml" .HOLONIGHT_DEPENDENCY_PREFIX) .HOLONIGHT_QML_IMPORT_PATH}}'
-env:
-  HOLONIGHT_DEPENDENCY_PREFIX: '{{.HOLONIGHT_DEPENDENCY_PREFIX}}'
-  HOLONIGHT_QML_IMPORT_PATH: '{{.HOLONIGHT_QML_IMPORT_PATH}}'
-  QML_IMPORT_PATH: '{{.HOLONIGHT_QML_IMPORT_PATH}}'
-  LD_LIBRARY_PATH: '{{.HOLONIGHT_DEPENDENCY_PREFIX}}/lib'
 tasks:
   deps:
-    desc: Refresh changed sibling providers in the project-local prefix
-    cmds: ['bash scripts/prepare-deps.sh']
-  configure:
-    desc: Configure the selected build preset
-    cmds: ['cmake --preset {{.PRESET}} -DCMAKE_PREFIX_PATH="{{.HOLONIGHT_DEPENDENCY_PREFIX}}" -DQML_IMPORT_PATH="{{.HOLONIGHT_QML_IMPORT_PATH}}"']
-  build:
-    desc: Configure and build the selected preset
-    deps: [deps]
+    desc: deps using standalone tooling
     cmds:
-      - task: configure
-        vars: {PRESET: '{{.PRESET}}'}
-      - cmake --build --preset {{.PRESET}}
+    - python3 tooling/workflow.py deps --preset {{.PRESET}}
+  configure:
+    desc: configure using standalone tooling
+    cmds:
+    - python3 tooling/workflow.py configure --preset {{.PRESET}}
+  build:
+    desc: build using standalone tooling
+    cmds:
+    - python3 tooling/workflow.py build --preset {{.PRESET}}
   run:
     desc: Build and launch the selected preset with CLI arguments
     cmds:
-      - task: build
-        vars: {PRESET: '{{.PRESET}}'}
-      - build/{{.PRESET}}/apps/files/hn-files {{.CLI_ARGS}}
-
+    - task: build
+      vars:
+        PRESET: '{{.PRESET}}'
+    - build/{{.PRESET}}/apps/files/hn-files {{.CLI_ARGS}}
   test:
-    desc: Build and run tests
+    desc: test using standalone tooling
     cmds:
-      - task: build
-        vars: {PRESET: test}
-      - ctest --preset test
+    - python3 tooling/workflow.py test --preset {{.PRESET}}
   format:
     desc: Format recursive C++ and QML sources
-    cmds: ['python3 scripts/format-sources.py']
+    cmds:
+    - python3 scripts/format-sources.py
   format-check:
     desc: Check recursive C++ and QML formatting
-    cmds: ['python3 scripts/format-sources.py --check']
+    cmds:
+    - python3 scripts/format-sources.py --check
   qml-import-check:
     desc: Check runtime-control import policy
-    cmds: ['python3 scripts/check-qml-import-policy.py']
+    cmds:
+    - python3 scripts/check-qml-import-policy.py
   qmltypes-check:
     desc: Check generated application QML metadata
-    cmds: ['cmake --build build/{{.PRESET}} --target qmltypes-check']
-  tidy:
-    desc: Run C++ clang-tidy checks
     cmds:
-      - task: build
-        vars: {PRESET: test}
-      - cmake --build build/test --target tidy
+    - cmake --build build/{{.PRESET}} --target qmltypes-check
+  tidy:
+    desc: tidy using standalone tooling
+    cmds:
+    - python3 tooling/workflow.py tidy --scope all
   qml-lint:
     desc: Run QML lint checks
-    deps: [build]
-    cmds: ['cmake --build build/{{.PRESET}} --target qml-lint']
+    deps:
+    - build
+    cmds:
+    - cmake --build build/{{.PRESET}} --target qml-lint
   lint:
     desc: Run C++ and QML lint checks
     cmds:
-      - task: tidy
-      - task: qml-lint
+    - task: tidy
+    - task: qml-lint
   license-check:
     desc: Check license metadata with REUSE
-    cmds: [reuse lint]
+    cmds:
+    - reuse lint
   install-check:
     desc: Stage Release and verify installed payload and desktop launch
     cmds:
-      - task: build
-        vars: {PRESET: release}
-      - bash scripts/check-install.sh
+    - task: build
+      vars:
+        PRESET: release
+    - bash scripts/check-install.sh
   check:
     desc: Sequentially build, test, check formatting, lint, licenses, staged installation
-    aliases: [verify]
+    aliases:
+    - verify
     cmds:
-      - task: build
-        vars: {PRESET: debug}
-      - task: build
-        vars: {PRESET: release}
-      - task: test
-      - task: format-check
-      - task: lint
-      - task: license-check
-      - task: install-check
-      - task: qml-import-check
-      - task: qmltypes-check
+    - task: build
+      vars:
+        PRESET: debug
+    - task: build
+      vars:
+        PRESET: release
+    - task: test
+    - task: format-check
+    - task: lint
+    - task: license-check
+    - task: install-check
+    - task: qml-import-check
+    - task: qmltypes-check
   clean:
     desc: Remove Files debug/release/test build directories, preserving provider installs
     cmds:
-      - rm -rf -- build/debug build/release build/test
+    - rm -rf -- build/debug build/release build/test
   isolated-runtime-check:
     desc: Build in a fresh CI container and verify its installed payload without networking
     cmds:
-      - python3 scripts/check-container-runtime.py
+    - python3 scripts/check-container-runtime.py
   visual-check:
     desc: Capture dark/light renders at normal and fractional scale for inspection
     cmds:
-      - task: build
-        vars: {PRESET: test}
-      - bash scripts/check-visual.sh
+    - task: build
+      vars:
+        PRESET: test
+    - bash scripts/check-visual.sh
+  tooling:doctor:
+    desc: doctor using standalone tooling
+    cmds:
+    - python3 tooling/workflow.py doctor
+  tooling:refresh:
+    desc: refresh using standalone tooling
+    cmds:
+    - python3 tooling/workflow.py refresh --preset {{default "test" .EDITOR_PRESET}}
+  serena:serve:
+    desc: Start independent Serena server in codex context
+    cmds:
+    - serena start-mcp-server --project "{{.TASKFILE_DIR}}" --context codex
+  serena:index:
+    desc: Explicitly index this module
+    cmds:
+    - serena project index "{{.TASKFILE_DIR}}"
+  configure-tests:
+    desc: configure using standalone tooling
+    cmds:
+    - python3 tooling/workflow.py configure --preset test
+  configure:release:
+    desc: configure using standalone tooling
+    cmds:
+    - python3 tooling/workflow.py configure --preset release
+  build:release:
+    desc: build using standalone tooling
+    cmds:
+    - python3 tooling/workflow.py build --preset release
+  tidy-src:
+    desc: tidy using standalone tooling
+    cmds:
+    - python3 tooling/workflow.py tidy --scope src
+  tidy-tests:
+    desc: tidy using standalone tooling
+    cmds:
+    - python3 tooling/workflow.py tidy --scope tests
+  tooling:qmlls:
+    desc: Start configured Qt language server with resolved import paths
+    cmds:
+    - python3 tooling/workflow.py qmlls

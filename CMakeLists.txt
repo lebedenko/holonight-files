@@ -8,6 +8,7 @@ include(GNUInstallDirs)
 # Presets/tasks supply development defaults; explicit caller paths are authoritative.
 set(FILES_RUNTIME_QML_PATH "${QML_IMPORT_PATH}")
 string(REPLACE ";" ":" FILES_RUNTIME_QML_PATH "${FILES_RUNTIME_QML_PATH}")
+include("${CMAKE_CURRENT_SOURCE_DIR}/tooling/dependencies.cmake")
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Quick Qml QuickControls2 Svg)
 find_package(HolonightQt CONFIG REQUIRED)
 find_package(tomlplusplus 3.4 CONFIG REQUIRED)

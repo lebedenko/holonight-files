@@ -9,19 +9,33 @@ trap 'rm -rf "$workspace"' EXIT
 
 mkdir -p "$workspace/files/scripts" "$workspace/bin" "$workspace/config" "$workspace/qt" "$workspace/images" "$workspace/thumbnails" "$workspace/system-services" "$workspace/search"
 cp "$source_repo/scripts/prepare-deps.sh" "$workspace/files/scripts/prepare-deps.sh"
+cp -r "$source_repo/tooling" "$workspace/files/tooling"
 
 for provider in config qt images thumbnails system-services search; do
+  printf "project(fixture)\n" > "$workspace/$provider/CMakeLists.txt"
   git -C "$workspace/$provider" init --quiet
   git -C "$workspace/$provider" config user.email test@example.invalid
   git -C "$workspace/$provider" config user.name 'Provider revision test'
   printf '%s\n' "$provider" > "$workspace/$provider/provider.txt"
-  git -C "$workspace/$provider" add provider.txt
+  git -C "$workspace/$provider" add provider.txt CMakeLists.txt
   git -C "$workspace/$provider" commit --quiet -m 'Initial provider revision'
 done
 
 cat > "$workspace/bin/cmake" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$CALL_LOG"
+if [[ $1 == --install ]]; then
+  case ${2##*/} in
+    holonight-config) package=HoloNightConfig ;;
+    holonight-qt) package=HolonightQt ;;
+    holonight-images) package=HolonightImages ;;
+    holonight-thumbnails) package=HolonightThumbnails ;;
+    holonight-system-services) package=HoloNightSystemServices ;;
+    holonight-search) package=HolonightSearch ;;
+  esac
+  mkdir -p "$INSTALL_FIXTURE_PREFIX/lib/cmake/$package"
+  printf '# fixture\n' > "$INSTALL_FIXTURE_PREFIX/lib/cmake/$package/${package}Config.cmake"
+fi
 EOF
 chmod +x "$workspace/bin/cmake"
 
@@ -34,8 +48,8 @@ run_deps() {
     HOLONIGHT_THUMBNAILS_SOURCE="$workspace/thumbnails" \
     HOLONIGHT_SYSTEM_SERVICES_SOURCE="$workspace/system-services" \
     HOLONIGHT_SEARCH_SOURCE="$workspace/search" \
-    HOLONIGHT_DEPENDENCY_PREFIX="$workspace/files/build/deps/prefix" \
-    bash "$workspace/files/scripts/prepare-deps.sh"
+    INSTALL_FIXTURE_PREFIX="$workspace/files/build/deps/prefix" \
+    env -u HOLONIGHT_DEPENDENCY_PREFIX bash "$workspace/files/scripts/prepare-deps.sh"
 }
 
 call_count() {
