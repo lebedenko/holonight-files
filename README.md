@@ -546,3 +546,37 @@ view. See [the demand-text cycle](docs/sdd/sidebar-icons-demand-text/SPEC.md).
 ## Standalone developer tooling
 
 See [tooling/README.md](tooling/README.md) for presets, dependencies, editor refresh and Serena.
+
+## Finder indexing exclusions
+
+Hidden paths are opt-in through **Include hidden**. With it enabled, `.config`, `.local/share`, `.local/state`,
+and other useful dot paths remain searchable unless explicitly excluded. Normal browsing is unaffected.
+
+The finder skips directories named `.git`, `.venv`, `.codex`, `.claude`, `.agents`, `node_modules`, `__pycache__`,
+and directory names matching `build*` at any depth. It also skips the exact `~/.cache` subtree, resolved
+`$XDG_CACHE_HOME` subtree (fallback `~/.cache`), and `Trash` inside resolved `$XDG_DATA_HOME`
+(fallback `~/.local/share/Trash`). Duplicate exclusions are merged. Relative XDG values use the fallback.
+
+Add optional rules to `$XDG_CONFIG_HOME/holonight-files/config.toml` (fallback
+`~/.config/holonight-files/config.toml`):
+
+```toml
+[search]
+exclude_paths = ["~/Downloads/large-datasets", "/mnt/archive"]
+exclude_directory_patterns = ["vendor", "dist", ".pytest_cache"]
+```
+
+Rules add to built-ins; empty lists remove nothing. Paths must be absolute or start with `~/`, need not exist,
+and match the named entry and its subtree at path-component boundaries. Other variable expansion is rejected.
+Directory patterns match complete basenames case-sensitively: `*` matches any characters and `?` one character;
+all other characters are literal, and `/` is invalid. There is no negation or reinclusion syntax. `.gitignore`
+is not read.
+
+Selecting an excluded directory or its descendant as the search root permits scanning there. Ancestor exclusions
+are bypassed; exclusions still apply beneath that root. To search inside `.git`, choose it as the root.
+
+Search settings reload whenever the finder opens; changed rules rebuild both hidden and visible index caches,
+while unchanged effective rules reuse completed scans. Files reads configuration without creating or rewriting it.
+Missing config means built-ins only. Invalid rules are diagnosed and ignored. Unreadable or malformed config retains
+the last successfully loaded search policy (initially built-ins) and displays errors in the finder and diagnostics.
+Other settings retain startup loading. A Settings page is deferred to the configuration interoperability initiative.

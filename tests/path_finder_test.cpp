@@ -40,8 +40,12 @@ TEST(PathFinderModel, UnorderedTermsFindPathsAcrossFields) {
   ASSERT_TRUE(settled(model));
   QSignalSpy resets(&model, &QAbstractItemModel::modelReset);
   QSet<QString> forward;
-  for (const QString& query : {QStringLiteral("lambda"), QStringLiteral("lambda func"), QStringLiteral("lambda audit"),
-                               QStringLiteral("audit lambda")}) {
+  for (const QString& query : {
+           QStringLiteral("lambda"),
+           QStringLiteral("lambda func"),
+           QStringLiteral("lambda audit"),
+           QStringLiteral("audit lambda"),
+       }) {
     resets.clear();
     model.setQuery(query);
     ASSERT_TRUE(QTest::qWaitFor([&] { return !resets.isEmpty(); }, 5000)) << query.toStdString();
@@ -135,8 +139,8 @@ TEST(PathFinderModel, HiddenPathsRequireExplicitOptIn) {
 
 TEST(PathFinderModel, PublishesPartialResultsBeforeScanCompletes) {
   QSemaphore continueScan;
-  PathScanFunction scanner = [&continueScan](const QString& root, bool, const std::atomic_bool&,
-                                             const PathBatchReady& batchReady) {
+  PathScanFunction scanner = [&continueScan](const QString& root, bool, const SearchExclusionPolicy&,
+                                             const std::atomic_bool&, const PathBatchReady& batchReady) {
     batchReady({{.path = root + "/lambda.cpp", .relativePath = "lambda.cpp", .directory = false}});
     continueScan.acquire();
     return true;
@@ -179,11 +183,13 @@ TEST(PathFinderModel, ReopeningAndSwitchingModesReuseCompletedScan) {
   ASSERT_TRUE(QDir(directory.path()).mkdir("project"));
   ASSERT_TRUE(touch(directory.path() + "/project.txt"));
   std::atomic_int scanCount = 0;
-  PathScanFunction scanner = [&scanCount](const QString& root, bool, const std::atomic_bool&,
-                                          const PathBatchReady& batchReady) {
+  PathScanFunction scanner = [&scanCount](const QString& root, bool, const SearchExclusionPolicy&,
+                                          const std::atomic_bool&, const PathBatchReady& batchReady) {
     ++scanCount;
-    batchReady({{.path = root + "/project", .relativePath = "project", .directory = true},
-                {.path = root + "/project.txt", .relativePath = "project.txt", .directory = false}});
+    batchReady({
+        {.path = root + "/project", .relativePath = "project", .directory = true},
+        {.path = root + "/project.txt", .relativePath = "project.txt", .directory = false},
+    });
     return true;
   };
   PathFinderModel model(scanner);
@@ -211,8 +217,8 @@ TEST(PathFinderModel, ReopeningAndSwitchingModesReuseCompletedScan) {
 TEST(PathFinderModel, InterruptedScanRestartsOnReopen) {
   QSemaphore continueScan;
   std::atomic_int scanCount = 0;
-  PathScanFunction scanner = [&continueScan, &scanCount](const QString& root, bool, const std::atomic_bool&,
-                                                         const PathBatchReady& batchReady) {
+  PathScanFunction scanner = [&continueScan, &scanCount](const QString& root, bool, const SearchExclusionPolicy&,
+                                                         const std::atomic_bool&, const PathBatchReady& batchReady) {
     const int call = ++scanCount;
     batchReady({{.path = root + "/lambda.cpp", .relativePath = "lambda.cpp", .directory = false}});
     if (call == 1) {

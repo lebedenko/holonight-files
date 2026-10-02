@@ -11,6 +11,8 @@ QString typeName(TomlValue::Type type) {
       return QStringLiteral("a boolean");
     case TomlValue::Type::String:
       return QStringLiteral("a string");
+    case TomlValue::Type::StringList:
+      return QStringLiteral("a string list");
     case TomlValue::Type::Integer:
       return QStringLiteral("an integer");
     case TomlValue::Type::Missing:
@@ -25,19 +27,26 @@ QString keyPath(const QString& section, const QString& key) {
 }
 
 TomlDiagnostic unknownEntry(const QString& what, int line) {
-  return {.kind = TomlDiagnostic::Kind::UnknownEntry,
-          .message = QCoreApplication::translate("settings", "unknown %1; ignored").arg(what),
-          .line = line};
+  return {
+      .kind = TomlDiagnostic::Kind::UnknownEntry,
+      .message = QCoreApplication::translate("settings", "unknown %1; ignored").arg(what),
+      .line = line,
+  };
 }
 }  // namespace
 
 void SettingsRegistry::declare(const QString& section, const Setting<bool>& setting) {
-  Entry entry{.info = {.section = section,
-                       .key = QString::fromUtf8(setting.key),
-                       .description = QString::fromUtf8(setting.description),
-                       .type = TomlValue::Type::Bool,
-                       .source = SettingSource::Default},
-              .resolved = {.type = TomlValue::Type::Bool, .bool_value = setting.default_value}};
+  Entry entry{
+      .info =
+          {
+              .section = section,
+              .key = QString::fromUtf8(setting.key),
+              .description = QString::fromUtf8(setting.description),
+              .type = TomlValue::Type::Bool,
+              .source = SettingSource::Default,
+          },
+      .resolved = {.type = TomlValue::Type::Bool, .bool_value = setting.default_value},
+  };
   entries_.push_back(std::move(entry));
 }
 
@@ -46,10 +55,11 @@ std::vector<TomlDiagnostic> SettingsRegistry::apply(const TomlDocument& document
   for (const auto& key : document.rootKeys()) {
     const auto line = document.value({}, key).line;
     if (declaresSection(key)) {
-      diagnostics.push_back(
-          {.kind = TomlDiagnostic::Kind::WrongType,
-           .message = QCoreApplication::translate("settings", "[%1] must be a table; ignored").arg(key),
-           .line = line});
+      diagnostics.push_back({
+          .kind = TomlDiagnostic::Kind::WrongType,
+          .message = QCoreApplication::translate("settings", "[%1] must be a table; ignored").arg(key),
+          .line = line,
+      });
     } else {
       diagnostics.push_back(unknownEntry(QCoreApplication::translate("settings", "key %1").arg(key), line));
     }
@@ -74,12 +84,13 @@ std::vector<TomlDiagnostic> SettingsRegistry::apply(const TomlDocument& document
       continue;
     }
     if (found.type != entry.info.type) {
-      diagnostics.push_back(
-          {.kind = TomlDiagnostic::Kind::WrongType,
-           .message =
-               QCoreApplication::translate("settings", "%1: expected %2, found %3; using the default")
-                   .arg(keyPath(entry.info.section, entry.info.key), typeName(entry.info.type), typeName(found.type)),
-           .line = found.line});
+      diagnostics.push_back({
+          .kind = TomlDiagnostic::Kind::WrongType,
+          .message =
+              QCoreApplication::translate("settings", "%1: expected %2, found %3; using the default")
+                  .arg(keyPath(entry.info.section, entry.info.key), typeName(entry.info.type), typeName(found.type)),
+          .line = found.line,
+      });
       continue;
     }
     entry.resolved = found;
@@ -111,4 +122,22 @@ const SettingsRegistry::Entry* SettingsRegistry::find(const QString& section, co
 
 bool SettingsRegistry::declaresSection(const QString& section) const {
   return std::ranges::any_of(entries_, [&](const Entry& entry) { return entry.info.section == section; });
+}
+
+void SettingsRegistry::declare(const QString& section, const Setting<QStringList>& setting) {
+  Entry entry;
+  entry.info = {
+      .section = section,
+      .key = QString::fromUtf8(setting.key),
+      .description = QString::fromUtf8(setting.description),
+      .type = TomlValue::Type::StringList,
+  };
+  entry.resolved.type = TomlValue::Type::StringList;
+  entry.resolved.string_list_value = setting.default_value;
+  entries_.push_back(std::move(entry));
+}
+
+QStringList SettingsRegistry::value(const QString& section, const Setting<QStringList>& setting) const {
+  const auto* entry = find(section, QString::fromUtf8(setting.key));
+  return entry == nullptr ? setting.default_value : entry->resolved.string_list_value;
 }

@@ -30,7 +30,7 @@ QString writeConfig(const QString& configHome, const QByteArray& content) {
 TEST(AppSettings, DefaultsDisableRestore) {
   const auto settings = AppSettings::defaults();
   EXPECT_FALSE(settings.general().restoreLastLocation());
-  ASSERT_EQ(settings.settingInfo().size(), 1U);
+  ASSERT_EQ(settings.settingInfo().size(), 3U);
   EXPECT_EQ(settings.settingInfo()[0].key, "restore_last_location");
   EXPECT_EQ(settings.settingInfo()[0].source, SettingSource::Default);
 }

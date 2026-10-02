@@ -31,6 +31,9 @@ add_library(files-private STATIC
   browsing/path_finder_model.h
   browsing/path_scanner.cpp
   browsing/path_scanner.h
+  browsing/search_exclusion_policy.cpp
+  browsing/search_exclusion_policy.h
+  settings/search_settings.h
   browsing/jump_list.cpp
   browsing/jump_list.h
   browsing/location_classifier.cpp

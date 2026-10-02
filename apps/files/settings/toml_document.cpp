@@ -48,6 +48,17 @@ TomlValue toValue(const toml::node& node) {
   } else if (const auto* integer = node.as_integer()) {
     value.type = TomlValue::Type::Integer;
     value.int_value = integer->get();
+  } else if (const auto* array = node.as_array()) {
+    value.type = TomlValue::Type::StringList;
+    for (const auto& item : *array) {
+      const auto* string = item.as_string();
+      if (string == nullptr) {
+        value.type = TomlValue::Type::Other;
+        value.string_list_value.clear();
+        break;
+      }
+      value.string_list_value.append(fromUtf8(string->get()));
+    }
   } else {
     value.type = TomlValue::Type::Other;
   }
@@ -64,9 +75,11 @@ TomlDocument::ParseResult TomlDocument::parse(const QByteArray& content) {
     result.document.impl_ = std::move(impl);
   } catch (const toml::parse_error& error) {
     // The parser stops at the first error, so a file with many errors still yields one diagnostic.
-    result.diagnostics.push_back({.kind = TomlDiagnostic::Kind::ParseError,
-                                  .message = fromUtf8(error.description()),
-                                  .line = static_cast<int>(error.source().begin.line)});
+    result.diagnostics.push_back({
+        .kind = TomlDiagnostic::Kind::ParseError,
+        .message = fromUtf8(error.description()),
+        .line = static_cast<int>(error.source().begin.line),
+    });
   }
   return result;
 }
@@ -82,7 +95,14 @@ TomlDocument::ParseResult TomlDocument::parseFile(const QString& path) {
     result.diagnostics.push_back({.kind = TomlDiagnostic::Kind::ParseError, .message = file.errorString()});
     return result;
   }
-  return parse(file.readAll());
+  const QByteArray content = file.readAll();
+  if (file.error() != QFileDevice::NoError) {
+    ParseResult result;
+    result.file_exists = true;
+    result.diagnostics.push_back({.kind = TomlDiagnostic::Kind::ParseError, .message = file.errorString()});
+    return result;
+  }
+  return parse(content);
 }
 
 namespace {

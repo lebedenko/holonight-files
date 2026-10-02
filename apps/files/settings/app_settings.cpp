@@ -14,11 +14,13 @@ QString located(const QString& path, int line, const QString& message) {
 SettingsRegistry AppSettings::declareAll() {
   SettingsRegistry registry;
   GeneralSettings::declare(registry);
+  SearchSettings::declare(registry);
   return registry;
 }
 
 void AppSettings::readAll(const SettingsRegistry& registry) {
   general_ = GeneralSettings::read(registry);
+  search_ = SearchSettings::read(registry);
   info_ = registry.settings();
 }
 
