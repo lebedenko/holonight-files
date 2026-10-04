@@ -1,6 +1,7 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
 #include "engine_setup.h"
+#include "icon_theme_fixtures.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
 #include "quick_look_presentation_model.h"
@@ -352,6 +353,10 @@ TEST(PreviewConsumers, SidebarFadesOutgoingThumbnailWithoutRestoringStalePixels)
 class SidebarFallbackContinuity : public testing::TestWithParam<int> {};
 
 TEST_P(SidebarFallbackContinuity, MatchingChainsSurviveRapidNavigationAcrossEveryTier) {
+  QTemporaryDir icons(files_test::fixturePattern("sidebar-tiny-theme"));
+  ASSERT_TRUE(icons.isValid());
+  ASSERT_TRUE(files_test::writeTinyTheme(icons));
+  const auto restoreIcons = files_test::scopedIconTheme({icons.path()}, QStringLiteral("tiny-test-theme"));
   DirectoryController controller;
   auto& preview = *controller.preview();
   QQuickWindow window;

@@ -2,6 +2,7 @@
 
 #include "directory_fixtures.h"
 #include "icon_image_provider_test_access.h"
+#include "icon_theme_fixtures.h"
 
 #include <QColor>
 #include <QDir>
@@ -14,6 +15,8 @@
 #include <gtest/gtest.h>
 
 using files_test::fixturePattern;
+using files_test::scopedIconTheme;
+using files_test::writeTinyTheme;
 
 namespace {
 std::atomic_int& iconWarningCount() {
@@ -25,42 +28,6 @@ void countIconWarnings(QtMsgType type, const QMessageLogContext& /*context*/, co
   if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg) {
     iconWarningCount().fetch_add(1);
   }
-}
-
-// Tests may replace the process-wide icon theme; production code never does (REQ-F-018).
-[[nodiscard]] auto scopedIconTheme(const QStringList& searchPaths, const QString& themeName) {
-  const auto previousPaths = QIcon::themeSearchPaths();
-  const auto previousFallbackPaths = QIcon::fallbackSearchPaths();
-  const auto previousTheme = QIcon::themeName();
-  const auto previousFallbackTheme = QIcon::fallbackThemeName();
-  QIcon::setThemeSearchPaths(searchPaths);
-  QIcon::setFallbackSearchPaths({});
-  QIcon::setThemeName(themeName);
-  QIcon::setFallbackThemeName(themeName);
-  return qScopeGuard([=] {
-    QIcon::setThemeSearchPaths(previousPaths);
-    QIcon::setFallbackSearchPaths(previousFallbackPaths);
-    QIcon::setThemeName(previousTheme);
-    QIcon::setFallbackThemeName(previousFallbackTheme);
-  });
-}
-
-// A one-icon theme with a 16 px PNG "folder", so pixmap sizing can be checked without any icon
-// theme installed on the machine running the tests.
-bool writeTinyTheme(const QTemporaryDir& root) {
-  const QDir themeDir(root.filePath("tiny-test-theme"));
-  if (!themeDir.mkpath("16x16/places")) {
-    return false;
-  }
-  QFile index(themeDir.filePath("index.theme"));
-  if (!index.open(QIODevice::WriteOnly) ||
-      index.write("[Icon Theme]\nName=tiny-test-theme\nDirectories=16x16/places\n\n"
-                  "[16x16/places]\nSize=16\nContext=Places\nType=Fixed\n") < 0) {
-    return false;
-  }
-  QImage image(16, 16, QImage::Format_ARGB32);
-  image.fill(QColor(0x20, 0xa0, 0xf0));
-  return image.save(themeDir.filePath("16x16/places/folder.png"));
 }
 
 }  // namespace

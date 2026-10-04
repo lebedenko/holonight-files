@@ -12,6 +12,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QPersistentModelIndex>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -1992,17 +1993,16 @@ TEST(DirectoryController, ActivateBookmarkNavigatesOnceTheDirectoryExists) {
   DirectoryController controller;
   const auto row = findPlaceRow(*controller.places(), home.filePath("target"));
   ASSERT_GE(row, 0);
+  const QPersistentModelIndex bookmarkIndex(controller.places()->index(row));
   ASSERT_TRUE(QTest::qWaitFor([&] {
-    return controller.places()
-               ->data(controller.places()->index(row), PlacesModel::StatusRole)
-               .value<PlacesModel::Status>() == PlacesModel::Status::Unavailable;
+    return controller.places()->data(bookmarkIndex, PlacesModel::StatusRole).value<PlacesModel::Status>() ==
+           PlacesModel::Status::Unavailable;
   }));
   ASSERT_TRUE(QDir(home.path()).mkdir("target"));
-  controller.activateBookmark(row);
+  controller.activateBookmark(bookmarkIndex.row());
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.currentPath() == home.filePath("target"); }));
-  EXPECT_EQ(
-      controller.places()->data(controller.places()->index(row), PlacesModel::StatusRole).value<PlacesModel::Status>(),
-      PlacesModel::Status::Available);
+  EXPECT_EQ(controller.places()->data(bookmarkIndex, PlacesModel::StatusRole).value<PlacesModel::Status>(),
+            PlacesModel::Status::Available);
   EXPECT_EQ(DirectoryControllerTestAccess::jumpList(controller).size(), 1);  // history gained an entry
 }
 
@@ -2017,20 +2017,19 @@ TEST(DirectoryController, ActivateBookmarkShowsUnavailableMessageWithoutNavigati
   DirectoryController controller;
   const auto row = findPlaceRow(*controller.places(), home.filePath("target"));
   ASSERT_GE(row, 0);
+  const QPersistentModelIndex bookmarkIndex(controller.places()->index(row));
   ASSERT_TRUE(QTest::qWaitFor([&] {
-    return controller.places()
-               ->data(controller.places()->index(row), PlacesModel::StatusRole)
-               .value<PlacesModel::Status>() == PlacesModel::Status::Available;
+    return controller.places()->data(bookmarkIndex, PlacesModel::StatusRole).value<PlacesModel::Status>() ==
+           PlacesModel::Status::Available;
   }));
   const auto before = controller.currentPath();
   ASSERT_TRUE(QDir().rmdir(home.filePath("target")));
-  controller.activateBookmark(row);
+  controller.activateBookmark(bookmarkIndex.row());
   ASSERT_TRUE(QTest::qWaitFor(
       [&] { return controller.statusMessage() == QStringLiteral("Location is currently unavailable"); }));
   EXPECT_EQ(controller.currentPath(), before);
-  EXPECT_EQ(
-      controller.places()->data(controller.places()->index(row), PlacesModel::StatusRole).value<PlacesModel::Status>(),
-      PlacesModel::Status::Unavailable);
+  EXPECT_EQ(controller.places()->data(bookmarkIndex, PlacesModel::StatusRole).value<PlacesModel::Status>(),
+            PlacesModel::Status::Unavailable);
 }
 
 TEST(DirectoryController, NavigationBetweenActivationAndResolutionSuppressesBookmarkSideEffect) {
@@ -2068,14 +2067,14 @@ TEST(DirectoryController, TwoBookmarkActivationsAddNoWarnings) {
                                                 std::shared_ptr<WarningSink>(&warnings, [](WarningSink*) {}));
   const auto row = findPlaceRow(*controller.places(), home.filePath("target"));
   ASSERT_GE(row, 0);
+  const QPersistentModelIndex bookmarkIndex(controller.places()->index(row));
   ASSERT_TRUE(QTest::qWaitFor([&] {
-    return controller.places()
-               ->data(controller.places()->index(row), PlacesModel::StatusRole)
-               .value<PlacesModel::Status>() != PlacesModel::Status::Checking;
+    return controller.places()->data(bookmarkIndex, PlacesModel::StatusRole).value<PlacesModel::Status>() !=
+           PlacesModel::Status::Checking;
   }));
-  controller.activateBookmark(row);
+  controller.activateBookmark(bookmarkIndex.row());
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.currentPath() == home.filePath("target"); }));
-  controller.activateBookmark(row);
+  controller.activateBookmark(bookmarkIndex.row());
   QTest::qWait(50);
   EXPECT_TRUE(warnings.messages.isEmpty());
 }
