@@ -244,7 +244,7 @@ Requires C++23, Qt 6.11+ (including the Svg component), CMake 3.25+, Ninja,
 Task, libexif (via pkg-config), tomlplusplus 3.4+ (shared library, CMake config), and installed HolonightQt::Core /
 HolonightQt::Controls. Tests use Qt Test and GTest. Checks need clang-format,
 clang-tidy (run-clang-tidy), REUSE, desktop-file-utils and Python 3.
-`task isolated-runtime-check` additionally needs Docker. It builds the current CI
+`task isolated-runtime-check` additionally needs Docker. It builds the legacy development container
 image, snapshots the current working sources (including nonignored untracked files),
 and builds providers and Files inside that image before verifying its installed payload.
 Host build directories are preserved. Sources, image IDs and logs are retained under
@@ -321,12 +321,26 @@ adopt or remove legacy Files installations. The uninstaller preserves modified o
 Standalone builds and `DESTDIR` staging remain supported. Complete onboarding requires a
 published Files revision and an explicit umbrella pin update.
 
-CI runs deps, gives files-test ownership of build/, and runs check in C.UTF-8
-and the additional en_US.UTF-8 tests. It prepares the runtime
-context inside the build container and builds/runs the runtime image from the
-runner using the repository-relative `build/runtime-check-context` marker.
-The runtime container has no workspace or Docker-socket mounts and no network;
-CI retains verification logs as an artifact.
+`task ci` rehearses every push validation lane in fresh snapshots, using the same
+repository scripts, immutable SDK/REUSE 6.2.0 images and checksum-pinned supplements
+as GitHub. Install Python 3 and Docker (or Podman), with daemon/registry access and
+network access for the six pinned providers. Run it from this repository; current
+tracked edits and non-ignored new inputs are included. Add reported new files before
+pushing. Existing development commands remain available.
+
+The build lane runs full `task check` as unprivileged files-test in C.UTF-8, then
+additional en_US.UTF-8 tests. The host builds its captured installed payload and
+runs the runtime image plus all nine verifier fixtures without networking or host
+mounts. A separate lane builds both filesystem executables and requires namespace
+coverage offline. Where AppArmor is active, the host must already have the supplied
+holonight-files-isolation profile loaded; the launcher never changes host policy.
+
+Every lane uses fresh application and provider build trees. Container layers may
+be cached. Complete logs, revision/dirty status, image/tool/provider identities,
+runtime fixture logs and lane results remain under ignored `build/ci/`. Source is
+read-only during execution and artifacts are host-owned. Missing runtimes or failed
+required checks return nonzero. GitHub retains logs separately for each lane;
+publication/uploads remain remote operations. See [local CI SDD](docs/sdd/local-ci/README.md).
 
 A manual staged install remains available with
 `DESTDIR=/your/stage cmake --install build/release` (prefix /usr). The

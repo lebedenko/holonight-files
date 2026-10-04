@@ -4,6 +4,10 @@ vars:
   HOLONIGHT_DEPENDENCY_PREFIX: '{{default (printf "%s/build/deps/prefix" .TASKFILE_DIR) .HOLONIGHT_DEPENDENCY_PREFIX}}'
   HOLONIGHT_QML_IMPORT_PATH: '{{default (printf "%s/lib/qt6/qml" .HOLONIGHT_DEPENDENCY_PREFIX) .HOLONIGHT_QML_IMPORT_PATH}}'
 tasks:
+  ci:
+    desc: Rehearse every push validation lane in fresh pinned containers
+    cmds:
+    - python3 scripts/ci/run.py
   deps:
     desc: deps using standalone tooling
     cmds:

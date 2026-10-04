@@ -1,5 +1,11 @@
 # Backlog
 
+## Local CI rehearsal
+
+[Local CI rehearsal](sdd/local-ci/README.md) preserves all push validation lanes
+in pinned disposable containers. Implementation and native/container acceptance
+are complete; publication and umbrella integration remain separate.
+
 ## Finder shared-engine adoption
 
 The recursive finder passed native UI, button, keyboard, and selection checks,

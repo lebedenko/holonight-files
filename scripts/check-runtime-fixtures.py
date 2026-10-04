@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the installed verifier in disposable containers; retain logs in build/."""
 from pathlib import Path
+import os
 import subprocess
 import sys
 import tempfile
@@ -41,7 +42,7 @@ chmod 755 /usr/bin/hn-files
 for name, (setup, expected_error) in CASES.items():
     # Only fixture setup is privileged. The real verifier always runs as files-test.
     command = [
-        "docker", "run", "--rm", "--network", "none", "--user", "root",
+        os.environ.get("FILES_CONTAINER_RUNTIME", "docker"), "run", "--rm", "--platform", "linux/amd64", "--network", "none", "--user", "root",
         IMAGE, "bash", "-euc",
         setup + "\nexec runuser -u files-test -- bash scripts/isolated-runtime.sh",
     ]

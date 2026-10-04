@@ -7,4 +7,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: fsfe/reuse-action@v5
+      - run: python3 scripts/ci/run.py --lane licensing

@@ -1,0 +1,236 @@
+[
+  {
+    "name": "xorg-server-xvfb",
+    "version": "21.1.18-2",
+    "sha256": "90e7983435b52d97fa418a90a0cf3f0ebb8e7fea2c76b9f83309661043f50f27",
+    "url": "https://archive.archlinux.org/packages/x/xorg-server-xvfb/xorg-server-xvfb-21.1.18-2-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libxdamage",
+    "version": "1.1.7-1",
+    "sha256": "36be52372da7f2f49f949fc8a0f3c6e4eaee6fb03761d67e17355bd15ea6cee6",
+    "url": "https://archive.archlinux.org/packages/l/libxdamage/libxdamage-1.1.7-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libxfont2",
+    "version": "2.0.7-1",
+    "sha256": "24a4fe5ca5baf8511214d74e1a0a1b1c9893c47d02214e279f47ce84d52b905b",
+    "url": "https://archive.archlinux.org/packages/l/libxfont2/libxfont2-2.0.7-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libfontenc",
+    "version": "1.1.9-1",
+    "sha256": "d81a0725b82dd5e89cfd5e65b6502a281cac62c413e1170dc7c571a5f44c42f6",
+    "url": "https://archive.archlinux.org/packages/l/libfontenc/libfontenc-1.1.9-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "xorg-xauth",
+    "version": "1.1.5-1",
+    "sha256": "df9e0d1f29ae0135a49b17157841a4cc7c97869f9f27fd7480fff64f9afb94b7",
+    "url": "https://archive.archlinux.org/packages/x/xorg-xauth/xorg-xauth-1.1.5-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "xorg-xkbcomp",
+    "version": "1.5.0-1",
+    "sha256": "662f4ad50763b9d4192bb4f2bbd81ba3c50630a0ec2a83a13deb8770f785734d",
+    "url": "https://archive.archlinux.org/packages/x/xorg-xkbcomp/xorg-xkbcomp-1.5.0-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "xkeyboard-config",
+    "version": "2.48-1",
+    "sha256": "7f7f8656dbd0b37e36d3a97f6e188fc5c6cbccc4c1e5d34ff35f1d7a79b1cc73",
+    "url": "https://archive.archlinux.org/packages/x/xkeyboard-config/xkeyboard-config-2.48-1-any.pkg.tar.zst"
+  },
+  {
+    "name": "libxi",
+    "version": "1.8.3-1",
+    "sha256": "5ac5541f58978a3a5fab08c24f03da43200a7e9b25098e3e6da7bad7a0892cf0",
+    "url": "https://archive.archlinux.org/packages/l/libxi/libxi-1.8.3-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libxfixes",
+    "version": "6.0.2-1",
+    "sha256": "d58ab2dbf326e36cf84792fe0dc12c34239ea04ac34159006a566103203db272",
+    "url": "https://archive.archlinux.org/packages/l/libxfixes/libxfixes-6.0.2-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libxrender",
+    "version": "0.9.12-1",
+    "sha256": "fed0389073d5b107074eaab48cefcc2716e607865142cde5b579c8ceeefea142",
+    "url": "https://archive.archlinux.org/packages/l/libxrender/libxrender-0.9.12-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libxmu",
+    "version": "1.3.1-1",
+    "sha256": "31870eb5ad1911880cd7b2f3a59292b644d84b873ed62a1a7c36b9ac26bc08a5",
+    "url": "https://archive.archlinux.org/packages/l/libxmu/libxmu-1.3.1-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libxkbfile",
+    "version": "1.2.0-1",
+    "sha256": "78f14e9854c70527975cf2204a6dcbb55473ccda8f4da953b8f15618f167a0f3",
+    "url": "https://archive.archlinux.org/packages/l/libxkbfile/libxkbfile-1.2.0-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "ripgrep",
+    "version": "15.2.0-1",
+    "sha256": "4ab540861ee43dfe6974403dd3f03830615fd4b53971736f5c4fc7aa82133a21",
+    "url": "https://archive.archlinux.org/packages/r/ripgrep/ripgrep-15.2.0-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "ttf-dejavu",
+    "version": "2.37+18+g9b5d1b2f-8",
+    "sha256": "d46da489e776dd3d74def85d6d613509db408e9de7a7e3445c63832fd3798e65",
+    "url": "https://archive.archlinux.org/packages/t/ttf-dejavu/ttf-dejavu-2.37%2B18%2Bg9b5d1b2f-8-any.pkg.tar.zst"
+  },
+  {
+    "name": "go-task",
+    "version": "3.54.0-1",
+    "sha256": "4b9cb9ee17240d8f75c58c96cb95e53d8df532a49059fab400b7c95051ec7299",
+    "url": "https://archive.archlinux.org/packages/g/go-task/go-task-3.54.0-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libexif",
+    "version": "0.6.26-1",
+    "sha256": "92890eb0eece217dff5df78403d32682693b0b1557f20ca9264ca798646caea5",
+    "url": "https://archive.archlinux.org/packages/l/libexif/libexif-0.6.26-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "desktop-file-utils",
+    "version": "0.28-1",
+    "sha256": "cc525a69b6901318f360fae249986e62f233c0320c61274f2bad44449e0c8e44",
+    "url": "https://archive.archlinux.org/packages/d/desktop-file-utils/desktop-file-utils-0.28-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "reuse",
+    "version": "6.2.0-2",
+    "sha256": "2cf049bf678e4c9b82d0b8cd425fe2dab30f9417b09a41defdc79a7cdb2505a9",
+    "url": "https://archive.archlinux.org/packages/r/reuse/reuse-6.2.0-2-any.pkg.tar.zst"
+  },
+  {
+    "name": "python-debian",
+    "version": "1.1.1-1",
+    "sha256": "aa2d8491ec81d149f98b1754006a3fbe50c223fd15660e8ed5931170e6361fb2",
+    "url": "https://archive.archlinux.org/packages/p/python-debian/python-debian-1.1.1-1-any.pkg.tar.zst"
+  },
+  {
+    "name": "python-license-expression",
+    "version": "30.4.4-2",
+    "sha256": "ac76300a0681322822a7061f97dd53bdc0c5e5742ec052057f2f9e56ef1c1310",
+    "url": "https://archive.archlinux.org/packages/p/python-license-expression/python-license-expression-30.4.4-2-any.pkg.tar.zst"
+  },
+  {
+    "name": "python-boolean.py",
+    "version": "5.0-2",
+    "sha256": "c41afe7daa089dfc2b5f729d584fb7423e92f0a5a7440e095208a59872a09383",
+    "url": "https://archive.archlinux.org/packages/p/python-boolean.py/python-boolean.py-5.0-2-any.pkg.tar.zst"
+  },
+  {
+    "name": "python-jinja",
+    "version": "1:3.1.6-3",
+    "sha256": "a09284358e1273d08b02b8743296c4830b77c66a67b80b6a0b9fe9b837c10a70",
+    "url": "https://archive.archlinux.org/packages/p/python-jinja/python-jinja-1%3A3.1.6-3-any.pkg.tar.zst"
+  },
+  {
+    "name": "python-markupsafe",
+    "version": "3.0.4-1",
+    "sha256": "fc242b277ed7824ee8b927fe2f7dee0f9c58da09f2016218cf2f5a0b01eea9be",
+    "url": "https://archive.archlinux.org/packages/p/python-markupsafe/python-markupsafe-3.0.4-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "python-binaryornot",
+    "version": "0.6.0-1",
+    "sha256": "e90ad78fa4452bb54781ce4c11cac8dc59e2e1236c96febeb2b5250f9afb00ef",
+    "url": "https://archive.archlinux.org/packages/p/python-binaryornot/python-binaryornot-0.6.0-1-any.pkg.tar.zst"
+  },
+  {
+    "name": "python-chardet",
+    "version": "6.0.0.post1-1",
+    "sha256": "9cbf6ea78aae62bb5fca348e7901e0dd7017fc413927b7dfa93b121e63e253fc",
+    "url": "https://archive.archlinux.org/packages/p/python-chardet/python-chardet-6.0.0.post1-1-any.pkg.tar.zst"
+  },
+  {
+    "name": "python-attrs",
+    "version": "26.1.0-1",
+    "sha256": "197dc210fd563c3a721a7b4d0f19cb8bef6db7b3ca868d85571a2ecf6a3eaf50",
+    "url": "https://archive.archlinux.org/packages/p/python-attrs/python-attrs-26.1.0-1-any.pkg.tar.zst"
+  },
+  {
+    "name": "python-tomlkit",
+    "version": "0.15.1-1",
+    "sha256": "58a4d96ade7c6437fc85c5a1eccc472fa70bd9644a9e24c6dc2a4c2b4b6c1ddc",
+    "url": "https://archive.archlinux.org/packages/p/python-tomlkit/python-tomlkit-0.15.1-1-any.pkg.tar.zst"
+  },
+  {
+    "name": "python-click",
+    "version": "8.5.0-1",
+    "sha256": "bb536c3c07a9e88e2651678c65a3ae1428f08c1945762e7040efd51a1c76d027",
+    "url": "https://archive.archlinux.org/packages/p/python-click/python-click-8.5.0-1-any.pkg.tar.zst"
+  },
+  {
+    "name": "qt6-imageformats",
+    "version": "6.11.1-1",
+    "sha256": "50ff79a6473525119d76efe906eb9d91ce9389d7f4bb2ad2e036a912c59a8bc4",
+    "url": "https://archive.archlinux.org/packages/q/qt6-imageformats/qt6-imageformats-6.11.1-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libtiff",
+    "version": "4.7.1-2",
+    "sha256": "0ec04018553ff2a1133fd5c5b5e0360bc214cd0f9c598f5518ba84d133a08b00",
+    "url": "https://archive.archlinux.org/packages/l/libtiff/libtiff-4.7.1-2-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "jbigkit",
+    "version": "2.1-8",
+    "sha256": "ca53fa884681273162aadcf99c30514a7010d5e621eb0a5ae491500ae8dc52c9",
+    "url": "https://archive.archlinux.org/packages/j/jbigkit/jbigkit-2.1-8-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libdeflate",
+    "version": "1.25-1",
+    "sha256": "4e9b5d01558db0cddfbd2a6a48ed6baf92bbe65af4d0dd1ae390206fe76080ee",
+    "url": "https://archive.archlinux.org/packages/l/libdeflate/libdeflate-1.25-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libwebp",
+    "version": "1.6.0-2",
+    "sha256": "a80e7edd3ddd27c6fd8cd83d0bd98d46b3f0279b7ee01f5baeded0d6f26f8975",
+    "url": "https://archive.archlinux.org/packages/l/libwebp/libwebp-1.6.0-2-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "jasper",
+    "version": "4.2.9-1",
+    "sha256": "de413717cf274894de2a4bbbc8c85be727f313fb3bbc2ed30fe316cfc773a6b1",
+    "url": "https://archive.archlinux.org/packages/j/jasper/jasper-4.2.9-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libmng",
+    "version": "2.0.3-4",
+    "sha256": "d72b54a4d4aef58770b19737427b00e98aa412702078fea2b8d40cad4c474b84",
+    "url": "https://archive.archlinux.org/packages/l/libmng/libmng-2.0.3-4-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "pixman",
+    "version": "0.46.4-1",
+    "sha256": "e87e665d25a2230a178d8490202e1d677fde5908f68ebedf7d987308fc26fcb6",
+    "url": "https://archive.archlinux.org/packages/p/pixman/pixman-0.46.4-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "libunwind",
+    "version": "1.8.2-1",
+    "sha256": "74ba64398637c2dad73f0ed09cee63a83a0f9a67f1484e6fea5a6223ff165d55",
+    "url": "https://archive.archlinux.org/packages/l/libunwind/libunwind-1.8.2-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "nettle",
+    "version": "3.10.2-1",
+    "sha256": "fa1a132d0d9cd8c58d90605e2b64b63503e89f398912a653ed05abd0f2dd0a3e",
+    "url": "https://archive.archlinux.org/packages/n/nettle/nettle-3.10.2-1-x86_64.pkg.tar.zst"
+  },
+  {
+    "name": "shared-mime-info",
+    "version": "2.5.1-2",
+    "sha256": "e71f0788fbb52679b9a75f3558ef8a2b5c3c9f691f136b7574caefc0240461c1",
+    "url": "https://archive.archlinux.org/packages/s/shared-mime-info/shared-mime-info-2.5.1-2-x86_64.pkg.tar.zst"
+  }
+]
