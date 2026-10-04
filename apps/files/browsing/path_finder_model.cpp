@@ -35,10 +35,10 @@ RecordBatches recordsForPaths(QVector<PathCandidate> ready) {
     fields.reserve(2);
     fields.append({
         .name = QStringLiteral("name"),
-        .text = candidate.relativePath.mid(candidate.relativePath.lastIndexOf(u'/') + 1),
+        .text = candidate.relative_path.mid(candidate.relative_path.lastIndexOf(u'/') + 1),
         .weight = 0,
     });
-    fields.append({.name = QStringLiteral("path"), .text = std::move(candidate.relativePath), .weight = 0});
+    fields.append({.name = QStringLiteral("path"), .text = std::move(candidate.relative_path), .weight = 0});
     Record record{.id = std::move(candidate.path), .fields = std::move(fields), .boost = 0};
     (candidate.directory ? batches.directories : batches.files).append(std::move(record));
   }
@@ -98,7 +98,7 @@ QVariant PathFinderModel::data(const QModelIndex& index, int role) const {
     case PathRole:
       return row.path;
     case RelativePathRole:
-      return row.relativePath;
+      return row.relative_path;
     case DirectoryRole:
       return row.directory;
     case PositionsRole:
@@ -540,9 +540,9 @@ QVector<PathFinderModel::Row> PathFinderModel::rowsForHits(const QVector<Holonig
     }
     Row row;
     row.path = hit.id;
-    row.relativePath = rootDirectory.relativeFilePath(hit.id);
+    row.relative_path = rootDirectory.relativeFilePath(hit.id);
     row.directory = directoriesOnly;
-    const int basenameStart = static_cast<int>(row.relativePath.lastIndexOf(u'/') + 1);
+    const int basenameStart = static_cast<int>(row.relative_path.lastIndexOf(u'/') + 1);
     for (const auto& highlight : hit.highlights) {
       for (const int position : highlight.positions) {
         row.positions.append(position + (highlight.field == QStringLiteral("name") ? basenameStart : 0));

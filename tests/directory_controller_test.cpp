@@ -767,7 +767,7 @@ TEST(DirectoryController, ExclusiveCreationPreservesRacingCollisionAndRetainsEdi
   controller.handleKey("o");
   controller.updateInsertText("race");
   DirectoryControllerTestAccess::beforeCommit(controller, [&](const auto& commit) {
-    EXPECT_EQ(commit.newPath, dir.filePath("race"));
+    EXPECT_EQ(commit.new_path, dir.filePath("race"));
     writeFile(dir, "race", "keep contents");
   });
   controller.commitInsertEditing();
@@ -811,7 +811,8 @@ TEST(DirectoryController, UnchangedTouchPreservesAtimeForFilesDirectoriesAndLink
   ASSERT_TRUE(QFile::link(target.filePath("missing"), dir.filePath("dangling")));
   // Future atime prevents unrelated preview reads from triggering Linux relatime updates.
   const std::array<timespec, 2> oldTimes{
-      {{.tv_sec = QDateTime::currentSecsSinceEpoch() + 86400, .tv_nsec = 123}, {.tv_sec = 1000000, .tv_nsec = 456}}};
+      {{.tv_sec = QDateTime::currentSecsSinceEpoch() + 86400, .tv_nsec = 123}, {.tv_sec = 1000000, .tv_nsec = 456}},
+  };
   ASSERT_EQ(::utimensat(AT_FDCWD, QFile::encodeName(target.filePath("target")).constData(), oldTimes.data(), 0), 0);
   DirectoryController controller;
   controller.open(dir.path());
@@ -1109,7 +1110,10 @@ struct NestedFixture {
 };
 NestedFixture buildNestedFixture(const QTemporaryDir& dir) {
   const NestedFixture fixture{
-      .root = dir.path(), .mid = dir.filePath("mid"), .zed = QDir(dir.filePath("mid")).filePath("zed")};
+      .root = dir.path(),
+      .mid = dir.filePath("mid"),
+      .zed = QDir(dir.filePath("mid")).filePath("zed"),
+  };
   QDir().mkpath(dir.filePath("aaa"));
   QDir().mkpath(QDir(fixture.mid).filePath("aaa"));
   QDir().mkpath(fixture.zed);
@@ -1683,8 +1687,12 @@ TEST(DirectoryController, HistoryNavigationStaysPinnedUntilQuickLookCloses) {
   ASSERT_TRUE(controller.quickLookOpen());
   const auto row = controller.cursorRow();
   const auto name = controller.preview()->name();
-  for (const auto navigate : {&DirectoryController::navigateHistoryBack, &DirectoryController::navigateHistoryForward,
-                              &DirectoryController::goBack, &DirectoryController::goForward}) {
+  for (const auto navigate : {
+           &DirectoryController::navigateHistoryBack,
+           &DirectoryController::navigateHistoryForward,
+           &DirectoryController::goBack,
+           &DirectoryController::goForward,
+       }) {
     (controller.*navigate)();
     EXPECT_TRUE(controller.quickLookOpen());
     EXPECT_EQ(controller.currentPath(), fixture.b);
@@ -1775,9 +1783,11 @@ TEST(DirectoryController, FailedRestoreOpensHomeWithMatchingReason) {
     const char* reason;
   };
   const std::vector<Case> cases = {
-      {.path = dir.filePath("deleted"),
-       .classification = Classification::Local,
-       .reason = "last location does not exist"},
+      {
+          .path = dir.filePath("deleted"),
+          .classification = Classification::Local,
+          .reason = "last location does not exist",
+      },
       {.path = file, .classification = Classification::Local, .reason = "last location is not a directory"},
       {.path = dir.path(), .classification = Classification::Network, .reason = "last location is not local"},
       {.path = dir.path(), .classification = Classification::Removable, .reason = "last location is not local"},

@@ -10,10 +10,10 @@
 struct NameValidationResult {
   bool valid = false;
   // "./" prefix stripped, trailing "/" directory marker stripped. Empty when !valid.
-  QString normalizedName;
-  bool createsDirectory = false;
+  QString normalized_name;
+  bool creates_directory = false;
   // Empty when valid.
-  QString errorMessage;
+  QString error_message;
 };
 
 // directoryPath: the directory the name would be created/renamed into (used only for the

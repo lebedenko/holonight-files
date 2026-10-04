@@ -21,7 +21,7 @@ NameValidationResult validateName(const QString& rawInput, const QString& direct
 
   // 2. No parent traversal, anywhere in what remains (REQ-F-031).
   if (name.contains(u"../")) {
-    result.errorMessage =
+    result.error_message =
         QCoreApplication::translate("NameValidator", "Can only operate within the current folder — no parent access");
     return result;
   }
@@ -32,40 +32,40 @@ NameValidationResult validateName(const QString& rawInput, const QString& direct
   if (name.endsWith(u'/')) {
     const auto withoutTrailing = name.left(name.size() - 1);
     if (withoutTrailing.contains(u'/')) {
-      result.errorMessage = QCoreApplication::translate(
+      result.error_message = QCoreApplication::translate(
           "NameValidator", "Cannot create nested entries — only items directly in this folder");
       return result;
     }
     createsDirectory = true;
     name = withoutTrailing;
   } else if (name.contains(u'/')) {
-    result.errorMessage = QCoreApplication::translate(
+    result.error_message = QCoreApplication::translate(
         "NameValidator", "Cannot create nested entries — only items directly in this folder");
     return result;
   }
 
   // 4. Empty or whitespace-only (REQ-F-033).
   if (name.trimmed().isEmpty()) {
-    result.errorMessage = QCoreApplication::translate("NameValidator", "Name cannot be empty");
+    result.error_message = QCoreApplication::translate("NameValidator", "Name cannot be empty");
     return result;
   }
 
   // 5. Literal "." or ".." (REQ-F-034).
   if (name == u"." || name == u"..") {
-    result.errorMessage = QCoreApplication::translate("NameValidator", "That name is reserved");
+    result.error_message = QCoreApplication::translate("NameValidator", "That name is reserved");
     return result;
   }
 
   // 6. Filesystem max name length, in bytes (REQ-F-035; see DESIGN.md Known Risks re: Unicode).
   if (name.toUtf8().size() > kMaxNameBytes) {
-    result.errorMessage = QCoreApplication::translate("NameValidator", "Name is too long");
+    result.error_message = QCoreApplication::translate("NameValidator", "Name is too long");
     return result;
   }
 
   // 7. Control bytes / DEL (REQ-F-036).
   for (const auto character : name) {
     if (isControlOrDelete(character)) {
-      result.errorMessage = QCoreApplication::translate("NameValidator", "Invalid file name");
+      result.error_message = QCoreApplication::translate("NameValidator", "Invalid file name");
       return result;
     }
   }
@@ -74,12 +74,12 @@ NameValidationResult validateName(const QString& rawInput, const QString& direct
   //    via selfName (REQ-F-037/REQ-F-038).
   const QFileInfo destination(QDir(directoryPath).filePath(name));
   if (name != selfName && (destination.exists() || destination.isSymLink())) {
-    result.errorMessage = QCoreApplication::translate("NameValidator", "An entry with that name already exists");
+    result.error_message = QCoreApplication::translate("NameValidator", "An entry with that name already exists");
     return result;
   }
 
   result.valid = true;
-  result.normalizedName = name;
-  result.createsDirectory = createsDirectory;
+  result.normalized_name = std::move(name);
+  result.creates_directory = createsDirectory;
   return result;
 }

@@ -25,7 +25,7 @@ void scanFolder(const QString& folder, const QDir& root, QVector<QString>& pendi
     }
     batch.append({
         .path = info.absoluteFilePath(),
-        .relativePath = root.relativeFilePath(info.absoluteFilePath()),
+        .relative_path = root.relativeFilePath(info.absoluteFilePath()),
         .directory = directory,
     });
     if (directory) {

@@ -14,9 +14,9 @@ class DirectoryProxyModel : public QSortFilterProxyModel {
  public:
   explicit DirectoryProxyModel(QObject* parent = nullptr);
   void setEditing(bool editing) { editing_ = editing; }
-  bool hiddenVisible() const { return hidden_visible_; }
+  [[nodiscard]] bool hiddenVisible() const { return hidden_visible_; }
   void setHiddenVisible(bool visible);
-  bool sortDescending() const { return sort_order_ == Qt::DescendingOrder; }
+  [[nodiscard]] bool sortDescending() const { return sort_order_ == Qt::DescendingOrder; }
   void setSortDescending(bool descending);
   // Pins the source row at sourceRow (an INSERT-mode o/O create placeholder) to sort immediately
   // adjacent to the entry named anchorName, instead of by its own (empty) name — the placeholder
@@ -32,8 +32,8 @@ class DirectoryProxyModel : public QSortFilterProxyModel {
   void sortDescendingChanged();
 
  protected:
-  bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
-  bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
+  [[nodiscard]] bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
+  [[nodiscard]] bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
 
  private:
   QCollator collator_;

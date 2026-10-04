@@ -14,9 +14,9 @@ TEST(NameValidator, AcceptsAnOrdinaryName) {
   ASSERT_TRUE(dir.isValid());
   const auto result = validateName("newfile.txt", dir.path());
   EXPECT_TRUE(result.valid);
-  EXPECT_EQ(result.normalizedName, "newfile.txt");
-  EXPECT_FALSE(result.createsDirectory);
-  EXPECT_TRUE(result.errorMessage.isEmpty());
+  EXPECT_EQ(result.normalized_name, "newfile.txt");
+  EXPECT_FALSE(result.creates_directory);
+  EXPECT_TRUE(result.error_message.isEmpty());
 }
 
 TEST(NameValidator, StripsALeadingDotSlashSilently) {
@@ -24,8 +24,8 @@ TEST(NameValidator, StripsALeadingDotSlashSilently) {
   ASSERT_TRUE(dir.isValid());
   const auto result = validateName("./example.txt", dir.path());
   EXPECT_TRUE(result.valid);
-  EXPECT_EQ(result.normalizedName, "example.txt");
-  EXPECT_TRUE(result.errorMessage.isEmpty());
+  EXPECT_EQ(result.normalized_name, "example.txt");
+  EXPECT_TRUE(result.error_message.isEmpty());
 }
 
 TEST(NameValidator, RejectsLeadingParentTraversal) {
@@ -33,7 +33,7 @@ TEST(NameValidator, RejectsLeadingParentTraversal) {
   ASSERT_TRUE(dir.isValid());
   const auto result = validateName("../danger", dir.path());
   EXPECT_FALSE(result.valid);
-  EXPECT_FALSE(result.errorMessage.isEmpty());
+  EXPECT_FALSE(result.error_message.isEmpty());
 }
 
 TEST(NameValidator, RejectsEmbeddedParentTraversal) {
@@ -48,8 +48,8 @@ TEST(NameValidator, AcceptsATrailingSlashAsADirectoryMarker) {
   ASSERT_TRUE(dir.isValid());
   const auto result = validateName("newfolder/", dir.path());
   EXPECT_TRUE(result.valid);
-  EXPECT_EQ(result.normalizedName, "newfolder");
-  EXPECT_TRUE(result.createsDirectory);
+  EXPECT_EQ(result.normalized_name, "newfolder");
+  EXPECT_TRUE(result.creates_directory);
 }
 
 TEST(NameValidator, RejectsAnEmbeddedSlashThatIsNotASingleTrailingMarker) {
@@ -104,7 +104,7 @@ TEST(NameValidator, AcceptsTheUnchangedNameAsATouchNotACollision) {
   writeFile(dir, "self.txt");
   const auto result = validateName("self.txt", dir.path(), "self.txt");
   EXPECT_TRUE(result.valid);
-  EXPECT_EQ(result.normalizedName, "self.txt");
+  EXPECT_EQ(result.normalized_name, "self.txt");
 }
 
 TEST(NameValidator, RenameToADifferentExistingNameStillCollides) {

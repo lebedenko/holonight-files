@@ -387,11 +387,13 @@ void DirectoryModel::startWalk(const QString& path, bool diff) {
                                   !updates_suspended_) {
                                 *acceptedLoad = true;
                               }
-                              applyBatch(Batch{.generation = generation,
-                                               .diff = diff,
-                                               .entries = entries,
-                                               .finished = finished,
-                                               .directory_error = error});
+                              applyBatch(Batch{
+                                  .generation = generation,
+                                  .diff = diff,
+                                  .entries = entries,
+                                  .finished = finished,
+                                  .directory_error = error,
+                              });
                             },
                             Qt::QueuedConnection);
                         if (succeeded) {

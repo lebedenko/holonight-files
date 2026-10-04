@@ -118,12 +118,14 @@ QRectF expectedStroke(QQuickItem* separator, qreal dpr) {
 void expectJunctionPixels(const QImage& background, const QImage& rendered, const QList<QQuickItem*>& separators,
                           const QList<QRectF>& bounds) {
   // Check complete junction neighborhoods, including the surrounding unpainted pixels.
-  QList<QPointF> junctions = {{bounds[1].center().x(), bounds[0].bottom()},
-                              {bounds[1].center().x(), bounds[5].top()},
-                              {bounds[6].center().x(), bounds[0].bottom()},
-                              {bounds[6].center().x(), bounds[5].top()},
-                              bounds[2].topLeft(),
-                              bounds[2].topRight()};
+  QList<QPointF> junctions = {
+      {bounds[1].center().x(), bounds[0].bottom()},
+      {bounds[1].center().x(), bounds[5].top()},
+      {bounds[6].center().x(), bounds[0].bottom()},
+      {bounds[6].center().x(), bounds[5].top()},
+      bounds[2].topLeft(),
+      bounds[2].topRight(),
+  };
   for (int column : {3, 4}) {
     junctions.append(QPointF(bounds[column].center().x(), bounds[0].bottom()));
     junctions.append(QPointF(bounds[column].center().x(), bounds[2].top()));
@@ -189,8 +191,15 @@ TEST(Files, WindowSeparatorJunctions) {
   }
   const auto grab = [&] { return gpu_capture ? gpu_capture->grab() : window->grabWindow(); };
   QList<QQuickItem*> separators;
-  for (const char* name : {"headerDivider", "sidebarDivider", "columnHeaderDivider", "sizeColumnDivider",
-                           "modifiedColumnDivider", "footerDivider", "listingPreviewDivider"}) {
+  for (const char* name : {
+           "headerDivider",
+           "sidebarDivider",
+           "columnHeaderDivider",
+           "sizeColumnDivider",
+           "modifiedColumnDivider",
+           "footerDivider",
+           "listingPreviewDivider",
+       }) {
     auto* item = window->findChild<QQuickItem*>(name);
     ASSERT_NE(item, nullptr) << name;
     ASSERT_EQ(item->property("thickness").toInt(), 1) << name;

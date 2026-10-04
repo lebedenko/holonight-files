@@ -468,7 +468,7 @@ TEST(TaskManager, IncompleteDirectoryMoveCountsOneItemAndReportsSkipsSeparately)
   EXPECT_EQ(tasks.lastSummary().succeeded, 0);
   EXPECT_EQ(tasks.lastSummary().incomplete, 1);
   EXPECT_EQ(tasks.lastSummary().failed, 0);
-  EXPECT_EQ(tasks.lastSummary().skippedChildren.size(), 1);
+  EXPECT_EQ(tasks.lastSummary().skipped_children.size(), 1);
   EXPECT_TRUE(tasks.lastSummaryText().contains("source retained; some destination copies exist"));
   EXPECT_TRUE(QFile::exists(src.filePath("tree/copied")));
 }

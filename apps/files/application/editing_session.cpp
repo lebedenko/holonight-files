@@ -78,22 +78,22 @@ void EditingSession::commitInsertEditing() {
     case VimModeController::InsertCommitAction::Touch: {
       const std::array<timespec, 2> times{{{.tv_sec = 0, .tv_nsec = UTIME_OMIT}, {.tv_sec = 0, .tv_nsec = UTIME_NOW}}};
       succeeded =
-          ::utimensat(AT_FDCWD, QFile::encodeName(commit.oldPath).constData(), times.data(), AT_SYMLINK_NOFOLLOW) == 0;
+          ::utimensat(AT_FDCWD, QFile::encodeName(commit.old_path).constData(), times.data(), AT_SYMLINK_NOFOLLOW) == 0;
       operationError = succeeded ? 0 : errno;
       break;
     }
     case VimModeController::InsertCommitAction::Rename: {
-      succeeded = ::renameat2(AT_FDCWD, QFile::encodeName(commit.oldPath).constData(), AT_FDCWD,
-                              QFile::encodeName(commit.newPath).constData(), RENAME_NOREPLACE) == 0;
+      succeeded = ::renameat2(AT_FDCWD, QFile::encodeName(commit.old_path).constData(), AT_FDCWD,
+                              QFile::encodeName(commit.new_path).constData(), RENAME_NOREPLACE) == 0;
       operationError = succeeded ? 0 : errno;
       break;
     }
     case VimModeController::InsertCommitAction::CreateDirectory:
-      succeeded = ::mkdir(QFile::encodeName(commit.newPath).constData(), 0777) == 0;
+      succeeded = ::mkdir(QFile::encodeName(commit.new_path).constData(), 0777) == 0;
       operationError = succeeded ? 0 : errno;
       break;
     case VimModeController::InsertCommitAction::CreateFile: {
-      QFile file(commit.newPath);
+      QFile file(commit.new_path);
       succeeded = file.open(QIODevice::WriteOnly | QIODevice::NewOnly);
       operationError = succeeded ? 0 : errno;
       detail = file.errorString();

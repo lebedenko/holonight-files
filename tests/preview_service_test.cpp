@@ -929,7 +929,8 @@ TEST(PreviewService, RasterOutcomesHaveDistinctPresentationAndSilentCancellation
   const std::array cases = {
       std::pair{Outcome::Success, Kind::None},         std::pair{Outcome::Unsupported, Kind::Unsupported},
       std::pair{Outcome::Damaged, Kind::DecodeFailed}, std::pair{Outcome::ResourceLimit, Kind::ResourceLimit},
-      std::pair{Outcome::IoFailure, Kind::IoFailure},  std::pair{Outcome::Cancelled, Kind::None}};
+      std::pair{Outcome::IoFailure, Kind::IoFailure},  std::pair{Outcome::Cancelled, Kind::None},
+  };
   QStringList messages;
   for (const auto& [outcome, kind] : cases) {
     const auto error = PreviewServiceTestAccess::rasterError(outcome);

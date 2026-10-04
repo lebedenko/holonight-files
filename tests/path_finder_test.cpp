@@ -143,7 +143,7 @@ TEST(PathFinderModel, PublishesPartialResultsBeforeScanCompletes) {
   QSemaphore continueScan;
   PathScanFunction scanner = [&continueScan](const QString& root, bool, const SearchExclusionPolicy&,
                                              const std::atomic_bool&, const PathBatchReady& batchReady) {
-    batchReady({{.path = root + "/lambda.cpp", .relativePath = "lambda.cpp", .directory = false}});
+    batchReady({{.path = root + "/lambda.cpp", .relative_path = "lambda.cpp", .directory = false}});
     continueScan.acquire();
     return true;
   };
@@ -189,8 +189,8 @@ TEST(PathFinderModel, ReopeningAndSwitchingModesReuseCompletedScan) {
                                           const std::atomic_bool&, const PathBatchReady& batchReady) {
     ++scanCount;
     batchReady({
-        {.path = root + "/project", .relativePath = "project", .directory = true},
-        {.path = root + "/project.txt", .relativePath = "project.txt", .directory = false},
+        {.path = root + "/project", .relative_path = "project", .directory = true},
+        {.path = root + "/project.txt", .relative_path = "project.txt", .directory = false},
     });
     return true;
   };
@@ -222,7 +222,7 @@ TEST(PathFinderModel, PopupClosureKeepsScanAndReopeningAttaches) {
   PathScanFunction scanner = [&continueScan, &scanCount](const QString& root, bool, const SearchExclusionPolicy&,
                                                          const std::atomic_bool&, const PathBatchReady& batchReady) {
     const int call = ++scanCount;
-    batchReady({{.path = root + "/lambda.cpp", .relativePath = "lambda.cpp", .directory = false}});
+    batchReady({{.path = root + "/lambda.cpp", .relative_path = "lambda.cpp", .directory = false}});
     if (call == 1) {
       continueScan.acquire();
     }
@@ -410,7 +410,7 @@ TEST(PathFinderModel, InvalidationDebouncesAndRejectsCancelledGeneration) {
       release.acquire();
     }
     const QString name = call == 1 ? "obsolete.txt" : "replacement.txt";
-    ready({{.path = root + u'/' + name, .relativePath = name, .directory = false}});
+    ready({{.path = root + u'/' + name, .relative_path = name, .directory = false}});
     return true;
   });
   model.start("/synthetic", false);
@@ -437,7 +437,7 @@ TEST(PathFinderModel, ShutdownIsAsynchronousAndDiscardsLateScanResults) {
                             const PathBatchReady& ready) {
     entered.store(true);
     release.acquire();
-    ready({{.path = root + "/obsolete.txt", .relativePath = "obsolete.txt", .directory = false}});
+    ready({{.path = root + "/obsolete.txt", .relative_path = "obsolete.txt", .directory = false}});
     return true;
   });
   model.start("/synthetic", false);
@@ -469,8 +469,8 @@ TEST(PathFinderModel, HomeWarmupAttachesAndPersistsAcrossModelRestart) {
       ++scans;
       entered.store(true);
       ready({
-          {.path = root + "/project.txt", .relativePath = "project.txt", .directory = false},
-          {.path = root + "/project", .relativePath = "project", .directory = true},
+          {.path = root + "/project.txt", .relative_path = "project.txt", .directory = false},
+          {.path = root + "/project", .relative_path = "project", .directory = true},
       });
       release.acquire();
       return true;
@@ -496,7 +496,7 @@ TEST(PathFinderModel, HomeWarmupAttachesAndPersistsAcrossModelRestart) {
     ++scans;
     entered.store(true);
     release.acquire();
-    ready({{.path = root + "/new.txt", .relativePath = "new.txt", .directory = false}});
+    ready({{.path = root + "/new.txt", .relative_path = "new.txt", .directory = false}});
     return true;
   });
   restored.warmUp();
@@ -534,7 +534,7 @@ TEST(PathFinderModel, ForegroundRootPreemptsHomeAndWarmupResumes) {
       }
     }
     // Deliberately emit even after cancellation to exercise the generation guard.
-    ready({{.path = root + "/needle.txt", .relativePath = "needle.txt", .directory = false}});
+    ready({{.path = root + "/needle.txt", .relative_path = "needle.txt", .directory = false}});
     return !cancelled.load();
   });
   model.warmUp();

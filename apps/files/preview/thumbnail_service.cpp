@@ -21,13 +21,15 @@ HolonightThumbnails::Request cacheRequest(QFile& file, const QString& path, cons
   const bool metadataValid = file.handle() >= 0 && ::fstat(file.handle(), &source) == 0;
   const qint64 milliseconds =
       metadataValid ? (static_cast<qint64>(source.st_mtim.tv_sec) * 1000) + (source.st_mtim.tv_nsec / 1000000) : 0;
-  return {.uri = QUrl::fromLocalFile(path),
-          .modified = metadataValid ? QDateTime::fromMSecsSinceEpoch(milliseconds) : QDateTime{},
-          .size = metadataValid ? source.st_size : -1,
-          .required = required,
-          .kind = kind == ImageKind::Svg ? HolonightThumbnails::Kind::Svg : HolonightThumbnails::Kind::Raster,
-          .revision = revision,
-          .tier = static_cast<int>(tier)};
+  return {
+      .uri = QUrl::fromLocalFile(path),
+      .modified = metadataValid ? QDateTime::fromMSecsSinceEpoch(milliseconds) : QDateTime{},
+      .size = metadataValid ? source.st_size : -1,
+      .required = required,
+      .kind = kind == ImageKind::Svg ? HolonightThumbnails::Kind::Svg : HolonightThumbnails::Kind::Raster,
+      .revision = revision,
+      .tier = static_cast<int>(tier),
+  };
 }
 
 HolonightThumbnails::StageCallback cacheStage(const StageCallback& stage) {

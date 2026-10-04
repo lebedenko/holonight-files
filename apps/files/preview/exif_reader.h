@@ -17,10 +17,10 @@ struct ExifSummary {
   bool present = false;
   QString make;
   QString model;
-  QString exposureTime;
+  QString exposure_time;
   QString iso;
-  QString focalLength;
-  QString lensModel;
+  QString focal_length;
+  QString lens_model;
   QString aperture;  // "f/X.X"
   bool operator==(const ExifSummary&) const = default;
 };

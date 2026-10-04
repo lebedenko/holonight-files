@@ -151,7 +151,7 @@ ItemResult commitTemporary(const QString& temporary, const QString& destination,
   if (!result.complete()) {
     ::unlink(encode(temporary).constData());
   } else {
-    result.destinationCopiesExist = true;
+    result.destination_copies_exist = true;
   }
   return result;
 }
@@ -275,14 +275,14 @@ ItemResult prepareDestinationDirectory(const QString& destPath, bool overwrite) 
     return failure(describeErrno(errno));
   }
   ItemResult result;
-  result.destinationCopiesExist = true;
+  result.destination_copies_exist = true;
   return result;
 }
 
 ItemResult copyDirectoryTree(const QString& srcPath, const QString& destPath, const struct stat& srcStat,
                              bool overwrite, const CancelFlag& cancel) {
   auto result = prepareDestinationDirectory(destPath, overwrite);
-  const bool created = result.destinationCopiesExist;
+  const bool created = result.destination_copies_exist;
   if (result.failed) {
     return result;
   }
@@ -297,7 +297,7 @@ ItemResult copyDirectoryTree(const QString& srcPath, const QString& destPath, co
     auto* item = ::readdir(dir.get());
     if (item == nullptr) {
       if (errno != 0) {
-        result.nestedFailures.append({.path = srcPath, .reason = describeErrno(errno)});
+        result.nested_failures.append({.path = srcPath, .reason = describeErrno(errno)});
       }
       break;
     }
@@ -310,28 +310,28 @@ ItemResult copyDirectoryTree(const QString& srcPath, const QString& destPath, co
       continue;
     }
     if (destinationExists(destPath, name)) {
-      result.skippedChildren.append(QDir(srcPath).filePath(name));
+      result.skipped_children.append(QDir(srcPath).filePath(name));
       continue;  // Nested skips are distinct from I/O failures.
     }
     const auto childSrc = QDir(srcPath).filePath(name);
     const auto childDest = QDir(destPath).filePath(name);
     const auto childResult = copyEntryImpl(childSrc, childDest, /*overwrite=*/false, cancel);
-    result.destinationCopiesExist = result.destinationCopiesExist || childResult.destinationCopiesExist;
-    result.skippedChildren.append(childResult.skippedChildren);
-    result.nestedFailures.append(childResult.nestedFailures);
+    result.destination_copies_exist = result.destination_copies_exist || childResult.destination_copies_exist;
+    result.skipped_children.append(childResult.skipped_children);
+    result.nested_failures.append(childResult.nested_failures);
     if (childResult.cancelled) {
       result.cancelled = true;
       return result;
     }
     if (childResult.failed) {
-      result.nestedFailures.append({.path = childSrc, .reason = childResult.reason});
+      result.nested_failures.append({.path = childSrc, .reason = childResult.reason});
     }
   }
   if (created) {
     const std::array<timespec, 2> times{{srcStat.st_atim, srcStat.st_mtim}};
     if (::utimensat(AT_FDCWD, encode(destPath).constData(), times.data(), AT_SYMLINK_NOFOLLOW) != 0 ||
         ::chmod(encode(destPath).constData(), srcStat.st_mode & 07777) != 0) {
-      result.nestedFailures.append({.path = destPath, .reason = describeErrno(errno)});
+      result.nested_failures.append({.path = destPath, .reason = describeErrno(errno)});
     }
   }
   return result;
@@ -480,8 +480,8 @@ ItemResult moveEntry(const QString& srcPath, const QString& destPath, bool overw
     result.cancelled = true;
   }
   if (!result.complete()) {
-    result.sourceRetained = true;
-    const auto retention = result.destinationCopiesExist
+    result.source_retained = true;
+    const auto retention = result.destination_copies_exist
                                ? QObject::tr("source retained; some destination copies exist")
                                : QObject::tr("source retained; no destination copies were committed");
     result.reason = QStringLiteral("%1; %2").arg(

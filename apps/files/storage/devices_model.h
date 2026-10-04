@@ -1,4 +1,5 @@
 #pragma once
+
 #include "capacity_probe.h"
 
 #include <QAbstractListModel>
@@ -8,6 +9,7 @@
 
 #include <StorageController.h>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -22,15 +24,18 @@ class DevicesModel : public QAbstractListModel {
 
   explicit DevicesModel(QObject* parent = nullptr);
   // A null probe measures the real filesystem (StorageInfoCapacityProbe).
-  DevicesModel(HoloNight::System::StorageController* controller, QObject* parent = nullptr,
-               std::shared_ptr<const CapacityProbe> probe = {});
+  explicit DevicesModel(HoloNight::System::StorageController* controller, QObject* parent = nullptr,
+                        std::shared_ptr<const CapacityProbe> probe = {});
   ~DevicesModel() override;
   DevicesModel(const DevicesModel&) = delete;
   DevicesModel& operator=(const DevicesModel&) = delete;
   DevicesModel(DevicesModel&&) = delete;
   DevicesModel& operator=(DevicesModel&&) = delete;
 
-  enum Role {
+  // Qt model roles/QML properties require implicit integer conversion.
+
+  // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
+  enum Role : std::uint16_t {
     TargetId = Qt::UserRole + 1,
     DriveId,
     Name,
@@ -46,17 +51,19 @@ class DevicesModel : public QAbstractListModel {
     GroupStart,
     CapacityValid,
     CapacityFraction,
-    CapacityText
+    CapacityText,
   };
   // Mirrors HoloNight::System::StorageOperation value for value, which QML cannot name.
-  enum Verb { NoVerb = -1, Mount = 0, Unmount, Eject, PowerOff };
+  // Qt model roles/QML properties require implicit integer conversion.
+  // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
+  enum Verb : std::int8_t { NoVerb = -1, Mount, Unmount, Eject, PowerOff };
   Q_ENUM(Verb)
 
-  int rowCount(const QModelIndex& parent = {}) const override;
-  QVariant data(const QModelIndex& index, int role) const override;
-  QHash<int, QByteArray> roleNames() const override;
-  int count() const { return static_cast<int>(rows_.size()); }
-  QString errorMessage() const { return error_message_; }
+  [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
+  [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
+  [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
+  [[nodiscard]] int count() const { return static_cast<int>(rows_.size()); }
+  [[nodiscard]] QString errorMessage() const { return error_message_; }
   void resolvedLocation(const QString& path, const QString& canonicalPath);
   void navigationChanged(const QString& path);
   void setInteractionEnabled(bool enabled);
@@ -67,7 +74,7 @@ class DevicesModel : public QAbstractListModel {
   // Runs the row's single removal verb (REQ-F-021); inert for a row without one (REQ-F-022).
   Q_INVOKABLE void remove(const QString& targetId);
   // Row index of targetId, or -1.
-  Q_INVOKABLE int findRow(const QString& targetId) const;
+  Q_INVOKABLE [[nodiscard]] int findRow(const QString& targetId) const;
  signals:
   void changed();
   void openRequested(const QString& path);
@@ -84,10 +91,10 @@ class DevicesModel : public QAbstractListModel {
   };
   void refresh();
   void appendEmptyDrives(QList<QVariantMap>& rows) const;
-  std::optional<QVariantMap> volumeRow(const HoloNight::System::StorageVolume& volume) const;
-  std::optional<HoloNight::System::StorageOperation> safeRemovalVerb(const HoloNight::System::StorageDrive& drive,
-                                                                     bool volumeCanUnmount) const;
-  bool scopeContainsOtherDrive(const QString& driveId, const QStringList& scope) const;
+  [[nodiscard]] std::optional<QVariantMap> volumeRow(const HoloNight::System::StorageVolume& volume) const;
+  [[nodiscard]] std::optional<HoloNight::System::StorageOperation> safeRemovalVerb(
+      const HoloNight::System::StorageDrive& drive, bool volumeCanUnmount) const;
+  [[nodiscard]] bool scopeContainsOtherDrive(const QString& driveId, const QStringList& scope) const;
   void applyCapacity(QVariantMap& row) const;
   void syncCapacity();
   void dispatchCapacity(const QString& mountPoint);

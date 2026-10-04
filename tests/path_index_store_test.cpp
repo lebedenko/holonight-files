@@ -10,8 +10,8 @@
 namespace {
 QVector<PathCandidate> records(const QString& root, const QString& name = QStringLiteral("project/needle.txt")) {
   return {
-      {.path = root + "/project", .relativePath = "project", .directory = true},
-      {.path = root + u'/' + name, .relativePath = name, .directory = false},
+      {.path = root + "/project", .relative_path = "project", .directory = true},
+      {.path = root + u'/' + name, .relative_path = name, .directory = false},
   };
 }
 bool load(const QString& path, const QString& root, const QByteArray& policy, QVector<PathCandidate>& out) {
@@ -55,11 +55,11 @@ TEST(PathIndexStore, ConcurrentWritersReplaceOnlyWithCompleteSnapshots) {
   ASSERT_TRUE(second.commit(QDateTime::currentMSecsSinceEpoch(), cancelled));
   QVector<PathCandidate> restored;
   ASSERT_TRUE(load(path, root, "policy", restored));
-  EXPECT_EQ(restored.last().relativePath, "second.txt");
+  EXPECT_EQ(restored.last().relative_path, "second.txt");
   ASSERT_TRUE(first.commit(QDateTime::currentMSecsSinceEpoch(), cancelled));
   restored.clear();
   ASSERT_TRUE(load(path, root, "policy", restored));
-  EXPECT_EQ(restored.last().relativePath, "first.txt");
+  EXPECT_EQ(restored.last().relative_path, "first.txt");
 }
 
 TEST(PathIndexStore, CancelledGenerationPreservesPreviousSnapshotAndWriteFailureIsNonfatal) {
@@ -75,7 +75,7 @@ TEST(PathIndexStore, CancelledGenerationPreservesPreviousSnapshotAndWriteFailure
   EXPECT_FALSE(second.commit(QDateTime::currentMSecsSinceEpoch(), cancelled));
   QVector<PathCandidate> restored;
   ASSERT_TRUE(load(path, "/root", "policy", restored));
-  EXPECT_EQ(restored.last().relativePath, "project/needle.txt");
+  EXPECT_EQ(restored.last().relative_path, "project/needle.txt");
   PathIndexStore failure(dir.path(), "/root", "policy");
   cancelled.store(false);
   EXPECT_FALSE(failure.commit(QDateTime::currentMSecsSinceEpoch(), cancelled));
@@ -140,7 +140,7 @@ TEST(PathIndexStore, RejectsInvalidRelativePathsAndInvalidEntryTypes) {
            QStringLiteral("folder/../escape"),
        }) {
     PathIndexStore writer(path, "/root", "policy");
-    writer.append({{.path = "/root/ignored", .relativePath = relative, .directory = false}});
+    writer.append({{.path = "/root/ignored", .relative_path = relative, .directory = false}});
     ASSERT_TRUE(writer.commit(QDateTime::currentMSecsSinceEpoch(), cancelled));
     QVector<PathCandidate> restored;
     EXPECT_FALSE(load(path, "/root", "policy", restored));
@@ -152,7 +152,7 @@ TEST(PathIndexStore, RejectsInvalidTypeEvenWithValidIntegrity) {
   const auto path = dir.filePath("snapshot");
   const std::atomic_bool cancelled = false;
   PathIndexStore writer(path, "/root", "policy");
-  writer.append({{.path = "/root/needle", .relativePath = "needle", .directory = false}});
+  writer.append({{.path = "/root/needle", .relative_path = "needle", .directory = false}});
   ASSERT_TRUE(writer.commit(QDateTime::currentMSecsSinceEpoch(), cancelled));
   QFile file(path);
   ASSERT_TRUE(file.open(QIODevice::ReadOnly));

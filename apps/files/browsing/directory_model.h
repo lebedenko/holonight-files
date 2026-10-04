@@ -11,6 +11,7 @@
 #include <QThread>
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <memory>
 
@@ -45,7 +46,9 @@ struct DirectoryEntry {
 class DirectoryModel : public QAbstractListModel {
   Q_OBJECT
  public:
-  enum Role {
+  // Qt model roles/QML properties require implicit integer conversion.
+  // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
+  enum Role : std::uint16_t {
     NameRole = Qt::UserRole + 1,
     PathRole,
     IsDirRole,
@@ -63,12 +66,16 @@ class DirectoryModel : public QAbstractListModel {
   };
   explicit DirectoryModel(QObject* parent = nullptr);
   ~DirectoryModel() override;
-  int rowCount(const QModelIndex& parent = {}) const override;
-  QVariant data(const QModelIndex& index, int role) const override;
-  QHash<int, QByteArray> roleNames() const override;
-  bool scanning() const { return scanning_; }
-  QString directoryPath() const { return directory_path_; }
-  QString directoryError() const { return directory_error_; }
+  DirectoryModel(const DirectoryModel&) = delete;
+  DirectoryModel& operator=(const DirectoryModel&) = delete;
+  DirectoryModel(DirectoryModel&&) = delete;
+  DirectoryModel& operator=(DirectoryModel&&) = delete;
+  [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
+  [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
+  [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
+  [[nodiscard]] bool scanning() const { return scanning_; }
+  [[nodiscard]] QString directoryPath() const { return directory_path_; }
+  [[nodiscard]] QString directoryError() const { return directory_error_; }
   // Starts a fresh walk of path, discarding any current contents immediately.
   void load(const QString& path);
   // Re-walks the current directoryPath(), diffing the result against current rows instead of

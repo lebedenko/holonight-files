@@ -85,7 +85,7 @@ TEST(FileOperationService, CopyEntryRecursesIntoNestedDirectories) {
   const auto dest = dir.filePath("copied-tree");
   const auto result = FileOperationService::copyEntry(dir.filePath("tree"), dest, /*overwrite=*/false, freshCancel());
   EXPECT_FALSE(result.failed);
-  EXPECT_TRUE(result.nestedFailures.isEmpty());
+  EXPECT_TRUE(result.nested_failures.isEmpty());
   EXPECT_TRUE(QFile::exists(dest + "/top.txt"));
   EXPECT_TRUE(QFile::exists(dest + "/child/leaf.txt"));
   EXPECT_TRUE(QFile::exists(dir.filePath("tree/top.txt")));  // original tree untouched
@@ -102,7 +102,7 @@ TEST(FileOperationService, CopyEntryNestedCollisionAutoSkipsWithoutFailure) {
   const auto result =
       FileOperationService::copyEntry(dir.filePath("src"), dir.filePath("dest"), /*overwrite=*/true, freshCancel());
   EXPECT_FALSE(result.failed);
-  EXPECT_TRUE(result.nestedFailures.isEmpty());  // REQ-F-048: a nested collision is not a failure
+  EXPECT_TRUE(result.nested_failures.isEmpty());  // REQ-F-048: a nested collision is not a failure
   QFile preserved(dir.filePath("dest/keep-existing.txt"));
   ASSERT_TRUE(preserved.open(QIODevice::ReadOnly));
   EXPECT_EQ(preserved.readAll(), QByteArray("PRE-EXISTING"));  // left untouched, not overwritten
@@ -241,9 +241,9 @@ TEST(FileOperationService, IncompleteMergeRetainsEverySourceChild) {
       FileOperationService::moveEntry(dir.filePath("source"), dir.filePath("dest"), true, freshCancel());
   EXPECT_FALSE(result.complete());
   EXPECT_FALSE(result.failed);
-  EXPECT_TRUE(result.sourceRetained);
-  EXPECT_EQ(result.skippedChildren.size(), 1);
-  EXPECT_TRUE(result.nestedFailures.isEmpty());
+  EXPECT_TRUE(result.source_retained);
+  EXPECT_EQ(result.skipped_children.size(), 1);
+  EXPECT_TRUE(result.nested_failures.isEmpty());
   EXPECT_TRUE(result.reason.contains("source retained; some destination copies exist"));
   EXPECT_TRUE(QFile::exists(dir.filePath("source/skip")));
   EXPECT_TRUE(QFile::exists(dir.filePath("source/nested/copied")));
@@ -347,9 +347,9 @@ TEST(FileOperationService, DirectoryMergeWithNestedErrorRetainsAllSourceEntries)
   const auto result =
       FileOperationService::moveEntry(dir.filePath("source"), dir.filePath("destination"), true, freshCancel());
   EXPECT_FALSE(result.complete());
-  EXPECT_TRUE(result.sourceRetained);
-  EXPECT_EQ(result.nestedFailures.size(), 1);
-  EXPECT_TRUE(result.skippedChildren.isEmpty());
+  EXPECT_TRUE(result.source_retained);
+  EXPECT_EQ(result.nested_failures.size(), 1);
+  EXPECT_TRUE(result.skipped_children.isEmpty());
   EXPECT_TRUE(QFile::exists(fifo));
   EXPECT_TRUE(QFile::exists(dir.filePath("source/good")));
   EXPECT_TRUE(QFile::exists(dir.filePath("destination/good")));
@@ -363,7 +363,8 @@ TEST(FileOperationService, CopyReadOnlyDirectoryPreservesDirectoryMetadata) {
   const auto source = QFile::encodeName(dir.filePath("source"));
   const auto child = QFile::encodeName(dir.filePath("source/child"));
   const std::array<timespec, 2> times{
-      {{.tv_sec = 1234567890, .tv_nsec = 123456789}, {.tv_sec = 1234567891, .tv_nsec = 987654321}}};
+      {{.tv_sec = 1234567890, .tv_nsec = 123456789}, {.tv_sec = 1234567891, .tv_nsec = 987654321}},
+  };
   ASSERT_EQ(::utimensat(AT_FDCWD, child.constData(), times.data(), 0), 0);
   ASSERT_EQ(::utimensat(AT_FDCWD, source.constData(), times.data(), 0), 0);
   ASSERT_EQ(::chmod(child.constData(), 0550), 0);

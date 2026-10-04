@@ -4,12 +4,13 @@
 
 #include <QString>
 
+#include <cstdint>
 #include <optional>
 
 // Freedesktop trash storage. Failure never authorizes permanent deletion.
 namespace TrashService {
 
-enum class FailureKind { SourceLookup, DirectoryCreation, Validation, Metadata, Move };
+enum class FailureKind : std::uint8_t { SourceLookup, DirectoryCreation, Validation, Metadata, Move };
 struct TrashError {
   FailureKind kind;
   QString path;
@@ -20,9 +21,9 @@ struct TrashResult : FileOperationService::ItemResult {
 };
 struct TrashDirectory {
   std::optional<TrashError> error;
-  QString filesDir;
-  QString infoDir;
-  bool useRelativePath = false;
+  QString files_dir;
+  QString info_dir;
+  bool use_relative_path = false;
   QString topdir;
 };
 

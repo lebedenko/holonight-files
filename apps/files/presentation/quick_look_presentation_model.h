@@ -8,13 +8,15 @@
 #include <QSizeF>
 #include <QtQml/qqmlregistration.h>
 
+#include <cstdint>
+
 // Per-overlay presentation state. The shared preview service remains independent of card layout.
 class QuickLookPresentationModel : public QObject, public QQmlParserStatus {
   Q_OBJECT
   QML_ELEMENT
   Q_INTERFACES(QQmlParserStatus)
  public:
-  enum class Kind { None, Pending, Image, Text, Compact };
+  enum class Kind : std::uint8_t { None, Pending, Image, Text, Compact };
   Q_ENUM(Kind)
 
   Q_PROPERTY(PreviewService* preview READ preview WRITE setPreview NOTIFY previewChanged)

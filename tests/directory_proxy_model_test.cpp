@@ -48,8 +48,9 @@ TEST(DirectoryProxyModel, SortsDirectoriesBeforeFilesWithNaturalCaseInsensitiveO
   const QStringList expected{"..", "aaa-folder", "zzz-folder", "Banana.txt", "File1.txt", "file2.txt", "File10.txt"};
   EXPECT_EQ(proxyNames(proxy), expected);
   proxy.setSortDescending(true);
-  const QStringList reversedExpected{"..",         "File10.txt", "file2.txt", "File1.txt",
-                                     "Banana.txt", "zzz-folder", "aaa-folder"};
+  const QStringList reversedExpected{
+      "..", "File10.txt", "file2.txt", "File1.txt", "Banana.txt", "zzz-folder", "aaa-folder",
+  };
   EXPECT_EQ(proxyNames(proxy), reversedExpected);
 }
 

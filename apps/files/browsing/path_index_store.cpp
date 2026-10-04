@@ -54,7 +54,7 @@ void PathIndexStore::append(const QVector<PathCandidate>& batch) {
   for (const auto& candidate : batch) {
     QByteArray bytes;
     QDataStream stream(&bytes, QIODevice::WriteOnly);
-    const auto path = candidate.relativePath.toUtf8();
+    const auto path = candidate.relative_path.toUtf8();
     if (path.isEmpty() || path.size() > maximumPathBytes) {
       valid_ = false;
       return;
@@ -136,7 +136,7 @@ bool PathIndexStore::load(const QString& path, const QString& root, const QByteA
     }
     hash.addData(bytes);
     hash.addData(type);
-    batch.append({.path = QDir(root).filePath(relative), .relativePath = relative, .directory = type[0] == 1});
+    batch.append({.path = QDir(root).filePath(relative), .relative_path = relative, .directory = type[0] == 1});
     if (batch.size() == 256) {
       batchReady(std::move(batch));
       batch.clear();

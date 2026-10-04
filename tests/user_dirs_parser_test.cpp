@@ -67,8 +67,10 @@ TEST(UserDirsParser, DisplayOrderIsFixedRegardlessOfFileOrder) {
                                                             "XDG_DOCUMENTS_DIR=\"$HOME/Documents\"\n"),
                                              QString(kHome));
   ASSERT_EQ(entries.size(), 9U);
-  const std::vector<Key> expected{Key::Desktop, Key::Documents, Key::Downloads, Key::Pictures, Key::Music,
-                                  Key::Videos,  Key::Projects,  Key::Templates, Key::Public};
+  const std::vector<Key> expected{
+      Key::Desktop, Key::Documents, Key::Downloads, Key::Pictures, Key::Music,
+      Key::Videos,  Key::Projects,  Key::Templates, Key::Public,
+  };
   for (std::size_t i = 0; i < expected.size(); ++i) {
     EXPECT_EQ(entries[i].key, expected[i]) << i;
   }

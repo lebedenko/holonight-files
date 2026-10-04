@@ -28,12 +28,14 @@ class FakeStorage : public HoloNight::System::StorageBackend {
   void stop() override {}
   void execute(const QString& requestId, HoloNight::System::StorageOperation operation,
                const QString& target) override {
-    calls.append({.requestId = requestId,
-                  .targetId = target,
-                  .operation = operation,
-                  .mountPath = {},
-                  .errorName = {},
-                  .errorMessage = {}});
+    calls.append({
+        .requestId = requestId,
+        .targetId = target,
+        .operation = operation,
+        .mountPath = {},
+        .errorName = {},
+        .errorMessage = {},
+    });
   }
   void publish() {
     emit snapshotChanged(drives, volumes, true);
@@ -42,9 +44,10 @@ class FakeStorage : public HoloNight::System::StorageBackend {
 };
 
 // A USB stick unless told otherwise: external bus, the drive itself is the removable object.
-inline HoloNight::System::StorageDrive storageDrive(QString id = "drive", bool removable = true, bool media = true) {
+inline HoloNight::System::StorageDrive storageDrive(QString identifier = "drive", bool removable = true,
+                                                    bool media = true) {
   HoloNight::System::StorageDrive record;
-  record.id = std::move(id);
+  record.id = std::move(identifier);
   record.model = "USB SSD";
   record.connectionBus = "usb";
   record.removable = removable;
@@ -53,11 +56,11 @@ inline HoloNight::System::StorageDrive storageDrive(QString id = "drive", bool r
   return record;
 }
 
-inline HoloNight::System::StorageVolume storageVolume(const QString& id = "volume", QString drive = "drive") {
+inline HoloNight::System::StorageVolume storageVolume(const QString& identifier = "volume", QString drive = "drive") {
   HoloNight::System::StorageVolume record;
-  record.id = id;
+  record.id = identifier;
   record.driveId = std::move(drive);
-  record.label = id;
+  record.label = identifier;
   record.usage = "filesystem";
   record.canMount = true;
   record.canUnmount = true;
@@ -111,7 +114,7 @@ class FakeCapacityProbe : public CapacityProbe {
   }
   void set(const QString& mountPoint, quint64 total, quint64 available) {
     const std::scoped_lock lock(mutex_);
-    results_.insert(mountPoint, {.valid = true, .bytesAvailable = available, .bytesTotal = total});
+    results_.insert(mountPoint, {.valid = true, .bytes_available = available, .bytes_total = total});
   }
   void gate(const QString& mountPoint) {
     const std::scoped_lock lock(mutex_);

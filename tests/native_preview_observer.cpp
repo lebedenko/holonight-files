@@ -108,25 +108,27 @@ void NativePreviewObserver::snapshot(const QString& reason) {
   }
   const auto& preview = *controller_.preview();
   const auto pixels = preview.image();
-  QJsonObject event{{"event", "snapshot"},
-                    {"reason", reason},
-                    {"path", PreviewServiceTestAccess::path(preview)},
-                    {"name", preview.name()},
-                    {"file_bytes", preview.size()},
-                    {"modified_ms", preview.modified().toMSecsSinceEpoch()},
-                    {"source", dimensions(preview.sourcePixelSize())},
-                    {"decoded", dimensions(pixels.size())},
-                    {"image_key", QString::number(pixels.cacheKey())},
-                    {"busy", preview.busy()},
-                    {"error", static_cast<int>(preview.previewErrorKind())},
-                    {"requested", dimensions(PreviewServiceTestAccess::requestedSize(preview))},
-                    {"pane_requested", dimensions(PreviewServiceTestAccess::paneSize(preview))},
-                    {"quick_requested", dimensions(PreviewServiceTestAccess::quickLookRequestedSize(preview))},
-                    {"resize_pending", PreviewServiceTestAccess::resizePending(preview)},
-                    {"quick_open", controller_.quickLookOpen()},
-                    {"decode_attempts", attempts_->load()},
-                    {"frames", frames_->load()},
-                    {"max_gui_gap_ns", max_gap_}};
+  QJsonObject event{
+      {"event", "snapshot"},
+      {"reason", reason},
+      {"path", PreviewServiceTestAccess::path(preview)},
+      {"name", preview.name()},
+      {"file_bytes", preview.size()},
+      {"modified_ms", preview.modified().toMSecsSinceEpoch()},
+      {"source", dimensions(preview.sourcePixelSize())},
+      {"decoded", dimensions(pixels.size())},
+      {"image_key", QString::number(pixels.cacheKey())},
+      {"busy", preview.busy()},
+      {"error", static_cast<int>(preview.previewErrorKind())},
+      {"requested", dimensions(PreviewServiceTestAccess::requestedSize(preview))},
+      {"pane_requested", dimensions(PreviewServiceTestAccess::paneSize(preview))},
+      {"quick_requested", dimensions(PreviewServiceTestAccess::quickLookRequestedSize(preview))},
+      {"resize_pending", PreviewServiceTestAccess::resizePending(preview)},
+      {"quick_open", controller_.quickLookOpen()},
+      {"decode_attempts", attempts_->load()},
+      {"frames", frames_->load()},
+      {"max_gui_gap_ns", max_gap_},
+  };
   if (window_) {
     event.insert("dpr", window_->devicePixelRatio());
     event.insert("backend", static_cast<int>(window_->rendererInterface()->graphicsApi()));
@@ -142,10 +144,11 @@ void NativePreviewObserver::snapshot(const QString& reason) {
       if (item != nullptr) {
         const auto position = item->mapToScene(QPointF());
         const auto* image = item->findChild<PreviewImageItem*>();
-        consumers.insert(
-            name, QJsonObject{{"logical", QJsonArray{position.x(), position.y(), item->width(), item->height()}},
-                              {"visible", item->isVisible()},
-                              {"image_key", image != nullptr ? QString::number(image->image().cacheKey()) : "0"}});
+        consumers.insert(name, QJsonObject{
+                                   {"logical", QJsonArray{position.x(), position.y(), item->width(), item->height()}},
+                                   {"visible", item->isVisible()},
+                                   {"image_key", image != nullptr ? QString::number(image->image().cacheKey()) : "0"},
+                               });
       }
     }
     event.insert("consumers", consumers);

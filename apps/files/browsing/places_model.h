@@ -7,6 +7,7 @@
 #include <QAbstractListModel>
 #include <QtQml/qqmlregistration.h>
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 
@@ -15,11 +16,13 @@
 class PlacesModel : public QAbstractListModel {
   Q_OBJECT
  public:
-  enum class Origin { Home, XdgUserDirectory, Bookmark };
+  enum class Origin : std::uint8_t { Home, XdgUserDirectory, Bookmark };
   Q_ENUM(Origin)
-  enum class Status { Checking, Available, Unavailable };
+  enum class Status : std::uint8_t { Checking, Available, Unavailable };
   Q_ENUM(Status)
-  enum Role {
+  // Qt model roles/QML properties require implicit integer conversion.
+  // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
+  enum Role : std::uint16_t {
     NameRole = Qt::UserRole + 1,
     PathRole,
     IconNameRole,
@@ -37,10 +40,14 @@ class PlacesModel : public QAbstractListModel {
               std::shared_ptr<PlaceAvailabilityChecker> checker, const std::shared_ptr<WarningSink>& warnings,
               QObject* parent = nullptr);
   ~PlacesModel() override;
+  PlacesModel(const PlacesModel&) = delete;
+  PlacesModel& operator=(const PlacesModel&) = delete;
+  PlacesModel(PlacesModel&&) = delete;
+  PlacesModel& operator=(PlacesModel&&) = delete;
 
-  int rowCount(const QModelIndex& parent = {}) const override;
-  QVariant data(const QModelIndex& index, int role) const override;
-  QHash<int, QByteArray> roleNames() const override;
+  [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
+  [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
+  [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
 
   // Re-checks row's path off the GUI thread, regardless of its current status (REQ-F-022). Returns
   // the row's stable place id, or 0 if row is out of range or not a Bookmark row. Row indices are
@@ -65,7 +72,7 @@ class PlacesModel : public QAbstractListModel {
     quint64 id = 0;  // stable across the model's lifetime; rows are never reordered except removal
     QString name;
     QString path;
-    QString iconName;
+    QString icon_name;
     Origin origin = Origin::Home;
     Status status = Status::Checking;
     bool starts_bookmarks = false;
@@ -75,7 +82,7 @@ class PlacesModel : public QAbstractListModel {
                    WarningSink& warnings);
   void dispatchStartupChecks();
   void deliverResult(quint64 placeId, quint64 generation, bool available);
-  int rowForId(quint64 placeId) const;
+  [[nodiscard]] int rowForId(quint64 placeId) const;
   // Shared with every detached check thread; ~PlacesModel() locks it and nulls `model`.
   struct DeliveryGuard {
     std::mutex mutex;

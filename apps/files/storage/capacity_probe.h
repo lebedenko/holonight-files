@@ -5,8 +5,8 @@
 // can never disagree (REQ-F-041). valid == false covers unmounted, failed and not-yet-measured alike.
 struct Capacity {
   bool valid = false;
-  quint64 bytesAvailable = 0;  // Space available to an unprivileged user (REQ-F-039).
-  quint64 bytesTotal = 0;
+  quint64 bytes_available = 0;  // Space available to an unprivileged user (REQ-F-039).
+  quint64 bytes_total = 0;
   bool operator==(const Capacity&) const = default;
 };
 

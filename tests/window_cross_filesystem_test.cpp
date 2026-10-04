@@ -51,9 +51,9 @@ QString& xdgDataHomeForTest() {
 
 // GTEST_SKIP() must expand directly inside the TEST() body to return from it.
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
-#define SKIP_IF_UNAVAILABLE()                                      \
-  if (!setupResult().available) {                                  \
-    GTEST_SKIP() << setupResult().unavailableReason.toStdString(); \
+#define SKIP_IF_UNAVAILABLE()                                       \
+  if (!setupResult().available) {                                   \
+    GTEST_SKIP() << setupResult().unavailable_reason.toStdString(); \
   }
 
 QString writeFile(const QString& path, const QByteArray& content = "hello") {
@@ -278,7 +278,7 @@ int main(int argc, char* argv[]) {
   setupResult() = fs_isolation::setUp();
   if (!setupResult().available && qEnvironmentVariableIntValue("FILES_REQUIRE_FS_ISOLATION") == 1) {
     std::println(stderr, "Required filesystem isolation unavailable: {}",
-                 setupResult().unavailableReason.toStdString());
+                 setupResult().unavailable_reason.toStdString());
     return 1;
   }
   qunsetenv("QT_QUICK_CONTROLS_STYLE");

@@ -412,7 +412,8 @@ TEST(FilesStorage, RemoveDispatchesTheRowsSingleVerb) {
   const QList<std::pair<QString, StorageResult>> expected{
       {"internal", {.targetId = "internal", .operation = StorageOperation::Unmount}},
       {"disc", {.targetId = "dvd", .operation = StorageOperation::Eject}},
-      {"usb", {.targetId = "stick", .operation = StorageOperation::PowerOff}}};
+      {"usb", {.targetId = "stick", .operation = StorageOperation::PowerOff}},
+  };
   for (const auto& [row, call] : expected) {
     devices.backend.calls.clear();
     devices.model.remove(row);
@@ -446,15 +447,22 @@ TEST(FilesStorage, EveryOperationErrorReachesTheErrorLabel) {
   devices.backend.publish();
   const QList<std::pair<QString, QString>> branches{
       {"org.freedesktop.UDisks2.Error.NotAuthorizedDismissed", DevicesModel::tr("Authorization was canceled.")},
-      {"org.freedesktop.UDisks2.Error.NotAuthorized",
-       DevicesModel::tr("Permission to access this storage was denied.")},
-      {"org.freedesktop.UDisks2.Error.DeviceBusy",
-       DevicesModel::tr("The device is busy. Close files using it and try again.")},
-      {"org.holonight.Storage.ScopeChanged",
-       DevicesModel::tr("The affected devices changed. Review them before trying again.")},
+      {
+          "org.freedesktop.UDisks2.Error.NotAuthorized",
+          DevicesModel::tr("Permission to access this storage was denied."),
+      },
+      {
+          "org.freedesktop.UDisks2.Error.DeviceBusy",
+          DevicesModel::tr("The device is busy. Close files using it and try again."),
+      },
+      {
+          "org.holonight.Storage.ScopeChanged",
+          DevicesModel::tr("The affected devices changed. Review them before trying again."),
+      },
       {"org.holonight.Storage.Unavailable", DevicesModel::tr("The storage device or service is no longer available.")},
       {"org.holonight.Storage.Disappeared", DevicesModel::tr("The storage device or service is no longer available.")},
-      {"org.freedesktop.UDisks2.Error.Failed", DevicesModel::tr("Storage operation failed: %1").arg("boom")}};
+      {"org.freedesktop.UDisks2.Error.Failed", DevicesModel::tr("Storage operation failed: %1").arg("boom")},
+  };
   for (const auto& [errorName, message] : branches) {
     devices.backend.calls.clear();
     devices.model.remove("usb");

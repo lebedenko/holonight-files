@@ -97,12 +97,14 @@ TEST(PlacesModel, XdgDirectoriesOrderedTranslatedAndIconed) {
   const auto model = fixture.build();
   QCoreApplication::removeTranslator(&translator);
   ASSERT_EQ(model->rowCount(), 10);
-  const QStringList names{"translated-Home",      "translated-Desktop", "translated-Documents", "translated-Downloads",
-                          "translated-Pictures",  "translated-Music",   "translated-Videos",    "translated-Projects",
-                          "translated-Templates", "translated-Public"};
-  const QStringList icons{"user-home",        "user-desktop",      "folder-documents", "folder-download",
-                          "folder-pictures",  "folder-music",      "folder-videos",    "folder-development",
-                          "folder-templates", "folder-publicshare"};
+  const QStringList names{
+      "translated-Home",  "translated-Desktop", "translated-Documents", "translated-Downloads", "translated-Pictures",
+      "translated-Music", "translated-Videos",  "translated-Projects",  "translated-Templates", "translated-Public",
+  };
+  const QStringList icons{
+      "user-home",    "user-desktop",  "folder-documents",   "folder-download",  "folder-pictures",
+      "folder-music", "folder-videos", "folder-development", "folder-templates", "folder-publicshare",
+  };
   EXPECT_EQ(model->data(idx(*model, 0), PlacesModel::OriginRole).value<Origin>(), Origin::Home);
   for (int i = 0; i < names.size(); ++i) {
     EXPECT_EQ(model->data(idx(*model, i), PlacesModel::NameRole).toString(), names[i]) << i;

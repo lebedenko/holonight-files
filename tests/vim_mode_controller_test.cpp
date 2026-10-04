@@ -83,7 +83,7 @@ TEST(VimModeController, RenameUnchangedNameCommitsATouch) {
   vim.enterInsert(InsertKind::Prepend, 0, dir.path(), "readme.md");
   const auto commit = vim.commitInsert();
   EXPECT_EQ(commit.action, Action::Touch);
-  EXPECT_EQ(commit.oldPath, dir.filePath("readme.md"));
+  EXPECT_EQ(commit.old_path, dir.filePath("readme.md"));
 }
 
 TEST(VimModeController, RenameChangedNameCommitsARename) {
@@ -95,8 +95,8 @@ TEST(VimModeController, RenameChangedNameCommitsARename) {
   vim.setInsertText("new.txt");
   const auto commit = vim.commitInsert();
   EXPECT_EQ(commit.action, Action::Rename);
-  EXPECT_EQ(commit.oldPath, dir.filePath("old.txt"));
-  EXPECT_EQ(commit.newPath, dir.filePath("new.txt"));
+  EXPECT_EQ(commit.old_path, dir.filePath("old.txt"));
+  EXPECT_EQ(commit.new_path, dir.filePath("new.txt"));
 }
 
 TEST(VimModeController, RenameToAnInvalidNameStaysInInsertWithNoCommitAction) {
@@ -132,7 +132,7 @@ TEST(VimModeController, CreateDirectoryCommitStripsTrailingSlash) {
   vim.setInsertText("newfolder/");
   const auto commit = vim.commitInsert();
   EXPECT_EQ(commit.action, Action::CreateDirectory);
-  EXPECT_EQ(commit.newPath, dir.filePath("newfolder"));
+  EXPECT_EQ(commit.new_path, dir.filePath("newfolder"));
 }
 
 TEST(VimModeController, CreateFileCommitWithoutTrailingSlash) {
@@ -143,7 +143,7 @@ TEST(VimModeController, CreateFileCommitWithoutTrailingSlash) {
   vim.setInsertText("newfile.txt");
   const auto commit = vim.commitInsert();
   EXPECT_EQ(commit.action, Action::CreateFile);
-  EXPECT_EQ(commit.newPath, dir.filePath("newfile.txt"));
+  EXPECT_EQ(commit.new_path, dir.filePath("newfile.txt"));
 }
 
 TEST(VimModeController, ReportCommitFailedKeepsInsertModeWithAMessage) {

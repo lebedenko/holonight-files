@@ -9,6 +9,7 @@
 #include <QTimer>
 
 #include <atomic>
+#include <cstdint>
 #include <holonight/search/index.h>
 #include <memory>
 
@@ -23,21 +24,27 @@ class PathFinderModel : public QAbstractListModel {
   Q_PROPERTY(int indexedCount READ indexedCount NOTIFY stateChanged)
   Q_PROPERTY(QString error READ error NOTIFY stateChanged)
  public:
-  enum Role { PathRole = Qt::UserRole + 1, RelativePathRole, DirectoryRole, PositionsRole };
+  // Qt model roles/QML properties require implicit integer conversion.
+  // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
+  enum Role : std::uint16_t { PathRole = Qt::UserRole + 1, RelativePathRole, DirectoryRole, PositionsRole };
   explicit PathFinderModel(QObject* parent = nullptr);
-  PathFinderModel(PathScanFunction scanner, QObject* parent = nullptr);
+  explicit PathFinderModel(PathScanFunction scanner, QObject* parent = nullptr);
   ~PathFinderModel() override;
-  int rowCount(const QModelIndex& parent = {}) const override;
-  QVariant data(const QModelIndex& index, int role) const override;
-  QHash<int, QByteArray> roleNames() const override;
-  QString rootPath() const { return root_path_; }
+  PathFinderModel(const PathFinderModel&) = delete;
+  PathFinderModel& operator=(const PathFinderModel&) = delete;
+  PathFinderModel(PathFinderModel&&) = delete;
+  PathFinderModel& operator=(PathFinderModel&&) = delete;
+  [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
+  [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
+  [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
+  [[nodiscard]] QString rootPath() const { return root_path_; }
   static QString homePath();
-  QString query() const { return query_; }
-  bool directoriesOnly() const { return directories_only_; }
-  bool includeHidden() const { return include_hidden_; }
-  bool scanning() const { return scanning_; }
-  int indexedCount() const { return indexed_count_; }
-  QString error() const {
+  [[nodiscard]] QString query() const { return query_; }
+  [[nodiscard]] bool directoriesOnly() const { return directories_only_; }
+  [[nodiscard]] bool includeHidden() const { return include_hidden_; }
+  [[nodiscard]] bool scanning() const { return scanning_; }
+  [[nodiscard]] int indexedCount() const { return indexed_count_; }
+  [[nodiscard]] QString error() const {
     return config_error_.isEmpty() ? error_ : config_error_ + (error_.isEmpty() ? QString{} : u'\n' + error_);
   }
   Q_INVOKABLE void start(const QString& rootPath, bool directoriesOnly);
@@ -45,8 +52,8 @@ class PathFinderModel : public QAbstractListModel {
   Q_INVOKABLE void setQuery(const QString& query);
   Q_INVOKABLE void setIncludeHidden(bool includeHidden);
   Q_INVOKABLE void stop();
-  Q_INVOKABLE QString pathAt(int row) const;
-  Q_INVOKABLE bool isDirectoryAt(int row) const;
+  Q_INVOKABLE [[nodiscard]] QString pathAt(int row) const;
+  Q_INVOKABLE [[nodiscard]] bool isDirectoryAt(int row) const;
   void warmUp();
   void invalidatePaths(const QStringList& paths);
   void shutdown();
@@ -61,7 +68,7 @@ class PathFinderModel : public QAbstractListModel {
  private:
   struct Row {
     QString path;
-    QString relativePath;
+    QString relative_path;
     bool directory = false;
     QList<int> positions;
   };

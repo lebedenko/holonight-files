@@ -9,8 +9,8 @@
 class LastLocationTracker {
  public:
   void recordLoad(const QString& path, LocationClassifier::Classification classification);
-  bool hasCandidate() const { return !candidate_.isEmpty(); }
-  QString candidate() const { return candidate_; }
+  [[nodiscard]] bool hasCandidate() const { return !candidate_.isEmpty(); }
+  [[nodiscard]] QString candidate() const { return candidate_; }
 
  private:
   QString candidate_;

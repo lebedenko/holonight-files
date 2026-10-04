@@ -86,15 +86,15 @@ VimModeController::InsertCommitResult VimModeController::commitInsert() {
   }
   const QDir dir(insert_directory_path_);
   if (editingIsCreate()) {
-    result.newPath = dir.filePath(insert_validation_.normalizedName);
+    result.new_path = dir.filePath(insert_validation_.normalized_name);
     result.action =
-        insert_validation_.createsDirectory ? InsertCommitAction::CreateDirectory : InsertCommitAction::CreateFile;
-  } else if (insert_validation_.normalizedName == insert_self_name_) {
-    result.oldPath = dir.filePath(insert_self_name_);
+        insert_validation_.creates_directory ? InsertCommitAction::CreateDirectory : InsertCommitAction::CreateFile;
+  } else if (insert_validation_.normalized_name == insert_self_name_) {
+    result.old_path = dir.filePath(insert_self_name_);
     result.action = InsertCommitAction::Touch;
   } else {
-    result.oldPath = dir.filePath(insert_self_name_);
-    result.newPath = dir.filePath(insert_validation_.normalizedName);
+    result.old_path = dir.filePath(insert_self_name_);
+    result.new_path = dir.filePath(insert_validation_.normalized_name);
     result.action = InsertCommitAction::Rename;
   }
   return result;
@@ -108,7 +108,7 @@ void VimModeController::cancelInsert() {
 
 void VimModeController::reportCommitFailed(const QString& message) {
   insert_validation_.valid = false;
-  insert_validation_.errorMessage = message;
+  insert_validation_.error_message = message;
   emit changed();
 }
 

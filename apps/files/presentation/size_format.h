@@ -10,5 +10,5 @@ class SizeFormat : public QObject {
   QML_SINGLETON
  public:
   explicit SizeFormat(QObject* parent = nullptr) : QObject(parent) {}
-  Q_INVOKABLE QString formatSize(qint64 bytes) const;
+  Q_INVOKABLE [[nodiscard]] QString formatSize(qint64 bytes) const;
 };

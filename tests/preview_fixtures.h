@@ -7,6 +7,7 @@
 #include <QString>
 #include <QTemporaryDir>
 
+#include <array>
 #include <cstdlib>
 #include <cstring>
 #include <libexif/exif-data.h>
@@ -14,7 +15,9 @@
 #include <libexif/exif-ifd.h>
 #include <libexif/exif-tag.h>
 #include <libexif/exif-utils.h>
+#include <memory>
 #include <optional>
+#include <span>
 
 // Fixture builders for PreviewService/ThumbnailService/ExifReader/TextPreviewService tests,
 // mirroring directory_fixtures.h's philosophy: real files on a real QTemporaryDir filesystem,
@@ -44,13 +47,15 @@ namespace detail {
 
 inline ExifEntry* newEntry(ExifIfd ifd, ExifData* data, ExifTag tag, ExifFormat format, unsigned long components,
                            unsigned int size) {
-  auto* entry = exif_entry_new();
+  auto* allocator = exif_mem_new_default();
+  auto* entry = exif_entry_new_mem(allocator);
   entry->tag = tag;
   entry->format = format;
   entry->components = components;
   entry->size = size;
-  entry->data = static_cast<unsigned char*>(malloc(size));
-  exif_content_add_entry(data->ifd[ifd], entry);
+  entry->data = static_cast<unsigned char*>(exif_mem_alloc(allocator, size));
+  exif_mem_unref(allocator);
+  exif_content_add_entry(std::span(data->ifd)[static_cast<size_t>(ifd)], entry);
   exif_entry_unref(entry);  // exif_content_add_entry took its own reference.
   return entry;
 }
@@ -59,7 +64,7 @@ inline void setAsciiEntry(ExifData* data, ExifIfd ifd, ExifTag tag, const QByteA
   auto* entry = newEntry(ifd, data, tag, EXIF_FORMAT_ASCII, static_cast<unsigned long>(value.size() + 1),
                          static_cast<unsigned int>(value.size() + 1));
   std::memcpy(entry->data, value.constData(), static_cast<size_t>(value.size()));
-  entry->data[value.size()] = '\0';
+  std::span(entry->data, entry->size)[static_cast<size_t>(value.size())] = '\0';
 }
 
 inline void setRationalEntry(ExifData* data, ExifIfd ifd, ExifTag tag, ExifRational value, ExifByteOrder order) {
@@ -74,28 +79,29 @@ inline void setShortEntry(ExifData* data, ExifIfd ifd, ExifTag tag, ExifShort va
 
 // PNG's CRC-32 (ISO 3309 / zlib's polynomial), needed to hand-splice a well-formed eXIf chunk.
 inline quint32 pngCrc32(const QByteArray& bytes) {
-  static quint32 table[256];
-  static bool initialized = false;
-  if (!initialized) {
-    for (quint32 n = 0; n < 256; ++n) {
-      quint32 c = n;
-      for (int k = 0; k < 8; ++k) {
-        c = (c & 1u) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+  static const auto table = [] {
+    std::array<quint32, 256> entries{};
+    for (quint32 index = 0; index < 256; ++index) {
+      quint32 remainder = index;
+      for (int bit = 0; bit < 8; ++bit) {
+        remainder = (remainder & 1U) != 0U ? (0xEDB88320U ^ (remainder >> 1)) : (remainder >> 1);
       }
-      table[n] = c;
+      entries.at(index) = remainder;
     }
-    initialized = true;
-  }
-  quint32 crc = 0xFFFFFFFFu;
+    return entries;
+  }();
+  quint32 crc = 0xFFFFFFFFU;
   for (const unsigned char byte : bytes) {
-    crc = table[(crc ^ byte) & 0xFFu] ^ (crc >> 8);
+    crc = table.at((crc ^ byte) & 0xFFU) ^ (crc >> 8);
   }
-  return crc ^ 0xFFFFFFFFu;
+  return crc ^ 0xFFFFFFFFU;
 }
 
-inline quint32 readBigEndianU32(const QByteArray& bytes, qsizetype at) {
-  const auto* p = reinterpret_cast<const unsigned char*>(bytes.constData() + at);
-  return (quint32(p[0]) << 24) | (quint32(p[1]) << 16) | (quint32(p[2]) << 8) | quint32(p[3]);
+inline quint32 readBigEndianU32(const QByteArray& bytes, qsizetype offset) {
+  const auto byteAt = [&](qsizetype index) {
+    return static_cast<quint32>(static_cast<unsigned char>(bytes.at(index)));
+  };
+  return (byteAt(offset) << 24) | (byteAt(offset + 1) << 16) | (byteAt(offset + 2) << 8) | byteAt(offset + 3);
 }
 
 }  // namespace detail
@@ -104,10 +110,10 @@ inline quint32 readBigEndianU32(const QByteArray& bytes, qsizetype at) {
 // and ExposureTime/FocalLength/ISO/LensModel/FNumber in the Exif sub-IFD — the same tags
 // ExifReader::read() extracts. Tests switch groups off to build partial-EXIF variants.
 struct SampleExifTags {
-  bool camera = true;                                        // Make + Model
-  bool exposure = true;                                      // ExposureTime + FocalLength + ISO
-  QByteArray lensModel = "HN 24-70mm F2.8";                  // empty omits the tag
-  std::optional<ExifRational> fNumber = ExifRational{8, 1};  // nullopt omits the tag
+  bool camera = true;                         // Make + Model
+  bool exposure = true;                       // ExposureTime + FocalLength + ISO
+  QByteArray lens_model = "HN 24-70mm F2.8";  // empty omits the tag
+  std::optional<ExifRational> f_number = ExifRational{.numerator = 8, .denominator = 1};  // nullopt omits the tag
 };
 
 // A lens model long enough to overflow the value column at the 220 px minimum pane width.
@@ -128,21 +134,24 @@ inline QByteArray buildExifBlob(const SampleExifTags& tags) {
     detail::setAsciiEntry(data, EXIF_IFD_0, EXIF_TAG_MODEL, "TestCam 1000");
   }
   if (tags.exposure) {
-    detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_EXPOSURE_TIME, ExifRational{1, 250}, order);
-    detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_FOCAL_LENGTH, ExifRational{50, 1}, order);
+    detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_EXPOSURE_TIME,
+                             ExifRational{.numerator = 1, .denominator = 250}, order);
+    detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_FOCAL_LENGTH,
+                             ExifRational{.numerator = 50, .denominator = 1}, order);
     detail::setShortEntry(data, EXIF_IFD_EXIF, EXIF_TAG_ISO_SPEED_RATINGS, 100, order);
   }
-  if (!tags.lensModel.isEmpty()) {
-    detail::setAsciiEntry(data, EXIF_IFD_EXIF, EXIF_TAG_LENS_MODEL, tags.lensModel);
+  if (!tags.lens_model.isEmpty()) {
+    detail::setAsciiEntry(data, EXIF_IFD_EXIF, EXIF_TAG_LENS_MODEL, tags.lens_model);
   }
-  if (tags.fNumber) {
-    detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_FNUMBER, *tags.fNumber, order);
+  if (tags.f_number) {
+    detail::setRationalEntry(data, EXIF_IFD_EXIF, EXIF_TAG_FNUMBER, *tags.f_number, order);
   }
   unsigned char* rawData = nullptr;
   unsigned int rawSize = 0;
   exif_data_save_data(data, &rawData, &rawSize);
-  const QByteArray blob(reinterpret_cast<char*>(rawData), static_cast<qsizetype>(rawSize));
-  free(rawData);
+  const std::unique_ptr<unsigned char, decltype(&std::free)> owner(rawData, &std::free);
+  QByteArray blob(static_cast<qsizetype>(rawSize), Qt::Uninitialized);
+  std::memcpy(blob.data(), owner.get(), rawSize);
   exif_data_unref(data);
   return blob;
 }
@@ -150,7 +159,9 @@ inline QByteArray buildExifBlob(const SampleExifTags& tags) {
 inline QByteArray buildSampleExifBlob() { return buildExifBlob({}); }
 
 // Every sample tag except LensModel and FNumber.
-inline QByteArray buildSampleExifBlobWithoutLens() { return buildExifBlob({.lensModel = {}, .fNumber = std::nullopt}); }
+inline QByteArray buildSampleExifBlobWithoutLens() {
+  return buildExifBlob({.lens_model = {}, .f_number = std::nullopt});
+}
 
 // Only LensModel and FNumber — no camera or exposure tags.
 inline QByteArray buildLensAndApertureOnlyExifBlob() { return buildExifBlob({.camera = false, .exposure = false}); }
@@ -162,10 +173,10 @@ inline QByteArray spliceJpegExif(const QByteArray& jpeg, const QByteArray& exifB
   const QByteArray& payload = exifBlob;
   const auto length = static_cast<quint16>(payload.size() + 2);
   QByteArray segment;
-  segment.append(char(0xFF));
-  segment.append(char(0xE1));
-  segment.append(char((length >> 8) & 0xFF));
-  segment.append(char(length & 0xFF));
+  segment.append(static_cast<char>(0xFF));
+  segment.append(static_cast<char>(0xE1));
+  segment.append(static_cast<char>((length >> 8) & 0xFF));
+  segment.append(static_cast<char>(length & 0xFF));
   segment.append(payload);
   return jpeg.left(2) + segment + jpeg.mid(2);
 }
@@ -173,10 +184,11 @@ inline QByteArray spliceJpegExif(const QByteArray& jpeg, const QByteArray& exifB
 // Stored quadrants: red, green, blue, yellow. Minimal TIFF for controllable EXIF.
 inline QByteArray orientationJpeg(QSize size, std::optional<int> orientation) {
   QImage image(size, QImage::Format_RGB32);
-  const QColor colors[] = {Qt::red, Qt::green, Qt::blue, Qt::yellow};
-  for (int y = 0; y < size.height(); ++y) {
-    for (int x = 0; x < size.width(); ++x) {
-      image.setPixelColor(x, y, colors[(y >= size.height() / 2 ? 2 : 0) + (x >= size.width() / 2 ? 1 : 0)]);
+  const std::array<QColor, 4> colors = {Qt::red, Qt::green, Qt::blue, Qt::yellow};
+  for (int row = 0; row < size.height(); ++row) {
+    for (int column = 0; column < size.width(); ++column) {
+      image.setPixelColor(column, row,
+                          colors.at((row >= size.height() / 2 ? 2 : 0) + (column >= size.width() / 2 ? 1 : 0)));
     }
   }
   QBuffer buffer;
@@ -200,16 +212,16 @@ inline QByteArray splicePngExifChunk(const QByteArray& png, const QByteArray& ex
   const QByteArray typeAndData = QByteArray("eXIf", 4) + exifBlob;
   const auto length = static_cast<quint32>(exifBlob.size());
   QByteArray chunk;
-  chunk.append(char((length >> 24) & 0xFF));
-  chunk.append(char((length >> 16) & 0xFF));
-  chunk.append(char((length >> 8) & 0xFF));
-  chunk.append(char(length & 0xFF));
+  chunk.append(static_cast<char>((length >> 24) & 0xFF));
+  chunk.append(static_cast<char>((length >> 16) & 0xFF));
+  chunk.append(static_cast<char>((length >> 8) & 0xFF));
+  chunk.append(static_cast<char>(length & 0xFF));
   chunk.append(typeAndData);
   const quint32 crc = detail::pngCrc32(typeAndData);
-  chunk.append(char((crc >> 24) & 0xFF));
-  chunk.append(char((crc >> 16) & 0xFF));
-  chunk.append(char((crc >> 8) & 0xFF));
-  chunk.append(char(crc & 0xFF));
+  chunk.append(static_cast<char>((crc >> 24) & 0xFF));
+  chunk.append(static_cast<char>((crc >> 16) & 0xFF));
+  chunk.append(static_cast<char>((crc >> 8) & 0xFF));
+  chunk.append(static_cast<char>(crc & 0xFF));
   return png.left(ihdrEnd) + chunk + png.mid(ihdrEnd);
 }
 

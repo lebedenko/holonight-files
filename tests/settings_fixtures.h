@@ -27,7 +27,7 @@ class RecordingWarningSink : public WarningSink {
 // Holds the first classification until the test releases it; later loads proceed normally.
 class GatedLocationClassifier : public LocationClassifier {
  public:
-  Classification classify(const QString&) const override {
+  Classification classify(const QString& /*path*/) const override {
     if (calls.fetch_add(1) == 0) {
       entered = true;
       release.acquire();
@@ -41,7 +41,7 @@ class GatedLocationClassifier : public LocationClassifier {
 
 // Returns a fixed classification, recording which thread asked and optionally stalling like a
 // hung mount would.
-class FakeLocationClassifier : public LocationClassifier {
+struct FakeLocationClassifier : public LocationClassifier {
  public:
   explicit FakeLocationClassifier(Classification result, std::chrono::milliseconds delay = {})
       : result_(result), delay_(delay) {}
@@ -57,6 +57,8 @@ class FakeLocationClassifier : public LocationClassifier {
     return overrides.value(path, result_);
   }
   // Per-path results; fill in before handing the classifier to a model.
+  // Direct test controls configured before the fixture is shared with workers.
+  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   QHash<QString, Classification> overrides;
   std::vector<QThread*> threads() const {
     const std::scoped_lock lock(mutex_);
@@ -78,7 +80,7 @@ class FakeLocationClassifier : public LocationClassifier {
 // Records the calling thread and queried path per call (REQ-NF-001's "ran off the GUI thread"
 // assertion); supports per-path result overrides and, optionally, a per-path QSemaphore that
 // blocks the call until the test releases it (REQ-F-021/REQ-NF-002's hung-check scenarios).
-class FakePlaceAvailabilityChecker : public PlaceAvailabilityChecker {
+struct FakePlaceAvailabilityChecker : public PlaceAvailabilityChecker {
  public:
   [[nodiscard]] bool isAvailable(const QString& path) const override {
     {
@@ -91,8 +93,14 @@ class FakePlaceAvailabilityChecker : public PlaceAvailabilityChecker {
     }
     return overrides.value(path, default_result);
   }
+  // Direct test controls configured before the fixture is shared with workers.
+  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   bool default_result = true;
+  // Direct test controls configured before the fixture is shared with workers.
+  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   QHash<QString, bool> overrides;
+  // Direct test controls configured before the fixture is shared with workers.
+  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   QHash<QString, std::shared_ptr<QSemaphore>> gates;
   std::vector<QThread*> threads() const {
     const std::scoped_lock lock(mutex_);

@@ -1,12 +1,15 @@
 #pragma once
+
 #include "task_manager.h"
 #include "vim_mode_controller.h"
 
 #include <QElapsedTimer>
 
+#include <cstdint>
+
 // Parsing is independent of listing/operation side effects. The application executes commands.
 struct FileCommand {
-  enum class Kind {
+  enum class Kind : std::uint8_t {
     None,
     Move,
     First,
@@ -35,7 +38,7 @@ struct FileCommand {
     Overwrite,
     AutoRename,
     CancelConflict,
-    ConfirmTrash
+    ConfirmTrash,
   };
   Kind kind = Kind::None;
   int count = 1;
@@ -45,8 +48,8 @@ struct FileCommand {
 struct FileCommandContext {
   VimModeController::Mode mode;
   TaskManager::PromptKind prompt;
-  bool quickLookOpen;
-  bool canPreview;
+  bool quick_look_open;
+  bool can_preview;
 };
 class FileCommandRouter {
  public:

@@ -24,11 +24,11 @@ ExifSummary read(QIODevice& source, const QByteArray& mimeType, const std::share
   summary.outcome = result.outcome;
   summary.make = facts.make;
   summary.model = facts.model;
-  summary.lensModel = facts.lens;
+  summary.lens_model = facts.lens;
   if (facts.exposureSeconds && *facts.exposureSeconds > 0) {
     const auto time = *facts.exposureSeconds;
-    summary.exposureTime = time < 1 ? QStringLiteral("1/%1s").arg(std::round(1 / time), 0, 'f', 0)
-                                    : QStringLiteral("%1s").arg(time, 0, 'g', 4);
+    summary.exposure_time = time < 1 ? QStringLiteral("1/%1s").arg(std::round(1 / time), 0, 'f', 0)
+                                     : QStringLiteral("%1s").arg(time, 0, 'g', 4);
   }
   if (facts.iso) {
     summary.iso = QString::number(*facts.iso);
@@ -38,13 +38,13 @@ ExifSummary read(QIODevice& source, const QByteArray& mimeType, const std::share
     if (number.endsWith(".0")) {
       number.chop(2);
     }
-    summary.focalLength = number + "mm";
+    summary.focal_length = number + "mm";
   }
   if (facts.aperture) {
     summary.aperture = QStringLiteral("f/%1").arg(*facts.aperture, 0, 'f', 1);
   }
-  summary.present = !summary.make.isEmpty() || !summary.model.isEmpty() || !summary.lensModel.isEmpty() ||
-                    !summary.exposureTime.isEmpty() || !summary.iso.isEmpty() || !summary.focalLength.isEmpty() ||
+  summary.present = !summary.make.isEmpty() || !summary.model.isEmpty() || !summary.lens_model.isEmpty() ||
+                    !summary.exposure_time.isEmpty() || !summary.iso.isEmpty() || !summary.focal_length.isEmpty() ||
                     !summary.aperture.isEmpty();
   return summary;
 }

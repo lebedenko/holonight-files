@@ -165,11 +165,13 @@ void QuickLookPresentationModel::updateGeometry() {
   QSizeF frame;
   if (retained_kind_ == Kind::Compact) {
     frame = QSizeF(icon_extent_, icon_extent_);
-    card = QSizeF(
-        std::floor(std::min(bounds.width(), std::max({min_compact_width_, hint_implicit_width_ + (2 * card_padding_),
-                                                      icon_extent_ + (2 * card_padding_)}))),
-        std::floor(
-            std::min(bounds.height(), (2 * card_padding_) + icon_extent_ + frame_caption_gap_ + caption_reserve_)));
+    card = QSizeF(std::floor(std::min(bounds.width(), std::max({
+                                                          min_compact_width_,
+                                                          hint_implicit_width_ + (2 * card_padding_),
+                                                          icon_extent_ + (2 * card_padding_),
+                                                      }))),
+                  std::floor(std::min(bounds.height(),
+                                      (2 * card_padding_) + icon_extent_ + frame_caption_gap_ + caption_reserve_)));
   } else {
     frame = previewBounds();
     if (retained_kind_ == Kind::Image && retained_source_size_.width() > 0 && retained_source_size_.height() > 0) {

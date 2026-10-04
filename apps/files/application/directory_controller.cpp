@@ -270,8 +270,8 @@ bool DirectoryController::handleKey(const QString& key) {
   const auto command = commands_.route(key, {
                                                 .mode = vim_.currentMode(),
                                                 .prompt = tasks_.promptKind(),
-                                                .quickLookOpen = quickLookOpen(),
-                                                .canPreview = canPreviewSelection(),
+                                                .quick_look_open = quickLookOpen(),
+                                                .can_preview = canPreviewSelection(),
                                             });
   execute(command);
   return command.consumed;

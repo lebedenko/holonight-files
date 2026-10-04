@@ -13,8 +13,8 @@ namespace TextPreviewService {
 struct TextPreviewResult {
   QStringList lines;
   QString error;
-  qint64 totalSize = -1;
-  bool wasTruncated = false;
+  qint64 total_size = -1;
+  bool was_truncated = false;
 };
 
 // True if sample looks like binary data: a NUL byte anywhere, or more than 50% of the sampled

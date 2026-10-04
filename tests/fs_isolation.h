@@ -21,7 +21,7 @@ namespace fs_isolation {
 
 struct SetupResult {
   bool available = false;  // false if the sandbox disallows unprivileged user namespaces
-  QString unavailableReason;
+  QString unavailable_reason;
 };
 
 // Must be called exactly once, as the first thing in main(), before any threads exist (unshare()

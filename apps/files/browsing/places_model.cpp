@@ -34,13 +34,15 @@ void PlacesModel::buildPlaces(const QString& homePath, const QString& userDirsFi
   QSet<QString> seen;
   const auto append = [&](const QString& name, const QString& path, const QString& icon, Origin origin,
                           bool startsBookmarks) {
-    places_.append({.id = next_id_++,
-                    .name = name,
-                    .path = path,
-                    .iconName = icon,
-                    .origin = origin,
-                    .status = Status::Checking,
-                    .starts_bookmarks = startsBookmarks});
+    places_.append({
+        .id = next_id_++,
+        .name = name,
+        .path = path,
+        .icon_name = icon,
+        .origin = origin,
+        .status = Status::Checking,
+        .starts_bookmarks = startsBookmarks,
+    });
     seen.insert(path);
   };
 
@@ -172,7 +174,7 @@ QVariant PlacesModel::data(const QModelIndex& index, int role) const {
     case PathRole:
       return place.path;
     case IconNameRole:
-      return place.iconName;
+      return place.icon_name;
     case OriginRole:
       return QVariant::fromValue(place.origin);
     case StatusRole:
@@ -185,6 +187,8 @@ QVariant PlacesModel::data(const QModelIndex& index, int role) const {
 }
 
 QHash<int, QByteArray> PlacesModel::roleNames() const {
-  return {{NameRole, "name"},     {PathRole, "path"},     {IconNameRole, "iconName"},
-          {OriginRole, "origin"}, {StatusRole, "status"}, {StartsBookmarksRole, "startsBookmarks"}};
+  return {
+      {NameRole, "name"},     {PathRole, "path"},     {IconNameRole, "iconName"},
+      {OriginRole, "origin"}, {StatusRole, "status"}, {StartsBookmarksRole, "startsBookmarks"},
+  };
 }

@@ -16,9 +16,9 @@ class PreviewImageItem : public QQuickPaintedItem {
   Q_PROPERTY(qreal radius READ radius WRITE setRadius NOTIFY radiusChanged)
  public:
   explicit PreviewImageItem(QQuickItem* parent = nullptr);
-  QImage image() const { return image_; }
+  [[nodiscard]] QImage image() const { return image_; }
   void setImage(const QImage& image);
-  qreal radius() const { return radius_; }
+  [[nodiscard]] qreal radius() const { return radius_; }
   void setRadius(qreal radius);
   void paint(QPainter* painter) override;
   static QRectF fitRect(QSize image, QSizeF canvas);

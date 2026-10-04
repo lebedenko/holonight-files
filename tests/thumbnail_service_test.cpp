@@ -222,7 +222,8 @@ void expectCorners(const QImage& image, int orientation) {
   ASSERT_FALSE(image.isNull());
   // Stored quadrant indices at displayed TL, TR, BL, BR, from EXIF semantics.
   constexpr std::array<std::array<int, 4>, 8> corners = {
-      {{0, 1, 2, 3}, {1, 0, 3, 2}, {3, 2, 1, 0}, {2, 3, 0, 1}, {0, 2, 1, 3}, {2, 0, 3, 1}, {3, 1, 2, 0}, {1, 3, 0, 2}}};
+      {{0, 1, 2, 3}, {1, 0, 3, 2}, {3, 2, 1, 0}, {2, 3, 0, 1}, {0, 2, 1, 3}, {2, 0, 3, 1}, {3, 1, 2, 0}, {1, 3, 0, 2}},
+  };
   const std::array<QColor, 4> colors = {Qt::red, Qt::green, Qt::blue, Qt::yellow};
   for (int i = 0; i < 4; ++i) {
     const auto actual =

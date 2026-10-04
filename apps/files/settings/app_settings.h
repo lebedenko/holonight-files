@@ -19,9 +19,9 @@ class AppSettings {
   static AppSettings load(const QString& configPath, WarningSink& warnings);
   static AppSettings defaults();
 
-  const SearchSettings& search() const { return search_; }
-  const GeneralSettings& general() const { return general_; }
-  const std::vector<SettingInfo>& settingInfo() const { return info_; }
+  [[nodiscard]] const SearchSettings& search() const { return search_; }
+  [[nodiscard]] const GeneralSettings& general() const { return general_; }
+  [[nodiscard]] const std::vector<SettingInfo>& settingInfo() const { return info_; }
 
  private:
   AppSettings() = default;

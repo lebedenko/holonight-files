@@ -53,11 +53,11 @@ TEST(TextPreviewService, ReadHeadReturnsFullContentForASmallFile) {
   ASSERT_TRUE(dir.isValid());
   const auto path = writeSmallText(dir);
   const auto result = TextPreviewService::readHead(path, 65536);
-  EXPECT_FALSE(result.wasTruncated);
-  EXPECT_EQ(result.totalSize, QFileInfo(path).size());
+  EXPECT_FALSE(result.was_truncated);
+  EXPECT_EQ(result.total_size, QFileInfo(path).size());
   ASSERT_FALSE(result.lines.isEmpty());
   // The fixture ends with a terminator, which is not a line separator (one byte).
-  EXPECT_EQ(result.lines.join(QLatin1Char('\n')).toUtf8().size() + 1, result.totalSize);
+  EXPECT_EQ(result.lines.join(QLatin1Char('\n')).toUtf8().size() + 1, result.total_size);
 }
 
 TEST(TextPreviewService, ReadHeadTruncatesALargeFileAtTheRequestedBoundary) {
@@ -65,8 +65,8 @@ TEST(TextPreviewService, ReadHeadTruncatesALargeFileAtTheRequestedBoundary) {
   ASSERT_TRUE(dir.isValid());
   const auto path = writeLargeText(dir);
   const auto result = TextPreviewService::readHead(path, 102400);
-  EXPECT_TRUE(result.wasTruncated);
-  EXPECT_GT(result.totalSize, 102400);
+  EXPECT_TRUE(result.was_truncated);
+  EXPECT_GT(result.total_size, 102400);
   ASSERT_EQ(result.lines.size(), 1);  // the fixture has no line terminators
   EXPECT_EQ(result.lines.first().toUtf8().size(), 102400);
   EXPECT_TRUE(result.lines.first().endsWith(QStringLiteral("B")));  // past the fixture's 64 KiB of 'A'
@@ -94,8 +94,8 @@ TEST(TextPreviewService, FileBelowTheCapIsFullyLoadedAndNotTruncated) {
   QTemporaryDir dir(fixturePattern("text-50k"));
   ASSERT_TRUE(dir.isValid());
   const auto result = TextPreviewService::readHead(writeTextOfSize(dir, QStringLiteral("a.txt"), 50000), 102400);
-  EXPECT_FALSE(result.wasTruncated);
-  EXPECT_EQ(result.totalSize, 50000);
+  EXPECT_FALSE(result.was_truncated);
+  EXPECT_EQ(result.total_size, 50000);
   // The fixture's last byte is a terminator, which is not a line separator.
   EXPECT_EQ(result.lines.join(QLatin1Char('\n')).toUtf8().size() + 1, 50000);
 }
@@ -104,16 +104,16 @@ TEST(TextPreviewService, FileOfExactlyTheCapIsNotTruncated) {
   QTemporaryDir dir(fixturePattern("text-cap"));
   ASSERT_TRUE(dir.isValid());
   const auto result = TextPreviewService::readHead(writeTextOfSize(dir, QStringLiteral("a.txt"), 102400), 102400);
-  EXPECT_FALSE(result.wasTruncated);
-  EXPECT_EQ(result.totalSize, 102400);
+  EXPECT_FALSE(result.was_truncated);
+  EXPECT_EQ(result.total_size, 102400);
 }
 
 TEST(TextPreviewService, OneByteOverTheCapIsTruncated) {
   QTemporaryDir dir(fixturePattern("text-cap1"));
   ASSERT_TRUE(dir.isValid());
   const auto result = TextPreviewService::readHead(writeTextOfSize(dir, QStringLiteral("a.txt"), 102401), 102400);
-  EXPECT_TRUE(result.wasTruncated);
-  EXPECT_EQ(result.totalSize, 102401);
+  EXPECT_TRUE(result.was_truncated);
+  EXPECT_EQ(result.total_size, 102401);
   EXPECT_EQ(result.lines.join(QLatin1Char('\n')).toUtf8().size() + 1, 102400);  // trailing terminator
 }
 
@@ -121,7 +121,7 @@ TEST(TextPreviewService, TwoHundredKilobyteFileLoadsExactlyTheCap) {
   QTemporaryDir dir(fixturePattern("text-200k"));
   ASSERT_TRUE(dir.isValid());
   const auto result = TextPreviewService::readHead(writeTextOfSize(dir, QStringLiteral("a.txt"), 200000), 102400);
-  EXPECT_TRUE(result.wasTruncated);
+  EXPECT_TRUE(result.was_truncated);
   // 102,400 bytes with a newline after every 100th byte: 1024 complete lines, no phantom line.
   EXPECT_EQ(result.lines.size(), 1024);
   EXPECT_EQ(result.lines.join(QLatin1Char('\n')).toUtf8().size() + 1, 102400);
@@ -131,7 +131,7 @@ TEST(TextPreviewService, CapCuttingAMultibyteCharacterDropsItInsteadOfDecodingRe
   QTemporaryDir dir(fixturePattern("text-cut"));
   ASSERT_TRUE(dir.isValid());
   const auto result = TextPreviewService::readHead(writeCutMidUtf8Text(dir), 102400);
-  EXPECT_TRUE(result.wasTruncated);
+  EXPECT_TRUE(result.was_truncated);
   ASSERT_EQ(result.lines.size(), 1);
   EXPECT_FALSE(result.lines.first().contains(QChar(0xFFFD)));
   EXPECT_EQ(result.lines.first().size(), 102400 - 1);
@@ -142,7 +142,7 @@ TEST(TextPreviewService, EmptyFileYieldsOneEmptyLine) {
   ASSERT_TRUE(dir.isValid());
   const auto result = TextPreviewService::readHead(writeEmptyText(dir), 102400);
   EXPECT_TRUE(result.error.isEmpty());
-  EXPECT_FALSE(result.wasTruncated);
+  EXPECT_FALSE(result.was_truncated);
   EXPECT_EQ(result.lines, QStringList{QString()});
 }
 
@@ -198,7 +198,7 @@ TEST(TextPreviewService, WorstCaseShapesAtTheCapLoadQuickly) {
   timer.start();
   const auto oneLine = TextPreviewService::readHead(writeSingleLongLine(dir, 102400), 102400);
   EXPECT_EQ(oneLine.lines.size(), 1);
-  EXPECT_FALSE(oneLine.wasTruncated);
+  EXPECT_FALSE(oneLine.was_truncated);
   const auto manyLines =
       TextPreviewService::readHead(writeBytes(dir, QStringLiteral("newlines.txt"), QByteArray(102400, '\n')), 102400);
   EXPECT_EQ(manyLines.lines.size(), 102400);  // every terminator ends an (empty) line; none is synthesized after

@@ -14,7 +14,7 @@ class NavigationSession {
   explicit NavigationSession(DirectoryController& controller) : controller_(controller) {}
   void openInternal(const QString& requestedPath, const QString& fallbackReason, const QString& restoreName,
                     bool recordHistory);
-  QString outgoingCursorName() const;
+  [[nodiscard]] QString outgoingCursorName() const;
   void traverseHistory(int direction, int count);
   void cancelPendingRestore();
   void maybeApplyPendingRestore();
@@ -23,7 +23,7 @@ class NavigationSession {
   void openEntry(int proxyRow);
   void setCursorRow(qint64 row);
   void clampCursorRow();
-  QString entryNameAt(int proxyRow) const;
+  [[nodiscard]] QString entryNameAt(int proxyRow) const;
   void activateBookmark(int placesRow);
   void handleBookmarkRecheckResolved(quint64 placeId, const QString& path, bool available);
   void openRestoreCandidate(const QString& path);

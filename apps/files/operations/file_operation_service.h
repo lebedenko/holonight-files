@@ -22,14 +22,16 @@ struct FailedItem {
 using CancelFlag = std::shared_ptr<std::atomic_bool>;
 
 struct ItemResult {
-  bool sourceRetained = false;
-  bool destinationCopiesExist = false;
-  QStringList skippedChildren;
-  bool complete() const { return !failed && !cancelled && nestedFailures.isEmpty() && skippedChildren.isEmpty(); }
+  bool source_retained = false;
+  bool destination_copies_exist = false;
+  QStringList skipped_children;
+  [[nodiscard]] bool complete() const {
+    return !failed && !cancelled && nested_failures.isEmpty() && skipped_children.isEmpty();
+  }
   bool failed = false;     // top-level I/O or endpoint failure
   bool cancelled = false;  // cooperative cancellation, separate from I/O errors
   QString reason;
-  QList<FailedItem> nestedFailures;  // descendant I/O failures, distinct from skippedChildren
+  QList<FailedItem> nested_failures;  // descendant I/O failures, distinct from skippedChildren
 };
 
 // Converts an errno value into the human-readable reason text REQ-F-035's examples use

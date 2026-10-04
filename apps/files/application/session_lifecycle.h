@@ -20,6 +20,8 @@ class SessionLifecycle {
  private:
   friend class DirectoryController;
   friend struct DirectoryControllerTestAccess;
+  // Bound to the owning controller for this helper's entire lifetime.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
   DirectoryController& controller_;
   LastLocationTracker last_location_tracker_;
   StateStore state_store_;

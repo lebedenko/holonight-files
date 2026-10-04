@@ -40,18 +40,18 @@ SetupResult setUp() {
   const uid_t uid = ::getuid();
   const gid_t gid = ::getgid();
   if (::unshare(CLONE_NEWUSER | CLONE_NEWNS) != 0) {
-    result.unavailableReason = QStringLiteral("unshare(CLONE_NEWUSER|CLONE_NEWNS): %1").arg(std::strerror(errno));
+    result.unavailable_reason = QStringLiteral("unshare(CLONE_NEWUSER|CLONE_NEWNS): %1").arg(std::strerror(errno));
     return result;
   }
   QString error;
   if (!writeProcFile("/proc/self/uid_map", QByteArrayLiteral("0 ") + QByteArray::number(uid) + " 1\n", &error) ||
       !writeProcFile("/proc/self/setgroups", QByteArrayLiteral("deny"), &error) ||
       !writeProcFile("/proc/self/gid_map", QByteArrayLiteral("0 ") + QByteArray::number(gid) + " 1\n", &error)) {
-    result.unavailableReason = error;
+    result.unavailable_reason = std::move(error);
     return result;
   }
   if (::mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) != 0) {
-    result.unavailableReason = QStringLiteral("mount --make-rprivate: %1").arg(std::strerror(errno));
+    result.unavailable_reason = QStringLiteral("mount --make-rprivate: %1").arg(std::strerror(errno));
     return result;
   }
   result.available = true;

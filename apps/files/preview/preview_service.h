@@ -16,6 +16,7 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <memory>
 
@@ -34,7 +35,7 @@ class PreviewService : public QObject {
   // Nested (rather than a free-standing enum merely Q_ENUM'd from inside the class) so QML's
   // type resolver associates PreviewErrorKind with PreviewService's meta-object correctly —
   // referenced from QML as `PreviewService.None`, `PreviewService.DecodeTimeout`, etc.
-  enum class PreviewErrorKind {
+  enum class PreviewErrorKind : std::uint8_t {
     None,
     PermissionDenied,
     BrokenSymlink,
@@ -42,14 +43,14 @@ class PreviewService : public QObject {
     DecodeTimeout,
     Unsupported,
     ResourceLimit,
-    IoFailure
+    IoFailure,
   };
   Q_ENUM(PreviewErrorKind)
 
-  enum class PreviewConsumer { Pane, QuickLook };
+  enum class PreviewConsumer : std::uint8_t { Pane, QuickLook };
   Q_ENUM(PreviewConsumer)
 
-  enum class QuickLookEligibility { Checking, Supported, Unsupported };
+  enum class QuickLookEligibility : std::uint8_t { Checking, Supported, Unsupported };
   Q_ENUM(QuickLookEligibility)
 
   struct PreviewError {
@@ -103,45 +104,49 @@ class PreviewService : public QObject {
 
   explicit PreviewService(QObject* parent = nullptr);
   ~PreviewService() override;
+  PreviewService(const PreviewService&) = delete;
+  PreviewService& operator=(const PreviewService&) = delete;
+  PreviewService(PreviewService&&) = delete;
+  PreviewService& operator=(PreviewService&&) = delete;
 
-  bool hasEntry() const { return has_entry_; }
+  [[nodiscard]] bool hasEntry() const { return has_entry_; }
   // True when the current target is a directory; the QML fallback-glyph selector reads this instead of parsing
   // iconName, whose first name is now a place icon for named folders.
-  bool isDirectory() const { return has_entry_ && is_dir_; }
-  QString name() const { return name_; }
-  qint64 size() const { return size_; }
-  QDateTime modified() const { return modified_; }
-  QString permissions() const { return permissions_; }
-  QString mimeType() const { return mime_type_; }
-  QString mimeTypeDescription() const { return mime_type_description_; }
-  bool busy() const { return busy_; }
-  bool hasImage() const { return !display_image_.isNull(); }
-  QImage image() const { return display_image_; }
-  QSize sourcePixelSize() const { return source_pixel_size_; }
-  bool vectorImage() const { return image_kind_ == ThumbnailService::ImageKind::Svg; }
-  QSizeF documentSize() const { return document_size_; }
-  bool exifPresent() const { return exif_.present; }
-  QString exifMake() const { return exif_.make; }
-  QString exifModel() const { return exif_.model; }
-  QString exifExposureTime() const { return exif_.exposureTime; }
-  QString exifIso() const { return exif_.iso; }
-  QString exifFocalLength() const { return exif_.focalLength; }
-  QString exifLensModel() const { return exif_.lensModel; }
-  QString exifAperture() const { return exif_.aperture; }
-  QuickLookEligibility quickLookEligibility() const;
-  bool quickLookBusy() const { return busy_ || text_busy_; }
-  bool quickLookText() const;
-  PreviewErrorKind quickLookErrorKind() const { return quick_look_error_.kind; }
-  QString quickLookErrorMessage() const { return quick_look_error_.message; }
-  bool hasText() const { return has_text_; }
-  bool textTruncated() const { return text_.wasTruncated; }
-  qint64 textTotalSize() const { return text_.totalSize; }
+  [[nodiscard]] bool isDirectory() const { return has_entry_ && is_dir_; }
+  [[nodiscard]] QString name() const { return name_; }
+  [[nodiscard]] qint64 size() const { return size_; }
+  [[nodiscard]] QDateTime modified() const { return modified_; }
+  [[nodiscard]] QString permissions() const { return permissions_; }
+  [[nodiscard]] QString mimeType() const { return mime_type_; }
+  [[nodiscard]] QString mimeTypeDescription() const { return mime_type_description_; }
+  [[nodiscard]] bool busy() const { return busy_; }
+  [[nodiscard]] bool hasImage() const { return !display_image_.isNull(); }
+  [[nodiscard]] QImage image() const { return display_image_; }
+  [[nodiscard]] QSize sourcePixelSize() const { return source_pixel_size_; }
+  [[nodiscard]] bool vectorImage() const { return image_kind_ == ThumbnailService::ImageKind::Svg; }
+  [[nodiscard]] QSizeF documentSize() const { return document_size_; }
+  [[nodiscard]] bool exifPresent() const { return exif_.present; }
+  [[nodiscard]] QString exifMake() const { return exif_.make; }
+  [[nodiscard]] QString exifModel() const { return exif_.model; }
+  [[nodiscard]] QString exifExposureTime() const { return exif_.exposure_time; }
+  [[nodiscard]] QString exifIso() const { return exif_.iso; }
+  [[nodiscard]] QString exifFocalLength() const { return exif_.focal_length; }
+  [[nodiscard]] QString exifLensModel() const { return exif_.lens_model; }
+  [[nodiscard]] QString exifAperture() const { return exif_.aperture; }
+  [[nodiscard]] QuickLookEligibility quickLookEligibility() const;
+  [[nodiscard]] bool quickLookBusy() const { return busy_ || text_busy_; }
+  [[nodiscard]] bool quickLookText() const;
+  [[nodiscard]] PreviewErrorKind quickLookErrorKind() const { return quick_look_error_.kind; }
+  [[nodiscard]] QString quickLookErrorMessage() const { return quick_look_error_.message; }
+  [[nodiscard]] bool hasText() const { return has_text_; }
+  [[nodiscard]] bool textTruncated() const { return text_.was_truncated; }
+  [[nodiscard]] qint64 textTotalSize() const { return text_.total_size; }
   QAbstractItemModel* textLines() { return &text_lines_; }
-  int textLineCount() const { return text_lines_.rowCount(); }
-  int currentLineIndex() const { return current_line_; }
-  PreviewErrorKind previewErrorKind() const { return error_.kind; }
-  QString previewErrorMessage() const { return error_.message; }
-  QString iconName() const { return icon_name_; }
+  [[nodiscard]] int textLineCount() const { return text_lines_.rowCount(); }
+  [[nodiscard]] int currentLineIndex() const { return current_line_; }
+  [[nodiscard]] PreviewErrorKind previewErrorKind() const { return error_.kind; }
+  [[nodiscard]] QString previewErrorMessage() const { return error_.message; }
+  [[nodiscard]] QString iconName() const { return icon_name_; }
 
   // Called only by DirectoryController::syncPreviewTarget(). Formats generic metadata
   // synchronously on the UI thread with zero I/O and emits changed() before returning.
@@ -153,7 +158,7 @@ class PreviewService : public QObject {
   // lines or the index would not change.
   void moveCurrentLine(int delta);
   // Pending inspection may open a pinned loading overlay.
-  bool quickLookEligible() const;
+  [[nodiscard]] bool quickLookEligible() const;
   Q_INVOKABLE void moveCurrentLineDown() { moveCurrentLine(1); }
   Q_INVOKABLE void moveCurrentLineUp() { moveCurrentLine(-1); }
   Q_INVOKABLE void setRequestedSize(PreviewConsumer consumer, QSize pixels);

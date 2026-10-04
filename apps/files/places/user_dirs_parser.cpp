@@ -18,44 +18,64 @@ struct KeyInfo {
 };
 
 // Order matches Key's declaration order, which is also REQ-F-005's required display order.
-constexpr std::array<KeyInfo, 9> kKeys{{
-    {.key = Key::Desktop,
-     .xdg_name = "DESKTOP",
-     .label = QT_TRANSLATE_NOOP("PlacesModel", "Desktop"),
-     .icon_name = "user-desktop"},
-    {.key = Key::Documents,
-     .xdg_name = "DOCUMENTS",
-     .label = QT_TRANSLATE_NOOP("PlacesModel", "Documents"),
-     .icon_name = "folder-documents"},
-    {.key = Key::Downloads,
-     .xdg_name = "DOWNLOAD",
-     .label = QT_TRANSLATE_NOOP("PlacesModel", "Downloads"),
-     .icon_name = "folder-download"},
-    {.key = Key::Pictures,
-     .xdg_name = "PICTURES",
-     .label = QT_TRANSLATE_NOOP("PlacesModel", "Pictures"),
-     .icon_name = "folder-pictures"},
-    {.key = Key::Music,
-     .xdg_name = "MUSIC",
-     .label = QT_TRANSLATE_NOOP("PlacesModel", "Music"),
-     .icon_name = "folder-music"},
-    {.key = Key::Videos,
-     .xdg_name = "VIDEOS",
-     .label = QT_TRANSLATE_NOOP("PlacesModel", "Videos"),
-     .icon_name = "folder-videos"},
-    {.key = Key::Projects,
-     .xdg_name = "PROJECTS",
-     .label = QT_TRANSLATE_NOOP("PlacesModel", "Projects"),
-     .icon_name = "folder-development"},
-    {.key = Key::Templates,
-     .xdg_name = "TEMPLATES",
-     .label = QT_TRANSLATE_NOOP("PlacesModel", "Templates"),
-     .icon_name = "folder-templates"},
-    {.key = Key::Public,
-     .xdg_name = "PUBLICSHARE",
-     .label = QT_TRANSLATE_NOOP("PlacesModel", "Public"),
-     .icon_name = "folder-publicshare"},
-}};
+constexpr std::array<KeyInfo, 9> kKeys{
+    {
+        {
+            .key = Key::Desktop,
+            .xdg_name = "DESKTOP",
+            .label = QT_TRANSLATE_NOOP("PlacesModel", "Desktop"),
+            .icon_name = "user-desktop",
+        },
+        {
+            .key = Key::Documents,
+            .xdg_name = "DOCUMENTS",
+            .label = QT_TRANSLATE_NOOP("PlacesModel", "Documents"),
+            .icon_name = "folder-documents",
+        },
+        {
+            .key = Key::Downloads,
+            .xdg_name = "DOWNLOAD",
+            .label = QT_TRANSLATE_NOOP("PlacesModel", "Downloads"),
+            .icon_name = "folder-download",
+        },
+        {
+            .key = Key::Pictures,
+            .xdg_name = "PICTURES",
+            .label = QT_TRANSLATE_NOOP("PlacesModel", "Pictures"),
+            .icon_name = "folder-pictures",
+        },
+        {
+            .key = Key::Music,
+            .xdg_name = "MUSIC",
+            .label = QT_TRANSLATE_NOOP("PlacesModel", "Music"),
+            .icon_name = "folder-music",
+        },
+        {
+            .key = Key::Videos,
+            .xdg_name = "VIDEOS",
+            .label = QT_TRANSLATE_NOOP("PlacesModel", "Videos"),
+            .icon_name = "folder-videos",
+        },
+        {
+            .key = Key::Projects,
+            .xdg_name = "PROJECTS",
+            .label = QT_TRANSLATE_NOOP("PlacesModel", "Projects"),
+            .icon_name = "folder-development",
+        },
+        {
+            .key = Key::Templates,
+            .xdg_name = "TEMPLATES",
+            .label = QT_TRANSLATE_NOOP("PlacesModel", "Templates"),
+            .icon_name = "folder-templates",
+        },
+        {
+            .key = Key::Public,
+            .xdg_name = "PUBLICSHARE",
+            .label = QT_TRANSLATE_NOOP("PlacesModel", "Public"),
+            .icon_name = "folder-publicshare",
+        },
+    },
+};
 
 const KeyInfo* infoFor(Key key) {
   for (const auto& info : kKeys) {

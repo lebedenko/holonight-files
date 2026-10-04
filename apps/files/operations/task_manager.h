@@ -11,6 +11,7 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 
 // The queue, progress, cancellation, and prompt engine for copy/move/trash (SPEC.md's TaskManager,
@@ -40,11 +41,11 @@ class TaskManager : public QObject {
  public:
   // Nested (like PreviewService's PreviewErrorKind) so QML resolves these as TaskManager.Copy,
   // TaskManager.Conflict, etc.
-  enum class TaskKind { Copy, Move, Trash };
+  enum class TaskKind : std::uint8_t { Copy, Move, Trash };
   Q_ENUM(TaskKind)
-  enum class ConflictResolution { Skip, Overwrite, AutoRename, Cancel };
+  enum class ConflictResolution : std::uint8_t { Skip, Overwrite, AutoRename, Cancel };
   Q_ENUM(ConflictResolution)
-  enum class PromptKind { None, Conflict, TrashConfirm };
+  enum class PromptKind : std::uint8_t { None, Conflict, TrashConfirm };
   Q_ENUM(PromptKind)
 
   struct FailedItem {
@@ -57,35 +58,39 @@ class TaskManager : public QObject {
     int failed = 0;
     int incomplete = 0;
     int skipped = 0;
-    QStringList skippedChildren;
+    QStringList skipped_children;
     QList<FailedItem> failures;
   };
 
   struct Task {
     TaskKind kind = TaskKind::Copy;
     QStringList sources;
-    QString destDir;
+    QString dest_dir;
     quint64 id = 0;
   };
 
   explicit TaskManager(QObject* parent = nullptr);
   ~TaskManager() override;
+  TaskManager(const TaskManager&) = delete;
+  TaskManager& operator=(const TaskManager&) = delete;
+  TaskManager(TaskManager&&) = delete;
+  TaskManager& operator=(TaskManager&&) = delete;
 
-  TaskKind currentOperation() const { return current_operation_; }
-  QString currentItemName() const { return current_item_name_; }
-  int itemsDone() const { return items_done_; }
-  int itemsTotal() const { return items_total_; }
-  bool busy() const { return busy_; }
+  [[nodiscard]] TaskKind currentOperation() const { return current_operation_; }
+  [[nodiscard]] QString currentItemName() const { return current_item_name_; }
+  [[nodiscard]] int itemsDone() const { return items_done_; }
+  [[nodiscard]] int itemsTotal() const { return items_total_; }
+  [[nodiscard]] bool busy() const { return busy_; }
 
-  bool hasPrompt() const { return prompt_kind_ != PromptKind::None; }
-  PromptKind promptKind() const { return prompt_kind_; }
-  QString conflictSourceName() const { return conflict_source_name_; }
-  QString conflictDestName() const { return conflict_dest_name_; }
-  int trashConfirmCount() const { return trash_confirm_paths_.size(); }
-  quint64 promptId() const { return prompt_id_; }
+  [[nodiscard]] bool hasPrompt() const { return prompt_kind_ != PromptKind::None; }
+  [[nodiscard]] PromptKind promptKind() const { return prompt_kind_; }
+  [[nodiscard]] QString conflictSourceName() const { return conflict_source_name_; }
+  [[nodiscard]] QString conflictDestName() const { return conflict_dest_name_; }
+  [[nodiscard]] int trashConfirmCount() const { return static_cast<int>(trash_confirm_paths_.size()); }
+  [[nodiscard]] quint64 promptId() const { return prompt_id_; }
 
-  QString lastSummaryText() const { return last_summary_text_; }
-  const TaskSummary& lastSummary() const { return last_summary_; }
+  [[nodiscard]] QString lastSummaryText() const { return last_summary_text_; }
+  [[nodiscard]] const TaskSummary& lastSummary() const { return last_summary_; }
 
   Q_INVOKABLE void enqueueCopy(const QStringList& sources, const QString& destDir);
   Q_INVOKABLE void enqueueMove(const QStringList& sources, const QString& destDir);

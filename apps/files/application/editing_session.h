@@ -26,6 +26,8 @@ class EditingSession {
  private:
   friend class DirectoryController;
   friend struct DirectoryControllerTestAccess;
+  // Bound to the owning controller for this helper's entire lifetime.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
   DirectoryController& controller_;
   quint64 listing_revision_ = 0;
   quint64 search_revision_ = 0;

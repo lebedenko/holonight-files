@@ -28,9 +28,14 @@ StartupPlan planStartup(const QStringList& arguments, bool restoreEnabled,
     return {.resolved = resolveInitialDirectory(arguments), .pending_candidate_path = {}};
   }
   if (!storedLocation.has_value()) {
-    return {.resolved = ResolvedDirectory{.path = QStandardPaths::writableLocation(QStandardPaths::HomeLocation),
-                                          .fallback_reason = QCoreApplication::translate("main", "no stored location")},
-            .pending_candidate_path = {}};
+    return {
+        .resolved =
+            ResolvedDirectory{
+                .path = QStandardPaths::writableLocation(QStandardPaths::HomeLocation),
+                .fallback_reason = QCoreApplication::translate("main", "no stored location"),
+            },
+        .pending_candidate_path = {},
+    };
   }
   return {.resolved = std::nullopt, .pending_candidate_path = *storedLocation};
 }

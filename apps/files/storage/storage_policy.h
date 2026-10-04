@@ -1,7 +1,9 @@
 #pragma once
+
 #include <QString>
 
 #include <StorageTypes.h>
+#include <cstdint>
 #include <optional>
 
 // Presentation policy for the Devices panel. Pure functions over
@@ -11,7 +13,7 @@ namespace StoragePolicy {
 
 // Decides whether a removal control exists and which glyph it carries (REQ-F-001..003).
 // Declaration order is the Devices panel's display order: internal drives first.
-enum class DeviceClass { Internal, External, Optical };
+enum class DeviceClass : std::uint8_t { Internal, External, Optical };
 
 inline DeviceClass classify(const HoloNight::System::StorageDrive& drive) {
   if (drive.optical) {

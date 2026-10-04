@@ -25,14 +25,14 @@ TEST(TrashService, HomeTrashDirectoryIsCreatedWithFilesAndInfoAt0700) {
 
   const auto dir = TrashService::selectTrashDir(path);
   ASSERT_FALSE(dir.error.has_value());
-  EXPECT_FALSE(dir.useRelativePath);
-  EXPECT_EQ(dir.filesDir, home.filePath("Trash/files"));
-  EXPECT_EQ(dir.infoDir, home.filePath("Trash/info"));
+  EXPECT_FALSE(dir.use_relative_path);
+  EXPECT_EQ(dir.files_dir, home.filePath("Trash/files"));
+  EXPECT_EQ(dir.info_dir, home.filePath("Trash/info"));
   struct stat filesStat{};
-  ASSERT_EQ(::stat(QFile::encodeName(dir.filesDir).constData(), &filesStat), 0);
+  ASSERT_EQ(::stat(QFile::encodeName(dir.files_dir).constData(), &filesStat), 0);
   EXPECT_EQ(filesStat.st_mode & 0777, 0700U);
   struct stat infoStat{};
-  ASSERT_EQ(::stat(QFile::encodeName(dir.infoDir).constData(), &infoStat), 0);
+  ASSERT_EQ(::stat(QFile::encodeName(dir.info_dir).constData(), &infoStat), 0);
   EXPECT_EQ(infoStat.st_mode & 0777, 0700U);
 }
 
@@ -47,7 +47,7 @@ TEST(TrashService, WriteTrashInfoUsesAbsolutePathForHomeTrash) {
   const auto dir = TrashService::selectTrashDir(path);
   ASSERT_FALSE(dir.error.has_value());
   ASSERT_FALSE(TrashService::writeTrashInfo(dir, "doomed.txt", path));
-  QFile info(dir.infoDir + "/doomed.txt.trashinfo");
+  QFile info(dir.info_dir + "/doomed.txt.trashinfo");
   ASSERT_TRUE(info.open(QIODevice::ReadOnly));
   const auto lines = QString::fromUtf8(info.readAll()).split('\n', Qt::SkipEmptyParts);
   ASSERT_GE(lines.size(), 3);
@@ -67,12 +67,12 @@ TEST(TrashService, UniqueTrashNameAvoidsCollidingWithExistingFilesOrInfo) {
   const auto path = writeFile(source, "doc.txt");
   const auto dir = TrashService::selectTrashDir(path);
   ASSERT_FALSE(dir.error.has_value());
-  QFile preexisting(QDir(dir.filesDir).filePath("doc.txt"));  // pretend an earlier trash used this name
+  QFile preexisting(QDir(dir.files_dir).filePath("doc.txt"));  // pretend an earlier trash used this name
   ASSERT_TRUE(preexisting.open(QIODevice::WriteOnly));
   preexisting.close();
   const auto name = TrashService::uniqueTrashName(dir, "doc.txt");
   EXPECT_NE(name, "doc.txt");
-  EXPECT_FALSE(FileOperationService::destinationExists(dir.filesDir, name));
+  EXPECT_FALSE(FileOperationService::destinationExists(dir.files_dir, name));
 }
 
 TEST(TrashService, RemoveTrashInfoDeletesOnlyTheSidecar) {
@@ -86,7 +86,7 @@ TEST(TrashService, RemoveTrashInfoDeletesOnlyTheSidecar) {
   ASSERT_FALSE(dir.error.has_value());
   ASSERT_FALSE(TrashService::writeTrashInfo(dir, "doomed.txt", path));
   TrashService::removeTrashInfo(dir, "doomed.txt");
-  EXPECT_FALSE(QFile::exists(dir.infoDir + "/doomed.txt.trashinfo"));
+  EXPECT_FALSE(QFile::exists(dir.info_dir + "/doomed.txt.trashinfo"));
   EXPECT_TRUE(QFile::exists(path));  // only the sidecar is touched, never the original
 }
 
@@ -126,7 +126,7 @@ TEST(TrashService, MetadataFailureAndCancelledTrashLeaveSourceAndExistingMetadat
   const auto duplicate = TrashService::writeTrashInfo(directory, "keep", source);
   ASSERT_TRUE(duplicate.has_value());
   EXPECT_EQ(duplicate->kind, TrashService::FailureKind::Metadata);
-  EXPECT_TRUE(QFile::exists(QDir(directory.infoDir).filePath("keep.trashinfo")));
+  EXPECT_TRUE(QFile::exists(QDir(directory.info_dir).filePath("keep.trashinfo")));
   auto cancel = std::make_shared<std::atomic_bool>(true);
   EXPECT_TRUE(TrashService::trashEntry(source, cancel).cancelled);
   EXPECT_TRUE(QFile::exists(source));
@@ -147,6 +147,6 @@ TEST(TrashService, FailedMoveRollsBackOnlyItsOwnMetadata) {
   ASSERT_TRUE(result.error.has_value());
   EXPECT_EQ(result.error->kind, TrashService::FailureKind::Move);
   EXPECT_TRUE(QDir(home.filePath("Trash")).exists());
-  EXPECT_TRUE(QFile::exists(QDir(directory.infoDir).filePath("unrelated.trashinfo")));
-  EXPECT_FALSE(QFile::exists(QDir(directory.infoDir).filePath("Trash.trashinfo")));
+  EXPECT_TRUE(QFile::exists(QDir(directory.info_dir).filePath("unrelated.trashinfo")));
+  EXPECT_FALSE(QFile::exists(QDir(directory.info_dir).filePath("Trash.trashinfo")));
 }

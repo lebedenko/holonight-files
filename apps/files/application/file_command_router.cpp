@@ -76,14 +76,14 @@ bool FileCommandRouter::handleNormalToggleAndNavigationKey(const QString& key) {
   }
   if (key == u" ") {
     takeCount();
-    if (!context_.quickLookOpen && !context_.canPreview) {
+    if (!context_.quick_look_open && !context_.can_preview) {
       return true;
     }
     command_.kind = FileCommand::Kind::ToggleQuickLook;
     return true;
   }
   if (key == u"Escape") {
-    if (!context_.quickLookOpen) {
+    if (!context_.quick_look_open) {
       return false;  // Let the window-level Shortcut handle fullscreen.
     }
     takeCount();
@@ -135,7 +135,7 @@ bool FileCommandRouter::handleModeTransitionKey(const QString& key) {
   return false;
 }
 bool FileCommandRouter::handleNormalOnlyKey(const QString& key) {
-  if (key == u"Escape" && !context_.quickLookOpen) {
+  if (key == u"Escape" && !context_.quick_look_open) {
     return false;  // Let the window-level Shortcut handle fullscreen; count intentionally untouched.
   }
   if (handleNormalToggleAndNavigationKey(key)) {
@@ -162,7 +162,7 @@ bool FileCommandRouter::handleKey(const QString& key) {
     // events through here (REQ-C-001), but stay a safe no-op regardless.
     return false;
   }
-  if (context_.quickLookOpen) {
+  if (context_.quick_look_open) {
     return handleQuickLookKey(key);
   }
 

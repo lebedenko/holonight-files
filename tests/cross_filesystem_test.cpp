@@ -32,9 +32,9 @@ QString& xdgDataHomeForTest() {
 // GTEST_SKIP() must expand directly inside the TEST() body to return from it — a helper function
 // can only return from itself, not the caller — so a macro is the idiom gtest itself uses.
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
-#define SKIP_IF_UNAVAILABLE()                                      \
-  if (!setupResult().available) {                                  \
-    GTEST_SKIP() << setupResult().unavailableReason.toStdString(); \
+#define SKIP_IF_UNAVAILABLE()                                       \
+  if (!setupResult().available) {                                   \
+    GTEST_SKIP() << setupResult().unavailable_reason.toStdString(); \
   }
 
 std::shared_ptr<std::atomic_bool> freshCancel() { return std::make_shared<std::atomic_bool>(false); }
@@ -100,7 +100,7 @@ TEST(CrossFilesystem, MoveDirectoryFallsBackToCopyOnEXDEVAndPreservesTree) {
   const auto cancel = freshCancel();
   const auto result = FileOperationService::moveEntry(outer.filePath("tree"), dest, /*overwrite=*/false, cancel);
   EXPECT_FALSE(result.failed);
-  EXPECT_TRUE(result.nestedFailures.isEmpty());
+  EXPECT_TRUE(result.nested_failures.isEmpty());
   EXPECT_FALSE(QDir(outer.filePath("tree")).exists());
   EXPECT_TRUE(QFile::exists(dest + "/top.txt"));
   EXPECT_TRUE(QFile::exists(dest + "/nested/deep.txt"));
@@ -120,13 +120,13 @@ TEST(CrossFilesystem, PerPartitionTrashUsesTrashUidWhenStickyBitSet) {
 
   const auto dir = TrashService::selectTrashDir(sourcePath);
   ASSERT_FALSE(dir.error.has_value());
-  EXPECT_TRUE(dir.useRelativePath);
+  EXPECT_TRUE(dir.use_relative_path);
   EXPECT_EQ(dir.topdir, topdir);
-  EXPECT_TRUE(dir.filesDir.startsWith(trashPath + "/" + QString::number(::getuid())));
+  EXPECT_TRUE(dir.files_dir.startsWith(trashPath + "/" + QString::number(::getuid())));
 
   const auto name = TrashService::uniqueTrashName(dir, QStringLiteral("doomed.txt"));
   ASSERT_FALSE(TrashService::writeTrashInfo(dir, name, sourcePath));
-  QFile info(dir.infoDir + "/" + name + ".trashinfo");
+  QFile info(dir.info_dir + "/" + name + ".trashinfo");
   ASSERT_TRUE(info.open(QIODevice::ReadOnly));
   const auto contents = QString::fromUtf8(info.readAll());
   EXPECT_TRUE(contents.contains("[Trash Info]"));
@@ -145,7 +145,7 @@ TEST(CrossFilesystem, PerPartitionTrashRejectsSymlinkedTrashDirectory) {
   ASSERT_FALSE(writeFile(sourcePath).isEmpty());
   const auto dir = TrashService::selectTrashDir(sourcePath);
   ASSERT_FALSE(dir.error.has_value());  // falls through to .Trash-$uid instead
-  EXPECT_TRUE(dir.filesDir.contains(".Trash-" + QString::number(::getuid())));
+  EXPECT_TRUE(dir.files_dir.contains(".Trash-" + QString::number(::getuid())));
 }
 
 TEST(CrossFilesystem, PerPartitionTrashRejectsTrashDirectoryWithoutStickyBit) {
@@ -160,7 +160,7 @@ TEST(CrossFilesystem, PerPartitionTrashRejectsTrashDirectoryWithoutStickyBit) {
   ASSERT_FALSE(writeFile(sourcePath).isEmpty());
   const auto dir = TrashService::selectTrashDir(sourcePath);
   ASSERT_FALSE(dir.error.has_value());
-  EXPECT_TRUE(dir.filesDir.contains(".Trash-" + QString::number(::getuid())));  // REQ-F-043 fallback
+  EXPECT_TRUE(dir.files_dir.contains(".Trash-" + QString::number(::getuid())));  // REQ-F-043 fallback
 }
 
 TEST(CrossFilesystem, PerPartitionTrashFallsBackToTrashDashUidWhenTrashMissing) {
@@ -172,8 +172,8 @@ TEST(CrossFilesystem, PerPartitionTrashFallsBackToTrashDashUidWhenTrashMissing) 
 
   const auto dir = TrashService::selectTrashDir(sourcePath);
   ASSERT_FALSE(dir.error.has_value());
-  EXPECT_TRUE(QDir(dir.filesDir).exists());
-  EXPECT_TRUE(QDir(dir.infoDir).exists());
+  EXPECT_TRUE(QDir(dir.files_dir).exists());
+  EXPECT_TRUE(QDir(dir.info_dir).exists());
   struct stat info{};
   ASSERT_EQ(::stat(QFile::encodeName(topdir + "/.Trash-" + QString::number(::getuid())).constData(), &info), 0);
   EXPECT_EQ(info.st_mode & 0777, 0700U);
@@ -208,8 +208,8 @@ TEST(CrossFilesystem, HomeTrashUsedWhenOnSameDeviceAsXdgDataHome) {
   ASSERT_FALSE(writeFile(sourcePath).isEmpty());
   const auto dir = TrashService::selectTrashDir(sourcePath);
   ASSERT_FALSE(dir.error.has_value());
-  EXPECT_FALSE(dir.useRelativePath);
-  EXPECT_TRUE(dir.filesDir.startsWith(xdgDataHomeForTest()));
+  EXPECT_FALSE(dir.use_relative_path);
+  EXPECT_TRUE(dir.files_dir.startsWith(xdgDataHomeForTest()));
 }
 
 TEST(CrossFilesystem, IndependentTrashDirectoriesAreNotMerged) {
@@ -227,9 +227,9 @@ TEST(CrossFilesystem, IndependentTrashDirectoriesAreNotMerged) {
   const auto partitionDir = TrashService::selectTrashDir(partitionSource);
   ASSERT_FALSE(homeDir.error.has_value());
   ASSERT_FALSE(partitionDir.error.has_value());
-  EXPECT_NE(homeDir.filesDir, partitionDir.filesDir);
-  EXPECT_FALSE(homeDir.useRelativePath);
-  EXPECT_TRUE(partitionDir.useRelativePath);
+  EXPECT_NE(homeDir.files_dir, partitionDir.files_dir);
+  EXPECT_FALSE(homeDir.use_relative_path);
+  EXPECT_TRUE(partitionDir.use_relative_path);
 }
 
 TEST(CrossFilesystem, CopyToCapacityLimitedFilesystemReportsNoSpaceAndCleansUpPartial) {
@@ -259,7 +259,7 @@ int main(int argc, char* argv[]) {
   setupResult() = fs_isolation::setUp();
   if (!setupResult().available && qEnvironmentVariableIntValue("FILES_REQUIRE_FS_ISOLATION") == 1) {
     std::println(stderr, "Required filesystem isolation unavailable: {}",
-                 setupResult().unavailableReason.toStdString());
+                 setupResult().unavailable_reason.toStdString());
     return 1;
   }
   const QCoreApplication app(argc, argv);
@@ -289,8 +289,8 @@ TEST(CrossFilesystem, NestedErrorsRetainCompleteSourceAndExistingDestination) {
   ASSERT_FALSE(writeFile(tree + "/large", QByteArray(1 << 20, 'x')).isEmpty());
   const auto result = FileOperationService::moveEntry(tree, destination + "/tree", false, freshCancel());
   EXPECT_FALSE(result.complete());
-  EXPECT_TRUE(result.sourceRetained);
-  EXPECT_FALSE(result.nestedFailures.isEmpty());
+  EXPECT_TRUE(result.source_retained);
+  EXPECT_FALSE(result.nested_failures.isEmpty());
   EXPECT_TRUE(QFile::exists(tree + "/good"));
   EXPECT_TRUE(QFile::exists(tree + "/large"));
   EXPECT_FALSE(QFile::exists(destination + "/tree/large"));
@@ -316,9 +316,9 @@ TEST(CrossFilesystem, SkippedMergeChildrenAndUnsupportedFallbackRetainSource) {
   ASSERT_FALSE(writeFile(destination + "/tree/skip", "old").isEmpty());
   const auto result = FileOperationService::moveEntry(tree, destination + "/tree", true, freshCancel());
   EXPECT_FALSE(result.complete());
-  EXPECT_TRUE(result.sourceRetained);
-  EXPECT_EQ(result.skippedChildren.size(), 1);
-  EXPECT_TRUE(result.nestedFailures.isEmpty());
+  EXPECT_TRUE(result.source_retained);
+  EXPECT_EQ(result.skipped_children.size(), 1);
+  EXPECT_TRUE(result.nested_failures.isEmpty());
   EXPECT_TRUE(QFile::exists(tree + "/copy"));
   EXPECT_TRUE(QFile::exists(tree + "/skip"));
   EXPECT_TRUE(QFile::exists(destination + "/tree/copy"));
@@ -342,7 +342,7 @@ TEST(CrossFilesystem, InvalidSharedUserDirectoryFallsBack) {
   ASSERT_FALSE(source.isEmpty());
   const auto directory = TrashService::selectTrashDir(source);
   ASSERT_FALSE(directory.error.has_value());
-  EXPECT_TRUE(directory.filesDir.startsWith(top + "/.Trash-"));
+  EXPECT_TRUE(directory.files_dir.startsWith(top + "/.Trash-"));
 }
 
 TEST(CrossFilesystem, CancellationDuringDirectoryCopyRetainsEntireSourceTree) {
@@ -375,7 +375,7 @@ TEST(CrossFilesystem, CancellationDuringDirectoryCopyRetainsEntireSourceTree) {
   const auto result = transfer.get();
   EXPECT_TRUE(observed);
   EXPECT_TRUE(result.cancelled);
-  EXPECT_TRUE(result.sourceRetained);
+  EXPECT_TRUE(result.source_retained);
   EXPECT_TRUE(QFile::exists(tree + "/small"));
   EXPECT_TRUE(QFile::exists(tree + "/large"));
   EXPECT_TRUE(QDir(destination + "/tree").entryList({".holonight-transfer-*"}, QDir::Files | QDir::Hidden).isEmpty());
@@ -394,6 +394,6 @@ TEST(CrossFilesystem, MetadataDiskFullLeavesSourceAndNoOrphanInfo) {
   EXPECT_TRUE(QFile::exists(source));
   const auto directory = TrashService::selectTrashDir(source);
   ASSERT_FALSE(directory.error.has_value());
-  EXPECT_TRUE(QDir(directory.filesDir).entryList(QDir::Files).isEmpty());
-  EXPECT_TRUE(QDir(directory.infoDir).entryList(QDir::Files).isEmpty());
+  EXPECT_TRUE(QDir(directory.files_dir).entryList(QDir::Files).isEmpty());
+  EXPECT_TRUE(QDir(directory.info_dir).entryList(QDir::Files).isEmpty());
 }

@@ -87,7 +87,7 @@ TaskSummary processCopyMoveTask(const TaskManager::Task& task, const std::shared
                                 QSemaphore* semaphore, std::atomic_int* pendingConflict, TaskManager* self,
                                 QSet<QString>* affectedDirs, std::atomic<quint64>* promptSerial) {
   TaskSummary summary;
-  affectedDirs->insert(task.destDir);
+  affectedDirs->insert(task.dest_dir);
   for (const auto& source : task.sources) {
     if (cancel->load()) {
       break;
@@ -98,7 +98,7 @@ TaskSummary processCopyMoveTask(const TaskManager::Task& task, const std::shared
     affectedDirs->insert(info.absolutePath());
 
     const auto outcome =
-        resolveConflictIfAny(self, semaphore, cancel, pendingConflict, task.destDir, itemName, task.id, promptSerial);
+        resolveConflictIfAny(self, semaphore, cancel, pendingConflict, task.dest_dir, itemName, task.id, promptSerial);
     if (outcome.action == ConflictOutcome::Action::Aborted || outcome.action == ConflictOutcome::Action::CancelTask) {
       break;
     }
@@ -115,16 +115,16 @@ TaskSummary processCopyMoveTask(const TaskManager::Task& task, const std::shared
       ++summary.succeeded;
     } else {
       ++summary.incomplete;
-      if (result.failed || !result.nestedFailures.isEmpty()) {
+      if (result.failed || !result.nested_failures.isEmpty()) {
         ++summary.failed;
       }
       const auto reason = result.reason.isEmpty() ? QObject::tr("Transfer incomplete") : result.reason;
       summary.failures.append({.path = source, .reason = reason});
     }
-    for (const auto& nested : result.nestedFailures) {
+    for (const auto& nested : result.nested_failures) {
       summary.failures.append({.path = nested.path, .reason = nested.reason});
     }
-    summary.skippedChildren.append(result.skippedChildren);
+    summary.skipped_children.append(result.skipped_children);
     if (result.cancelled) {
       break;
     }
@@ -188,7 +188,7 @@ void TaskManager::enqueueCopy(const QStringList& sources, const QString& destDir
   if (sources.isEmpty() || stopping_) {
     return;
   }
-  queue_.append({.kind = TaskKind::Copy, .sources = sources, .destDir = destDir, .id = ++next_task_id_});
+  queue_.append({.kind = TaskKind::Copy, .sources = sources, .dest_dir = destDir, .id = ++next_task_id_});
   dispatchNextTask();
 }
 
@@ -196,7 +196,7 @@ void TaskManager::enqueueMove(const QStringList& sources, const QString& destDir
   if (sources.isEmpty() || stopping_) {
     return;
   }
-  queue_.append({.kind = TaskKind::Move, .sources = sources, .destDir = destDir, .id = ++next_task_id_});
+  queue_.append({.kind = TaskKind::Move, .sources = sources, .dest_dir = destDir, .id = ++next_task_id_});
   dispatchNextTask();
 }
 
@@ -204,7 +204,7 @@ void TaskManager::requestTrashConfirmation(const QStringList& paths) {
   if (paths.isEmpty() || stopping_) {
     return;
   }
-  queue_.append({.kind = TaskKind::Trash, .sources = paths, .destDir = {}, .id = ++next_task_id_});
+  queue_.append({.kind = TaskKind::Trash, .sources = paths, .dest_dir = {}, .id = ++next_task_id_});
   dispatchNextTask();
 }
 
@@ -389,8 +389,8 @@ void TaskManager::formatSummaryText() {
   if (summary.skipped > 0) {
     text += tr(". %1 skipped").arg(summary.skipped);
   }
-  if (!summary.skippedChildren.isEmpty()) {
-    text += tr(". Skipped children: %1").arg(summary.skippedChildren.join(QStringLiteral(", ")));
+  if (!summary.skipped_children.isEmpty()) {
+    text += tr(". Skipped children: %1").arg(summary.skipped_children.join(QStringLiteral(", ")));
   }
-  last_summary_text_ = text;
+  last_summary_text_ = std::move(text);
 }

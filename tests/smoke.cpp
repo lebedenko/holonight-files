@@ -318,8 +318,14 @@ TEST(Files, WindowAnchorOnlySeparatorsOccupyAndPaint) {
     ASSERT_TRUE(rendered.rect().contains(pixel)) << name;
     EXPECT_EQ(rendered.pixelColor(pixel), separator->property("color").value<QColor>()) << name;
   };
-  for (const auto* name : {"headerDivider", "sidebarDivider", "columnHeaderDivider", "sizeColumnDivider",
-                           "modifiedColumnDivider", "footerDivider"}) {
+  for (const auto* name : {
+           "headerDivider",
+           "sidebarDivider",
+           "columnHeaderDivider",
+           "sizeColumnDivider",
+           "modifiedColumnDivider",
+           "footerDivider",
+       }) {
     expectSeparator(name);
   }
 }
@@ -484,8 +490,9 @@ TEST(Files, LineNumberGutterWidthGrowsWithDigitsButBreadcrumbStays) {
   auto* listing = loaded.listing;
 
   // REQ-C-004: string-length digits with a three-digit minimum.
-  const QList<std::pair<int, int>> digits{{0, 3},   {1, 3},    {9, 3},    {10, 3},    {99, 3},   {100, 3},
-                                          {999, 3}, {1000, 4}, {9999, 4}, {10000, 5}, {99999, 5}};
+  const QList<std::pair<int, int>> digits{
+      {0, 3}, {1, 3}, {9, 3}, {10, 3}, {99, 3}, {100, 3}, {999, 3}, {1000, 4}, {9999, 4}, {10000, 5}, {99999, 5},
+  };
   for (const auto& [rows, expected] : digits) {
     int actual = 0;
     ASSERT_TRUE(
@@ -683,8 +690,13 @@ TEST(Files, EntryNameStylingReflectsFolderSymlinkAndFile) {
 }
 
 TEST(Files, EntryNameSearchOverridesColorAndWeightWhilePreservingItalic) {
-  for (const auto& kind : {QStringLiteral("file"), QStringLiteral("folder"), QStringLiteral("file-link"),
-                           QStringLiteral("folder-link"), QStringLiteral("dangling-link")}) {
+  for (const auto& kind : {
+           QStringLiteral("file"),
+           QStringLiteral("folder"),
+           QStringLiteral("file-link"),
+           QStringLiteral("folder-link"),
+           QStringLiteral("dangling-link"),
+       }) {
     SCOPED_TRACE(kind.toStdString());
     QTemporaryDir dir(files_test::fixturePattern("name-search-styling"));
     ASSERT_TRUE(dir.isValid());
@@ -755,8 +767,10 @@ RowIcons rowIcons(QQuickItem* list, int row) {
   // Delegates are parented to the ListView's contentItem only visually, not in the QObject tree.
   for (auto* delegate : list->property("contentItem").value<QQuickItem*>()->childItems()) {
     if (delegate->objectName() == "directoryEntryDelegate" && delegate->property("index").toInt() == row) {
-      return {.theme = delegate->findChild<QQuickItem*>("themeFileIcon"),
-              .fallback = delegate->findChild<QQuickItem*>("fallbackFileIcon")};
+      return {
+          .theme = delegate->findChild<QQuickItem*>("themeFileIcon"),
+          .fallback = delegate->findChild<QQuickItem*>("fallbackFileIcon"),
+      };
     }
   }
   return {};
@@ -1711,7 +1725,7 @@ TEST(Files, PreviewSidebarRowsHideWrapAndStayFreeOfBindingLoops) {
   files_test::writeJpegWithExifBlob(dir, "02-landscape.jpg", files_test::buildSampleExifBlobWithoutLens(),
                                     QSize(120, 60));
   files_test::writeJpegWithExifBlob(dir, "03-long-lens.jpg",
-                                    files_test::buildExifBlob({.lensModel = files_test::kLongLensModel}));
+                                    files_test::buildExifBlob({.lens_model = files_test::kLongLensModel}));
   files_test::writeJpegWithoutExif(dir, "04-no-exif.jpg");
   files_test::writeSmallText(dir, "05-notes.txt");
   files_test::writeCorruptJpeg(dir, "06-corrupt.jpg");
@@ -1746,8 +1760,20 @@ TEST(Files, PreviewSidebarRowsHideWrapAndStayFreeOfBindingLoops) {
   auto* dimensionsValue = window->findChild<QQuickItem*>("previewDimensionsValue");
   auto* errorNotice = window->findChild<QQuickItem*>("previewErrorNotice");
   auto* fileName = window->findChild<QQuickItem*>("previewFileName");
-  for (auto* item : {pane, imageArea, metadataTable, exifTable, exifHeader, lensValue, apertureValue, cameraValue,
-                     sizeValue, dimensionsValue, errorNotice, fileName}) {
+  for (auto* item : {
+           pane,
+           imageArea,
+           metadataTable,
+           exifTable,
+           exifHeader,
+           lensValue,
+           apertureValue,
+           cameraValue,
+           sizeValue,
+           dimensionsValue,
+           errorNotice,
+           fileName,
+       }) {
     ASSERT_NE(item, nullptr);
   }
   // The frame stays square regardless of the source aspect ratio, so the tables below never shift.
@@ -1894,7 +1920,7 @@ TEST(Files, PreviewSidebarScrollsToWrappedExifInShortWindows) {
   QTemporaryDir dir(files_test::fixturePattern("sidebar-scroll"));
   ASSERT_TRUE(dir.isValid());
   files_test::writeJpegWithExifBlob(
-      dir, "01-photo.jpg", files_test::buildExifBlob({.lensModel = files_test::kLongLensModel}), QSize(600, 900));
+      dir, "01-photo.jpg", files_test::buildExifBlob({.lens_model = files_test::kLongLensModel}), QSize(600, 900));
   files_test::writeSmallText(dir, "02-notes.txt");
   DirectoryController controller;
   QQmlApplicationEngine engine;

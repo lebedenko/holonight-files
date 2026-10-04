@@ -6,6 +6,7 @@
 #include <QString>
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <holonight_images/image.h>
 #include <optional>
@@ -14,7 +15,14 @@
 // Synchronous helpers used on PreviewService's verified source descriptor.
 namespace ThumbnailService {
 // Internal per-request synchronization seam; never exposed to QML or stored globally.
-enum class Stage { CacheInspect, CacheInspected, CacheDecode, OriginalDecode, OriginalDecoded, BeforeCommit };
+enum class Stage : std::uint8_t {
+  CacheInspect,
+  CacheInspected,
+  CacheDecode,
+  OriginalDecode,
+  OriginalDecoded,
+  BeforeCommit,
+};
 using StageCallback = std::function<void(Stage)>;
 struct Result {
   QImage image;
@@ -22,9 +30,9 @@ struct Result {
   Result(QImage pixels, HolonightImages::Outcome status) : image(std::move(pixels)), outcome(status) {}
 };
 
-enum class ImageKind { Raster, Svg };
+enum class ImageKind : std::uint8_t { Raster, Svg };
 
-enum class Tier { Normal = 128, Large = 256, XLarge = 512, XXLarge = 1024 };
+enum class Tier : std::uint16_t { Normal = 128, Large = 256, XLarge = 512, XXLarge = 1024 };
 QSize requiredSize(QSizeF source, QSize bound, ImageKind kind = ImageKind::Raster);
 std::optional<Tier> tierForSize(QSize required);
 std::optional<Result> lookup(QFile& file, const QString& path, const QString& revision, Tier selected, QSize required,

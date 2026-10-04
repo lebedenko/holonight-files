@@ -227,7 +227,7 @@ TEST(SearchExclusions, ChangedPolicyRejectsLateScanCallbacks) {
     if (++scans == 1) {
       entered.release();
       release.acquire();
-      ready({{.path = root + "/obsolete", .relativePath = "obsolete", .directory = false}});
+      ready({{.path = root + "/obsolete", .relative_path = "obsolete", .directory = false}});
     }
     return true;
   });

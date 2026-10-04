@@ -26,7 +26,7 @@ inline QString fixturePattern(const QString& label) {
 }
 
 inline QString writeFile(const QTemporaryDir& dir, const QString& name, const QByteArray& content = "x") {
-  const auto path = dir.filePath(name);
+  auto path = dir.filePath(name);
   QFile file(path);
   if (!file.open(QIODevice::WriteOnly) || file.write(content) != content.size()) {
     return {};
@@ -66,9 +66,11 @@ struct PermissionFixture {
 };
 
 inline PermissionFixture buildPermissionFixture(const QTemporaryDir& dir) {
-  PermissionFixture fixture{.blocked_dir = dir.filePath("blocked"),
-                            .broken_perm_link = dir.filePath("broken-perm-link"),
-                            .dangling_link = dir.filePath("dangling-link")};
+  PermissionFixture fixture{
+      .blocked_dir = dir.filePath("blocked"),
+      .broken_perm_link = dir.filePath("broken-perm-link"),
+      .dangling_link = dir.filePath("dangling-link"),
+  };
   QDir().mkpath(fixture.blocked_dir);
   const auto secret = QDir(fixture.blocked_dir).filePath("secret.txt");
   writeFile(dir, "blocked/secret.txt");

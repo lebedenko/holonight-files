@@ -28,7 +28,7 @@ PathScanFunction syntheticScanner(int count) {
       const QString name = i % 251 == 0 ? QStringLiteral("lambda-audit-%1.cpp").arg(i)
                                         : QStringLiteral("document-%1-%2.cpp").arg(i % 997).arg(i);
       const QString relative = folder + name;
-      batch.append({.path = root + u'/' + relative, .relativePath = relative, .directory = false});
+      batch.append({.path = root + u'/' + relative, .relative_path = relative, .directory = false});
       if (batch.size() == 4096) {
         batchReady(std::move(batch));
         batch.clear();
@@ -88,8 +88,8 @@ void reconstructBatch(HolonightSearch::Index& index, const QVector<PathCandidate
         .id = candidate.path,
         .fields =
             {
-                {.name = QStringLiteral("name"), .text = QFileInfo(candidate.relativePath).fileName(), .weight = 0},
-                {.name = QStringLiteral("path"), .text = candidate.relativePath, .weight = 0},
+                {.name = QStringLiteral("name"), .text = QFileInfo(candidate.relative_path).fileName(), .weight = 0},
+                {.name = QStringLiteral("path"), .text = candidate.relative_path, .weight = 0},
             },
         .boost = 0,
     };

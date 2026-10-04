@@ -102,8 +102,10 @@ DevicesModel::DevicesModel(StorageController* controller, QObject* parent, std::
   guard_->model = this;
   capacity_timer_.setInterval(kCapacityRefreshInterval);
   connect(&capacity_timer_, &QTimer::timeout, this, &DevicesModel::refreshCapacity);
-  for (auto* model : {static_cast<QAbstractItemModel*>(controller_->drives()),
-                      static_cast<QAbstractItemModel*>(controller_->volumes())}) {
+  for (auto* model : {
+           static_cast<QAbstractItemModel*>(controller_->drives()),
+           static_cast<QAbstractItemModel*>(controller_->volumes()),
+       }) {
     connect(model, &QAbstractItemModel::rowsInserted, this, &DevicesModel::scheduleRefresh);
     connect(model, &QAbstractItemModel::rowsRemoved, this, &DevicesModel::scheduleRefresh);
     connect(model, &QAbstractItemModel::dataChanged, this, &DevicesModel::scheduleRefresh);
@@ -142,22 +144,24 @@ QVariant DevicesModel::data(const QModelIndex& index, int role) const {
   return rows_[index.row()].value(QString::fromLatin1(roleNames().value(role)));
 }
 QHash<int, QByteArray> DevicesModel::roleNames() const {
-  return {{TargetId, "targetId"},
-          {DriveId, "driveId"},
-          {Name, "name"},
-          {DriveName, "driveName"},
-          {State, "stateText"},
-          {Mounted, "mounted"},
-          {Busy, "busy"},
-          {CanActivate, "canActivate"},
-          {IconName, "iconName"},
-          {RemovalVerb, "removalVerb"},
-          {RemovalLabel, "removalLabel"},
-          {GroupLabel, "groupLabel"},
-          {GroupStart, "groupStart"},
-          {CapacityValid, "capacityValid"},
-          {CapacityFraction, "capacityFraction"},
-          {CapacityText, "capacityText"}};
+  return {
+      {TargetId, "targetId"},
+      {DriveId, "driveId"},
+      {Name, "name"},
+      {DriveName, "driveName"},
+      {State, "stateText"},
+      {Mounted, "mounted"},
+      {Busy, "busy"},
+      {CanActivate, "canActivate"},
+      {IconName, "iconName"},
+      {RemovalVerb, "removalVerb"},
+      {RemovalLabel, "removalLabel"},
+      {GroupLabel, "groupLabel"},
+      {GroupStart, "groupStart"},
+      {CapacityValid, "capacityValid"},
+      {CapacityFraction, "capacityFraction"},
+      {CapacityText, "capacityText"},
+  };
 }
 bool DevicesModel::scopeContainsOtherDrive(const QString& driveId, const QStringList& scope) const {
   return std::ranges::any_of(controller_->drives()->items(),
@@ -195,20 +199,22 @@ std::optional<QVariantMap> DevicesModel::volumeRow(const StorageVolume& volume) 
   // Only a mounted volume offers removal; an unmounted one is opened (and mounted) by activation.
   const auto verb = mounted ? safeRemovalVerb(policyDrive, volume.canUnmount) : std::optional<StorageOperation>{};
   const auto name = volumeName(volume);
-  return QVariantMap{{"targetId", volume.id},
-                     {"driveId", volume.driveId},
-                     {"name", name},
-                     {"driveName", drive ? driveName(*drive) : tr("Volumes")},
-                     {"mounted", mounted},
-                     {"busy", busy},
-                     {"stateText", volumeState(volume, busy)},
-                     {"canActivate", !volume.locked && !busy && (volume.canMount || mounted)},
-                     {"classRank", static_cast<int>(StoragePolicy::classify(policyDrive))},
-                     {"iconName", StoragePolicy::iconName(policyDrive)},
-                     {"removalVerb", verbValue(verb)},
-                     {"removalLabel", verbLabel(verb, name)},
-                     // Deferred: a volume with several mount points is measured at the first, as it is opened.
-                     {"mountPoint", mounted ? volume.mountPoints.first() : QString()}};
+  return QVariantMap{
+      {"targetId", volume.id},
+      {"driveId", volume.driveId},
+      {"name", name},
+      {"driveName", drive ? driveName(*drive) : tr("Volumes")},
+      {"mounted", mounted},
+      {"busy", busy},
+      {"stateText", volumeState(volume, busy)},
+      {"canActivate", !volume.locked && !busy && (volume.canMount || mounted)},
+      {"classRank", static_cast<int>(StoragePolicy::classify(policyDrive))},
+      {"iconName", StoragePolicy::iconName(policyDrive)},
+      {"removalVerb", verbValue(verb)},
+      {"removalLabel", verbLabel(verb, name)},
+      // Deferred: a volume with several mount points is measured at the first, as it is opened.
+      {"mountPoint", mounted ? volume.mountPoints.first() : QString()},
+  };
 }
 void DevicesModel::refresh() {
   QList<QVariantMap> rows;
@@ -232,7 +238,7 @@ void DevicesModel::refresh() {
   }
   if (rows != rows_) {
     beginResetModel();
-    rows_ = rows;
+    rows_ = std::move(rows);
     endResetModel();
   }
   syncCapacity();
@@ -296,18 +302,18 @@ void DevicesModel::remove(const QString& targetId) {
 void DevicesModel::applyCapacity(QVariantMap& row) const {
   const auto mountPoint = row.value("mountPoint").toString();
   const auto capacity = mountPoint.isEmpty() ? Capacity{} : capacity_.value(mountPoint);
-  const bool valid = capacity.valid && capacity.bytesTotal > 0;
-  const auto available = std::min(capacity.bytesAvailable, capacity.bytesTotal);
+  const bool valid = capacity.valid && capacity.bytes_total > 0;
+  const auto available = std::min(capacity.bytes_available, capacity.bytes_total);
   const QLocale locale;
   row.insert("capacityValid", valid);
   row.insert("capacityFraction",
-             valid ? 1.0 - (static_cast<double>(available) / static_cast<double>(capacity.bytesTotal)) : 0.0);
-  row.insert(
-      "capacityText",
-      valid ? tr("%1 free of %2")
-                  .arg(locale.formattedDataSize(static_cast<qint64>(available), 0, QLocale::DataSizeSIFormat),
-                       locale.formattedDataSize(static_cast<qint64>(capacity.bytesTotal), 0, QLocale::DataSizeSIFormat))
-            : QString());
+             valid ? 1.0 - (static_cast<double>(available) / static_cast<double>(capacity.bytes_total)) : 0.0);
+  row.insert("capacityText",
+             valid ? tr("%1 free of %2")
+                         .arg(locale.formattedDataSize(static_cast<qint64>(available), 0, QLocale::DataSizeSIFormat),
+                              locale.formattedDataSize(static_cast<qint64>(capacity.bytes_total), 0,
+                                                       QLocale::DataSizeSIFormat))
+                   : QString());
 }
 // Evicts figures for paths no longer mounted (REQ-F-044) and measures newly mounted ones.
 void DevicesModel::syncCapacity() {
@@ -469,18 +475,20 @@ void DevicesModel::appendEmptyDrives(QList<QVariantMap>& rows) const {
     const bool busy = controller_->busy(drive.id);
     const auto verb = safeRemovalVerb(drive, false);
     const auto name = driveName(drive);
-    rows.append({{"targetId", drive.id},
-                 {"driveId", drive.id},
-                 {"name", name},
-                 {"driveName", name},
-                 {"stateText", tr("No media")},
-                 {"mounted", false},
-                 {"busy", busy},
-                 {"canActivate", false},
-                 {"classRank", static_cast<int>(StoragePolicy::classify(drive))},
-                 {"iconName", StoragePolicy::iconName(drive)},
-                 {"removalVerb", verbValue(verb)},
-                 {"removalLabel", verbLabel(verb, name)},
-                 {"mountPoint", QString()}});
+    rows.append({
+        {"targetId", drive.id},
+        {"driveId", drive.id},
+        {"name", name},
+        {"driveName", name},
+        {"stateText", tr("No media")},
+        {"mounted", false},
+        {"busy", busy},
+        {"canActivate", false},
+        {"classRank", static_cast<int>(StoragePolicy::classify(drive))},
+        {"iconName", StoragePolicy::iconName(drive)},
+        {"removalVerb", verbValue(verb)},
+        {"removalLabel", verbLabel(verb, name)},
+        {"mountPoint", QString()},
+    });
   }
 }

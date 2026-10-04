@@ -59,24 +59,24 @@ class DirectoryController : public QObject {
   // A null capacity probe measures the real filesystem; tests pass a fake (device-actions REQ-C-006).
   DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
                       std::shared_ptr<const CapacityProbe> capacity = {});
-  QString currentPath() const { return navigation_.current_path_; }
-  QString cursorPath() const;
-  QString statusMessage() const { return status_message_; }
-  QString directoryError() const { return navigation_.model_.directoryError(); }
-  bool scanning() const { return navigation_.model_.scanning(); }
-  int cursorRow() const { return navigation_.cursor_row_; }
+  [[nodiscard]] QString currentPath() const { return navigation_.current_path_; }
+  [[nodiscard]] QString cursorPath() const;
+  [[nodiscard]] QString statusMessage() const { return status_message_; }
+  [[nodiscard]] QString directoryError() const { return navigation_.model_.directoryError(); }
+  [[nodiscard]] bool scanning() const { return navigation_.model_.scanning(); }
+  [[nodiscard]] int cursorRow() const { return navigation_.cursor_row_; }
   DirectoryProxyModel* listing() { return &navigation_.proxy_; }
   PlacesModel* places() { return &places_; }
   PathFinderModel* finder() { return &finder_; }
   DevicesModel* devices() { return devices_; }
   SidebarNavigator* sidebarNavigator() { return &navigator_; }
-  bool sidebarActivationEnabled() const;
+  [[nodiscard]] bool sidebarActivationEnabled() const;
   PreviewService* preview() { return &preview_; }
   VimModeController* vim() { return &vim_; }
   TaskManager* tasks() { return &tasks_; }
-  bool quickLookOpen() const { return preview_selection_.quick_look_open_; }
-  bool canGoBack() const { return navigation_.jump_list_.canGoBack(); }
-  bool canGoForward() const { return navigation_.jump_list_.canGoForward(); }
+  [[nodiscard]] bool quickLookOpen() const { return preview_selection_.quick_look_open_; }
+  [[nodiscard]] bool canGoBack() const { return navigation_.jump_list_.canGoBack(); }
+  [[nodiscard]] bool canGoForward() const { return navigation_.jump_list_.canGoForward(); }
   Q_INVOKABLE void open(const QString& path, const QString& fallbackReason = {});
   Q_INVOKABLE bool acceptFinderResult(int row);
   // Bookmark activation entry point (SPEC.md REQ-F-022): PlaceRow calls this instead of open()
@@ -134,7 +134,7 @@ class DirectoryController : public QObject {
   void openInternal(const QString& requestedPath, const QString& fallbackReason, const QString& restoreName,
                     bool recordHistory);
   void traverseHistory(int direction, int count);
-  QString outgoingCursorName() const;
+  [[nodiscard]] QString outgoingCursorName() const;
   void maybeApplyPendingRestore();
   void cancelPendingRestore();
   void listingChanged();
@@ -144,16 +144,16 @@ class DirectoryController : public QObject {
   void setCursorRow(qint64 row);
   void clampCursorRow();
   void syncPreviewTarget();
-  bool canPreviewSelection() const;
+  [[nodiscard]] bool canPreviewSelection() const;
 
   void handleRestoreValidated(const QString& path, RestoreOutcome outcome);
   void handleBookmarkRecheckResolved(quint64 placeId, const QString& path, bool available);
   void saveState();
-  QString entryNameAt(int proxyRow) const;
+  [[nodiscard]] QString entryNameAt(int proxyRow) const;
   void beginRename(VimModeController::InsertKind kind);
   void beginCreate(VimModeController::InsertKind kind);
   void removeActivePlaceholderIfAny();
-  QStringList collectVisualSelectionPaths() const;
+  [[nodiscard]] QStringList collectVisualSelectionPaths() const;
   void yankOrCut(bool cut, bool wholeVisualSelection);
   void pasteRegister();
   void requestTrash(bool wholeVisualSelection);

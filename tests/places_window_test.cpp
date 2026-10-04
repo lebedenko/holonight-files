@@ -37,8 +37,9 @@ struct SeededUserDirs {
   files_test::ScopedXdgDataHome data_guard;
   explicit SeededUserDirs(int count) : config_guard(seed(count)), data_guard(data_home.path()) {}
   // All nine keys PlacesModel recognizes, in its display order.
-  static constexpr std::array<const char*, 9> kKeys{"DESKTOP", "DOCUMENTS", "DOWNLOAD",  "PICTURES",   "MUSIC",
-                                                    "VIDEOS",  "PROJECTS",  "TEMPLATES", "PUBLICSHARE"};
+  static constexpr std::array<const char*, 9> kKeys{
+      "DESKTOP", "DOCUMENTS", "DOWNLOAD", "PICTURES", "MUSIC", "VIDEOS", "PROJECTS", "TEMPLATES", "PUBLICSHARE",
+  };
   // Writes the seeded user-dirs.dirs and returns the config home it lives in.
   [[nodiscard]] QString seed(int count) const {
     QByteArray contents;
@@ -633,7 +634,8 @@ TEST(PlacesWindow, CapacityBarFillsUsedSpaceInThresholdColours) {
             QLocale().formattedDataSize(static_cast<qint64>(kFree), 0, QLocale::DataSizeSIFormat) + " free of " +
                 QLocale().formattedDataSize(static_cast<qint64>(kTerabyte), 0, QLocale::DataSizeSIFormat));
   const QList<std::pair<double, const char*>> thresholds{
-      {0.899, "primary"}, {0.90, "accentViolet"}, {0.949, "accentViolet"}, {0.95, "warning"}, {0.999, "warning"}};
+      {0.899, "primary"}, {0.90, "accentViolet"}, {0.949, "accentViolet"}, {0.95, "warning"}, {0.999, "warning"},
+  };
   for (const auto& [fraction, role] : thresholds) {
     bar->setProperty("fraction", fraction);
     const auto expected = evaluateIn(bar, QStringLiteral("HoloniightPalette.") + role).value<QColor>();
@@ -710,7 +712,8 @@ TEST(PlacesWindow, SidebarKeysCrossActivateAndRemove) {
   const QList<std::tuple<const char*, StorageOperation, const char*>> removals{
       {"usb2", StorageOperation::PowerOff, "stick2"},
       {"internal", StorageOperation::Unmount, "internal"},
-      {"disc", StorageOperation::Eject, "dvd"}};
+      {"disc", StorageOperation::Eject, "dvd"},
+  };
   for (const auto& [row, operation, target] : removals) {
     view.storage_backend.calls.clear();
     view.focusDevice(row);

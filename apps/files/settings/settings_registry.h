@@ -5,9 +5,10 @@
 
 #include <QString>
 
+#include <cstdint>
 #include <vector>
 
-enum class SettingSource { Default, ConfigFile };
+enum class SettingSource : std::uint8_t { Default, ConfigFile };
 
 // What a future settings UI renders for one declared setting (SPEC.md REQ-F-030).
 struct SettingInfo {
@@ -28,16 +29,16 @@ class SettingsRegistry {
   // Wrong-typed declared keys fall back to their defaults; undeclared sections and keys are
   // reported and ignored. Diagnostics are in source order.
   std::vector<TomlDiagnostic> apply(const TomlDocument& document);
-  bool value(const QString& section, const Setting<bool>& setting) const;
-  QStringList value(const QString& section, const Setting<QStringList>& setting) const;
-  std::vector<SettingInfo> settings() const;
+  [[nodiscard]] bool value(const QString& section, const Setting<bool>& setting) const;
+  [[nodiscard]] QStringList value(const QString& section, const Setting<QStringList>& setting) const;
+  [[nodiscard]] std::vector<SettingInfo> settings() const;
 
  private:
   struct Entry {
     SettingInfo info;
     TomlValue resolved;
   };
-  const Entry* find(const QString& section, const QString& key) const;
-  bool declaresSection(const QString& section) const;
+  [[nodiscard]] const Entry* find(const QString& section, const QString& key) const;
+  [[nodiscard]] bool declaresSection(const QString& section) const;
   std::vector<Entry> entries_;
 };

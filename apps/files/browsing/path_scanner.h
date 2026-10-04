@@ -10,7 +10,7 @@
 
 struct PathCandidate {
   QString path;
-  QString relativePath;
+  QString relative_path;
   bool directory = false;
 };
 

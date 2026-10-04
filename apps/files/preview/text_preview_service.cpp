@@ -41,7 +41,7 @@ TextPreviewResult readHead(const QString& path, qint64 maxBytes) {
 
 TextPreviewResult readHead(QFile& file, qint64 maxBytes) {
   TextPreviewResult result;
-  result.totalSize = file.size();
+  result.total_size = file.size();
   if (!file.seek(0)) {
     result.error = file.errorString();
     return result;
@@ -51,8 +51,8 @@ TextPreviewResult readHead(QFile& file, qint64 maxBytes) {
     result.error = file.errorString();
     return result;
   }
-  result.wasTruncated = result.totalSize > bytes.size();
-  const QByteArrayView loaded = result.wasTruncated ? TextLines::trimIncompleteUtf8Tail(bytes) : QByteArrayView(bytes);
+  result.was_truncated = result.total_size > bytes.size();
+  const QByteArrayView loaded = result.was_truncated ? TextLines::trimIncompleteUtf8Tail(bytes) : QByteArrayView(bytes);
   result.lines = TextLines::splitLines(TextLines::decodeUtf8(loaded));
   return result;
 }

@@ -13,6 +13,6 @@ class InspectionKeys : public QObject {
   explicit InspectionKeys(QObject* parent = nullptr) : QObject(parent) {}
   Q_INVOKABLE bool press(int key, const QString& text, int modifiers, bool autoRepeat, DirectoryController* controller,
                          bool popup) const;
-  Q_INVOKABLE bool release(int key) const;
-  Q_INVOKABLE bool overrideShortcut(int key, bool popup, bool blockEscape) const;
+  Q_INVOKABLE [[nodiscard]] bool release(int key) const;
+  Q_INVOKABLE [[nodiscard]] bool overrideShortcut(int key, bool popup, bool blockEscape) const;
 };

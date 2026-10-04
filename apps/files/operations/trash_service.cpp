@@ -29,17 +29,25 @@ std::optional<TrashError> ensureDir0700(const QString& path) {
   const auto encoded = encode(path);
   if (::mkdir(encoded.constData(), 0700) != 0 && errno != EEXIST) {
     return TrashError{
-        .kind = FailureKind::DirectoryCreation, .path = path, .reason = FileOperationService::describeErrno(errno)};
+        .kind = FailureKind::DirectoryCreation,
+        .path = path,
+        .reason = FileOperationService::describeErrno(errno),
+    };
   }
   struct stat info{};
   if (::lstat(encoded.constData(), &info) != 0) {
     return TrashError{
-        .kind = FailureKind::Validation, .path = path, .reason = FileOperationService::describeErrno(errno)};
+        .kind = FailureKind::Validation,
+        .path = path,
+        .reason = FileOperationService::describeErrno(errno),
+    };
   }
   if (!S_ISDIR(info.st_mode) || info.st_uid != ::getuid() || (info.st_mode & 07777) != 0700) {
-    return TrashError{.kind = FailureKind::Validation,
-                      .path = path,
-                      .reason = QObject::tr("Trash must be a real directory owned by this user with mode 0700")};
+    return TrashError{
+        .kind = FailureKind::Validation,
+        .path = path,
+        .reason = QObject::tr("Trash must be a real directory owned by this user with mode 0700"),
+    };
   }
   return std::nullopt;
 }
@@ -53,8 +61,8 @@ bool ensureFilesAndInfo(const QString& dirPath, TrashDirectory* out) {
       return false;
     }
   }
-  out->filesDir = files;
-  out->infoDir = info;
+  out->files_dir = files;
+  out->info_dir = info;
   out->error.reset();
   return true;
 }
@@ -101,13 +109,19 @@ TrashDirectory selectTrashDir(const QString& path) {
   struct stat pathStat{};
   if (::lstat(encode(path).constData(), &pathStat) != 0) {
     result.error = TrashError{
-        .kind = FailureKind::SourceLookup, .path = path, .reason = FileOperationService::describeErrno(errno)};
+        .kind = FailureKind::SourceLookup,
+        .path = path,
+        .reason = FileOperationService::describeErrno(errno),
+    };
     return result;
   }
   const auto home = xdgDataHome();
   if (!QDir().mkpath(home)) {
     result.error = TrashError{
-        .kind = FailureKind::DirectoryCreation, .path = home, .reason = FileOperationService::describeErrno(errno)};
+        .kind = FailureKind::DirectoryCreation,
+        .path = home,
+        .reason = FileOperationService::describeErrno(errno),
+    };
     return result;
   }
   struct stat homeStat{};
@@ -126,7 +140,7 @@ TrashDirectory selectTrashDir(const QString& path) {
   if (topLevelTrashQualifies(topLevelTrash)) {
     const auto uidDir = QDir(topLevelTrash).filePath(QString::number(::getuid()));
     if (ensureFilesAndInfo(uidDir, &result)) {  // REQ-F-042
-      result.useRelativePath = true;
+      result.use_relative_path = true;
       result.topdir = topdir;
       return result;
     }
@@ -135,7 +149,7 @@ TrashDirectory selectTrashDir(const QString& path) {
 
   const auto fallbackDir = QDir(topdir).filePath(QStringLiteral(".Trash-") + QString::number(::getuid()));
   if (ensureFilesAndInfo(fallbackDir, &result)) {  // REQ-F-043
-    result.useRelativePath = true;
+    result.use_relative_path = true;
     result.topdir = topdir;
     return result;
   }
@@ -143,8 +157,8 @@ TrashDirectory selectTrashDir(const QString& path) {
 }
 
 QString uniqueTrashName(const TrashDirectory& dir, const QString& itemName) {
-  if (!FileOperationService::destinationExists(dir.filesDir, itemName) &&
-      !FileOperationService::destinationExists(dir.infoDir, itemName + QStringLiteral(".trashinfo"))) {
+  if (!FileOperationService::destinationExists(dir.files_dir, itemName) &&
+      !FileOperationService::destinationExists(dir.info_dir, itemName + QStringLiteral(".trashinfo"))) {
     return itemName;
   }
   const auto dot = itemName.lastIndexOf(u'.');
@@ -152,8 +166,8 @@ QString uniqueTrashName(const TrashDirectory& dir, const QString& itemName) {
   const auto ext = dot > 0 ? itemName.mid(dot) : QString();
   for (int attempt = 2;; ++attempt) {
     const auto candidate = QStringLiteral("%1_%2%3").arg(base).arg(attempt).arg(ext);
-    if (!FileOperationService::destinationExists(dir.filesDir, candidate) &&
-        !FileOperationService::destinationExists(dir.infoDir, candidate + QStringLiteral(".trashinfo"))) {
+    if (!FileOperationService::destinationExists(dir.files_dir, candidate) &&
+        !FileOperationService::destinationExists(dir.info_dir, candidate + QStringLiteral(".trashinfo"))) {
       return candidate;
     }
   }
@@ -161,11 +175,11 @@ QString uniqueTrashName(const TrashDirectory& dir, const QString& itemName) {
 
 std::optional<TrashError> writeTrashInfo(const TrashDirectory& dir, const QString& trashName,
                                          const QString& originalPath) {
-  QFile file(QDir(dir.infoDir).filePath(trashName + QStringLiteral(".trashinfo")));
+  QFile file(QDir(dir.info_dir).filePath(trashName + QStringLiteral(".trashinfo")));
   if (!file.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
     return TrashError{.kind = FailureKind::Metadata, .path = file.fileName(), .reason = file.errorString()};
   }
-  const auto pathField = dir.useRelativePath ? QDir(dir.topdir).relativeFilePath(originalPath) : originalPath;
+  const auto pathField = dir.use_relative_path ? QDir(dir.topdir).relativeFilePath(originalPath) : originalPath;
   const auto encoded = QUrl::toPercentEncoding(pathField, "/");
   const auto deletionDate = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-ddTHH:mm:ss"));
   const auto contents =
@@ -182,7 +196,7 @@ std::optional<TrashError> writeTrashInfo(const TrashDirectory& dir, const QStrin
 }
 
 void removeTrashInfo(const TrashDirectory& dir, const QString& trashName) {
-  QFile::remove(QDir(dir.infoDir).filePath(trashName + QStringLiteral(".trashinfo")));
+  QFile::remove(QDir(dir.info_dir).filePath(trashName + QStringLiteral(".trashinfo")));
 }
 
 namespace {
@@ -231,7 +245,7 @@ TrashResult trashEntry(const QString& source, const FileOperationService::Cancel
   if (cancel->load()) {
     result.cancelled = true;
   } else {
-    const auto destination = QDir(directory.filesDir).filePath(name);
+    const auto destination = QDir(directory.files_dir).filePath(name);
     if (::renameat2(AT_FDCWD, encode(source).constData(), AT_FDCWD, encode(destination).constData(),
                     RENAME_NOREPLACE) != 0) {
       result = failedTrash(

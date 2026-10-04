@@ -8,6 +8,8 @@
 #include <QStringList>
 #include <QtQml/qqmlregistration.h>
 
+#include <cstdint>
+
 // The NORMAL/VISUAL/SEARCH/INSERT mode state machine (docs/sdd/vim-modal-editing/SPEC.md). Owned
 // as a value member of DirectoryController, structurally analogous to PreviewService, but kept
 // free of any pointer into DirectoryModel/DirectoryProxyModel: every method that needs directory
@@ -37,39 +39,39 @@ class VimModeController : public QObject {
   Q_PROPERTY(QList<int> searchMatchRows READ searchMatchRows NOTIFY changed)
 
  public:
-  enum class Mode { Normal, Visual, Search, Insert };
+  enum class Mode : std::uint8_t { Normal, Visual, Search, Insert };
   Q_ENUM(Mode)
-  enum class InsertKind { Prepend, Append, CreateBelow, CreateAbove };
+  enum class InsertKind : std::uint8_t { Prepend, Append, CreateBelow, CreateAbove };
   Q_ENUM(InsertKind)
-  enum class InsertCommitAction { None, Touch, Rename, CreateDirectory, CreateFile };
+  enum class InsertCommitAction : std::uint8_t { None, Touch, Rename, CreateDirectory, CreateFile };
   Q_ENUM(InsertCommitAction)
 
   struct InsertCommitResult {
     InsertCommitAction action = InsertCommitAction::None;
-    QString oldPath;
-    QString newPath;
+    QString old_path;
+    QString new_path;
   };
 
   explicit VimModeController(QObject* parent = nullptr);
 
-  Mode currentMode() const { return mode_; }
+  [[nodiscard]] Mode currentMode() const { return mode_; }
 
   // VISUAL — REQ-F-018 through REQ-F-023
-  int visualAnchorRow() const { return visual_anchor_row_; }
-  int selectedCount() const;
-  Q_INVOKABLE bool isRowSelected(int row) const;
+  [[nodiscard]] int visualAnchorRow() const { return visual_anchor_row_; }
+  [[nodiscard]] int selectedCount() const;
+  Q_INVOKABLE [[nodiscard]] bool isRowSelected(int row) const;
   Q_INVOKABLE void enterVisual(int currentRow);
   Q_INVOKABLE void extendVisual(int newRow);
   Q_INVOKABLE void exitVisual();
 
   // INSERT — REQ-F-006 through REQ-F-017, REQ-F-030 through REQ-F-042
-  int editingRow() const { return editing_row_; }
-  bool editingIsCreate() const;
-  QString insertText() const { return insert_text_; }
-  int insertCursorPosition() const { return insert_cursor_position_; }
-  bool insertValid() const { return insert_validation_.valid; }
-  QString insertErrorMessage() const { return insert_validation_.errorMessage; }
-  bool insertCreatesDirectory() const { return insert_validation_.createsDirectory; }
+  [[nodiscard]] int editingRow() const { return editing_row_; }
+  [[nodiscard]] bool editingIsCreate() const;
+  [[nodiscard]] QString insertText() const { return insert_text_; }
+  [[nodiscard]] int insertCursorPosition() const { return insert_cursor_position_; }
+  [[nodiscard]] bool insertValid() const { return insert_validation_.valid; }
+  [[nodiscard]] QString insertErrorMessage() const { return insert_validation_.error_message; }
+  [[nodiscard]] bool insertCreatesDirectory() const { return insert_validation_.creates_directory; }
   Q_INVOKABLE void enterInsert(InsertKind kind, int row, const QString& directoryPath, const QString& existingName);
   Q_INVOKABLE void setInsertText(const QString& text);
   // Returns the filesystem action DirectoryController must now perform, or
@@ -82,16 +84,16 @@ class VimModeController : public QObject {
   Q_INVOKABLE void reportCommitSucceeded();
 
   // SEARCH — REQ-F-024 through REQ-F-029
-  QList<int> searchMatchPositions() const { return search_match_positions_; }
+  [[nodiscard]] QList<int> searchMatchPositions() const { return search_match_positions_; }
   void updateSearchPositions(const QString& name);
   void refreshSearch(const QStringList& visibleNames);
   void resetSearch();
-  QString searchQuery() const { return search_query_; }
-  int searchBestRow() const { return search_best_row_; }
-  QList<int> searchMatchRows() const { return search_match_rows_; }
+  [[nodiscard]] QString searchQuery() const { return search_query_; }
+  [[nodiscard]] int searchBestRow() const { return search_best_row_; }
+  [[nodiscard]] QList<int> searchMatchRows() const { return search_match_rows_; }
   Q_INVOKABLE void enterSearch(int currentRow);
   Q_INVOKABLE void setSearchQuery(const QString& query, const QStringList& visibleNames);
-  Q_INVOKABLE int advanceSearchMatch(int currentRow, bool forward) const;
+  Q_INVOKABLE [[nodiscard]] int advanceSearchMatch(int currentRow, bool forward) const;
   Q_INVOKABLE void commitSearch();
   // Returns the row the cursor should be restored to.
   Q_INVOKABLE int cancelSearch();

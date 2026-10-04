@@ -2,6 +2,7 @@
 
 #include <QString>
 
+#include <cstdint>
 #include <vector>
 
 // Pure parser for ${XDG_CONFIG_HOME:-~/.config}/user-dirs.dirs (SPEC.md REQ-F-002..006, REQ-F-010).
@@ -10,7 +11,7 @@
 namespace UserDirsParser {
 
 // One of the 9 known XDG_*_DIR keys, in SPEC.md's required display order (REQ-F-005).
-enum class Key { Desktop, Documents, Downloads, Pictures, Music, Videos, Projects, Templates, Public };
+enum class Key : std::uint8_t { Desktop, Documents, Downloads, Pictures, Music, Videos, Projects, Templates, Public };
 
 struct Entry {
   Key key = Key::Desktop;

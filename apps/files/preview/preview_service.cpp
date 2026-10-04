@@ -213,9 +213,11 @@ PreviewResult decodeSvg(QFile& file, const QString& path, const QString& identit
   result.raster_outcome = inspection.outcome;
   if (inspection.outcome == HolonightImages::Outcome::Unsupported) {
     result.raster_outcome.reset();
-    result.error = {.kind = PreviewService::PreviewErrorKind::Unsupported,
-                    .message = QObject::tr("This SVG cannot be previewed because it contains unsupported resource "
-                                           "references. Open it in Viewer to view local linked images.")};
+    result.error = {
+        .kind = PreviewService::PreviewErrorKind::Unsupported,
+        .message = QObject::tr("This SVG cannot be previewed because it contains unsupported resource "
+                               "references. Open it in Viewer to view local linked images."),
+    };
     return result;
   }
   if (inspection.outcome != HolonightImages::Outcome::Success || cancel->load()) {
@@ -272,8 +274,10 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
   const int descriptor = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
   if (descriptor < 0) {
-    result.error = {.kind = PreviewService::PreviewErrorKind::PermissionDenied,
-                    .message = QString::fromLocal8Bit(std::strerror(errno))};
+    result.error = {
+        .kind = PreviewService::PreviewErrorKind::PermissionDenied,
+        .message = QString::fromLocal8Bit(std::strerror(errno)),
+    };
     return result;
   }
   QFile file(path);
@@ -284,8 +288,10 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
   }
   struct stat info{};
   if (::fstat(descriptor, &info) != 0 || !S_ISREG(info.st_mode)) {
-    result.error = {.kind = PreviewService::PreviewErrorKind::Unsupported,
-                    .message = QObject::tr("No preview available")};
+    result.error = {
+        .kind = PreviewService::PreviewErrorKind::Unsupported,
+        .message = QObject::tr("No preview available"),
+    };
     return result;
   }
   const QString identity = QStringLiteral("%1:%2:%3:%4:%5:%6:%7")
@@ -313,8 +319,10 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
     const bool supported =
         mime.name() == QLatin1String("text/plain") || mime.name() == QLatin1String("application/x-zerosize");
     if (!supported || TextPreviewService::looksBinary(sniff)) {
-      result.error = {.kind = PreviewService::PreviewErrorKind::Unsupported,
-                      .message = QObject::tr("No preview available")};
+      result.error = {
+          .kind = PreviewService::PreviewErrorKind::Unsupported,
+          .message = QObject::tr("No preview available"),
+      };
     } else if (!cancel->load()) {
       result.text = TextPreviewService::readHead(file, kTextViewerMaxBytes);
       result.has_text = result.text.error.isEmpty();
@@ -329,8 +337,10 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
     return decodeSvg(file, path, identity, result, cancel, requestedSize, cache, beforeFullDecode, stage);
   }
   if (mime.name() == QLatin1String("image/svg+xml-compressed")) {
-    result.error = {.kind = PreviewService::PreviewErrorKind::Unsupported,
-                    .message = QObject::tr("Compressed SVG previews are not supported.")};
+    result.error = {
+        .kind = PreviewService::PreviewErrorKind::Unsupported,
+        .message = QObject::tr("Compressed SVG previews are not supported."),
+    };
     return result;
   }
   if (mime.name().startsWith(QStringLiteral("image/"))) {
@@ -419,9 +429,11 @@ void PreviewService::setTarget(const QString& path, bool isDir, qint64 size, con
     // REQ-F-024: stat-level failures (broken symlinks, EACCES on the containing directory) are
     // already fully described by Stage 1's StatFailedRole/StatErrorRole; no new I/O needed.
     mime_type_.clear();
-    error_ = {.kind = statError.contains(QStringLiteral("Broken symbolic link")) ? PreviewErrorKind::BrokenSymlink
-                                                                                 : PreviewErrorKind::PermissionDenied,
-              .message = statError};
+    error_ = {
+        .kind = statError.contains(QStringLiteral("Broken symbolic link")) ? PreviewErrorKind::BrokenSymlink
+                                                                           : PreviewErrorKind::PermissionDenied,
+        .message = statError,
+    };
   } else if (!S_ISREG(mode) && !S_ISLNK(mode) && !isDir) {
     mime_type_ = S_ISFIFO(mode) ? QStringLiteral("inode/fifo") : QStringLiteral("application/octet-stream");
   } else if (isDir) {

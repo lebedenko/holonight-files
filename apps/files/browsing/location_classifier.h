@@ -2,6 +2,8 @@
 
 #include <QString>
 
+#include <cstdint>
+
 // Mount facts for one path, as QStorageInfo reports them.
 struct MountInfo {
   QString fs_type;
@@ -15,20 +17,20 @@ struct MountInfo {
 // ever called on DirectoryModel's worker thread (REQ-F-016).
 class LocationClassifier {
  public:
-  enum class Classification { Local, Network, Removable };
+  enum class Classification : std::uint8_t { Local, Network, Removable };
   LocationClassifier() = default;
   virtual ~LocationClassifier() = default;
   LocationClassifier(const LocationClassifier&) = delete;
   LocationClassifier& operator=(const LocationClassifier&) = delete;
   LocationClassifier(LocationClassifier&&) = delete;
   LocationClassifier& operator=(LocationClassifier&&) = delete;
-  virtual Classification classify(const QString& path) const = 0;
+  [[nodiscard]] virtual Classification classify(const QString& path) const = 0;
 };
 
 class RealLocationClassifier : public LocationClassifier {
  public:
   explicit RealLocationClassifier(QString sysfsRoot = QStringLiteral("/sys"));
-  Classification classify(const QString& path) const override;
+  [[nodiscard]] Classification classify(const QString& path) const override;
 
  private:
   QString sysfs_root_;

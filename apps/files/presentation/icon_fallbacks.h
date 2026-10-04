@@ -11,7 +11,7 @@ class IconFallbacks : public QObject {
   QML_SINGLETON
  public:
   explicit IconFallbacks(QObject* parent = nullptr) : QObject(parent) {}
-  Q_INVOKABLE bool isUnresolved(const QString& chain) const;
+  Q_INVOKABLE [[nodiscard]] bool isUnresolved(const QString& chain) const;
   Q_INVOKABLE void markUnresolved(const QString& chain);
 
  private:
