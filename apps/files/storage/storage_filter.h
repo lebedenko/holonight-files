@@ -24,12 +24,17 @@ inline bool infrastructure(const HoloNight::System::StorageVolume& volume) {
   if (purposes.contains(volume.partitionType.toLower())) {
     return true;
   }
+  // A volume is infrastructure only when every mount point is a system path: a bind mount into
+  // the home directory must not hide a data volume that is also mounted elsewhere (/mnt/storage).
+  bool systemOnly = !volume.mountPoints.isEmpty();
   for (const auto& mount : volume.mountPoints) {
     const auto path = QDir::cleanPath(mount);
     if (path == "/") {
       return true;
     }
+    bool system = false;
     if (path.startsWith("/run/media/")) {
+      systemOnly = false;
       continue;
     }
     for (const auto* directory : {
@@ -50,11 +55,13 @@ inline bool infrastructure(const HoloNight::System::StorageVolume& volume) {
              "/srv",
          }) {
       if (path == QLatin1String(directory) || path.startsWith(QString::fromLatin1(directory) + '/')) {
-        return true;
+        system = true;
+        break;
       }
     }
+    systemOnly = systemOnly && system;
   }
-  return false;
+  return systemOnly;
 }
 inline bool eligible(const HoloNight::System::StorageVolume& volume) {
   return !volume.hintIgnore && !volume.loop && !volume.partitionContainer && !infrastructure(volume) &&

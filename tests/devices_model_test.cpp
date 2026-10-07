@@ -95,6 +95,19 @@ TEST(FilesStorage, FiltersInfrastructureWithoutHidingHintSystemData) {
   ASSERT_EQ(model.count(), 1);
   EXPECT_EQ(model.data(model.index(0), DevicesModel::TargetId).toString(), "volume");
 }
+// A data volume bind-mounted under /home is still listed through its non-system mount.
+TEST(FilesStorage, ListsVolumeWithBindMountUnderHomeAndDataMount) {
+  Devices devices;
+  devices.backend.drives = {device()};
+  auto data = volume();
+  data.mountPoints = {"/mnt/storage", "/home/test/Media"};
+  auto bindOnly = volume("bind-only");
+  bindOnly.mountPoints = {"/home/test/Other"};
+  devices.backend.volumes = {data, bindOnly};
+  devices.backend.publish();
+  ASSERT_EQ(devices.model.count(), 1);
+  EXPECT_EQ(devices.value(0, DevicesModel::TargetId).toString(), "volume");
+}
 TEST(FilesStorage, PreservesMultipleVolumesAndDoesNotDuplicateUnlockedBacking) {
   FakeStorage backend;
   StorageController controller(&backend);
