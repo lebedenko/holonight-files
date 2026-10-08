@@ -147,6 +147,24 @@ bool FileCommandRouter::handleNormalOnlyKey(const QString& key) {
   takeCount();
   return false;
 }
+void FileCommandRouter::expirePendingCommands() {
+  if (pending_g_ && pending_g_timer_.elapsed() > kPendingGTimeoutMs) {
+    pending_g_ = false;
+  }
+  if (pending_y_ && pending_y_timer_.elapsed() > kPendingGTimeoutMs) {
+    pending_y_ = false;
+  }
+  if (pending_d_ && pending_d_timer_.elapsed() > kPendingGTimeoutMs) {
+    pending_d_ = false;
+  }
+
+  if (pending_f_ && pending_f_timer_.elapsed() > kPendingGTimeoutMs) {
+    pending_f_ = false;
+  }
+  if (pending_c_ && pending_c_timer_.elapsed() > kPendingGTimeoutMs) {
+    pending_c_ = false;
+  }
+}
 bool FileCommandRouter::handleKey(const QString& key) {
   // File-operations (SPEC.md docs/sdd/file-operations/SPEC.md): a pending prompt captures every
   // key exclusively, ahead of mode dispatch entirely (REQ-F-021's "paused... does not proceed
@@ -166,22 +184,7 @@ bool FileCommandRouter::handleKey(const QString& key) {
     return handleQuickLookKey(key);
   }
 
-  if (pending_g_ && pending_g_timer_.elapsed() > kPendingGTimeoutMs) {
-    pending_g_ = false;
-  }
-  if (pending_y_ && pending_y_timer_.elapsed() > kPendingGTimeoutMs) {
-    pending_y_ = false;
-  }
-  if (pending_d_ && pending_d_timer_.elapsed() > kPendingGTimeoutMs) {
-    pending_d_ = false;
-  }
-
-  if (pending_f_ && pending_f_timer_.elapsed() > kPendingGTimeoutMs) {
-    pending_f_ = false;
-  }
-  if (pending_c_ && pending_c_timer_.elapsed() > kPendingGTimeoutMs) {
-    pending_c_ = false;
-  }
+  expirePendingCommands();
 
   const bool isVisual = mode == VimModeController::Mode::Visual;
   if (handleFinderKey(key)) {

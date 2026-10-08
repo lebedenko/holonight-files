@@ -66,6 +66,7 @@ class FileCommandRouter {
   bool handleNormalToggleAndNavigationKey(const QString& key);
   bool handleModeTransitionKey(const QString& key);
   bool handleNormalOnlyKey(const QString& key);
+  void expirePendingCommands();
   bool handleKey(const QString& key);
   bool handleFinderKey(const QString& key);
   bool handleFileOperationKey(const QString& key, bool isVisual);

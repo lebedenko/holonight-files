@@ -15,12 +15,12 @@ Item {
     readonly property real inset: HnMetrics.internalSpacing(HnControlSize.Normal)
     readonly property bool activationEnabled: root.controller.sidebarActivationEnabled
     readonly property SidebarNavigator navigator: root.controller.sidebarNavigator
-    readonly property alias list: list
+    readonly property alias list: placeList
 
-    implicitHeight: list.y + list.height + root.inset
+    implicitHeight: placeList.y + placeList.height + root.inset
 
     function activateRow(index: int): void {
-        const place = list.itemAtIndex(index) as PlaceRow;
+        const place = placeList.itemAtIndex(index) as PlaceRow;
         if (place)
             place.activate();
     }
@@ -36,7 +36,7 @@ Item {
     }
 
     ListView {
-        id: list
+        id: placeList
         objectName: "placesListView"
         x: root.inset
         y: heading.y + heading.height + root.inset
@@ -61,7 +61,7 @@ Item {
         required property int origin
         required property int status
         required property bool startsBookmarks
-        width: list.width
+        width: placeList.width
         // One extra compact-spacing token before the first bookmark row (REQ-F-028), on top of
         // ListView's own inter-row spacing; the visible delegate stays anchored to the bottom so
         // the gap appears above it, not inside it.

@@ -16,17 +16,17 @@ Item {
     readonly property SidebarNavigator navigator: root.controller.sidebarNavigator
     // Operation errors go to the window status bar, not here (REQ-F-029).
     readonly property bool hasContent: root.controller.devices.count > 0
-    readonly property alias list: list
+    readonly property alias list: deviceList
 
-    implicitHeight: list.y + list.height + root.inset
+    implicitHeight: deviceList.y + deviceList.height + root.inset
 
     function activateRow(index: int): void {
-        const row = list.itemAtIndex(index) as DeviceRow;
+        const row = deviceList.itemAtIndex(index) as DeviceRow;
         if (row && root.activationEnabled)
             root.controller.devices.activate(row.targetId);
     }
     function removeRow(index: int): void {
-        const row = list.itemAtIndex(index) as DeviceRow;
+        const row = deviceList.itemAtIndex(index) as DeviceRow;
         if (row && root.activationEnabled)
             root.controller.devices.remove(row.targetId);
     }
@@ -41,7 +41,7 @@ Item {
         color: HoloniightPalette.textMuted
     }
     ListView {
-        id: list
+        id: deviceList
         objectName: "devicesListView"
         x: root.inset
         y: heading.y + heading.height + root.inset
@@ -74,7 +74,7 @@ Item {
         readonly property bool isCursor: root.navigator.section === SidebarNavigator.Devices && root.navigator.index === row.index
         readonly property real padding: HnMetrics.horizontalPadding(HnControlSize.Compact)
 
-        width: list.width
+        width: deviceList.width
         implicitHeight: body.y + body.height
 
         // Drive name above a drive's first row when it contributes several (REQ-F-018); absent,
@@ -93,7 +93,7 @@ Item {
         Item {
             id: body
             objectName: "deviceRowBody"
-            y: groupHeader.height > 0 ? groupHeader.height + list.spacing : 0
+            y: groupHeader.height > 0 ? groupHeader.height + deviceList.spacing : 0
             width: row.width
             height: Math.max(columns.implicitHeight, HnMetrics.controlHeight(HnControlSize.Compact)) + HnMetrics.internalSpacing(HnControlSize.Compact)
             Accessible.role: Accessible.Button
