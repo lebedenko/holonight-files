@@ -120,6 +120,17 @@ Controls.Popup {
             Keys.onReturnPressed: root.accept()
             Keys.onEnterPressed: root.accept()
             Keys.onEscapePressed: root.close()
+            Keys.onPressed: event => {
+                if ((event.modifiers & Qt.ControlModifier) === 0)
+                    return;
+                if (event.key === Qt.Key_N) {
+                    root.selectedRow = Math.min(root.selectedRow + 1, Math.max(0, results.count - 1));
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_P) {
+                    root.selectedRow = Math.max(root.selectedRow - 1, 0);
+                    event.accepted = true;
+                }
+            }
         }
         HnLabel {
             Layout.fillWidth: true

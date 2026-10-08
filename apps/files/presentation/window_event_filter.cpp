@@ -22,6 +22,7 @@ bool WindowEventFilter::eventFilter(QObject* watched, QEvent* event) {
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   auto* keyEvent = static_cast<QKeyEvent*>(event);
   const bool cancel = keyEvent->key() == Qt::Key_C && keyEvent->modifiers().testFlag(Qt::ControlModifier) &&
+                      !keyEvent->modifiers().testFlag(Qt::ShiftModifier) &&
                       (controller_.tasks()->busy() || controller_.tasks()->hasPrompt());
   if (!controller_.tasks()->hasPrompt() && !cancel) {
     return false;

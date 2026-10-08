@@ -31,7 +31,8 @@ HnApplicationWindow {
     }
 
     Shortcut {
-        sequence: "F"
+        // Plain f is the first key of the `ff` file finder, so fullscreen lives on Ctrl+F.
+        sequence: "Ctrl+F"
         enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.toggleFullscreen()
     }
@@ -65,14 +66,16 @@ HnApplicationWindow {
         onActivated: window.controller.tasks.cancelCurrentTask()
     }
     Shortcut {
-        sequence: "Ctrl+G"
-        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && !window.controller.quickLookOpen && window.controller.vim.currentMode === VimModeController.Normal
-        onActivated: pathFinder.start(true)
+        sequence: "Ctrl+Shift+C"
+        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode !== VimModeController.Insert && window.controller.vim.currentMode !== VimModeController.Search
+        onActivated: window.controller.copyCursorPath()
     }
-    Shortcut {
-        sequence: "Ctrl+P"
-        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && !window.controller.quickLookOpen && window.controller.vim.currentMode === VimModeController.Normal
-        onActivated: pathFinder.start(false)
+    Connections {
+        target: window.controller
+        function onFinderRequested(directoriesOnly: bool): void {
+            if (!pathFinder.visible)
+                pathFinder.start(directoriesOnly);
+        }
     }
 
     PathFinderPopup {

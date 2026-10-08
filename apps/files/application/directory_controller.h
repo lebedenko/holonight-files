@@ -79,6 +79,10 @@ class DirectoryController : public QObject {
   [[nodiscard]] bool canGoForward() const { return navigation_.jump_list_.canGoForward(); }
   Q_INVOKABLE void open(const QString& path, const QString& fallbackReason = {});
   Q_INVOKABLE bool acceptFinderResult(int row);
+  // Number of listing rows that fit in the viewport; Ctrl+U / Ctrl+D move half of it.
+  Q_INVOKABLE void setViewportRows(int rows) { viewport_rows_ = qMax(1, rows); }
+  // Copies the absolute path of the entry under the cursor (the current directory for ".." or an empty listing).
+  Q_INVOKABLE void copyCursorPath();
   // Bookmark activation entry point (SPEC.md REQ-F-022): PlaceRow calls this instead of open()
   // for origin === Bookmark rows. Home/XDG rows keep calling open(path) directly (unchanged --
   // both are guaranteed available whenever shown, REQ-C-005/REQ-C-006).
@@ -119,6 +123,7 @@ class DirectoryController : public QObject {
  signals:
   void changed();
   void navigated();
+  void finderRequested(bool directoriesOnly);
   void shutdownFinished();
 
  private:
@@ -168,6 +173,7 @@ class DirectoryController : public QObject {
   ClipboardRegister register_;
 
   QString status_message_;
+  int viewport_rows_ = 20;
 
   NavigationSession navigation_{*this};
   EditingSession editing_{*this};

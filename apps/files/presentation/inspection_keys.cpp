@@ -25,8 +25,10 @@ QString normalized(int key, const QString& text, bool popup) {
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 bool InspectionKeys::press(int key, const QString& text, int modifiers, bool autoRepeat,
                            DirectoryController* controller, bool popup) const {
-  if (popup && (modifiers & Qt::ControlModifier) != 0 && (key == Qt::Key_O || key == Qt::Key_I)) {
-    if (controller != nullptr) {
+  const bool control = (modifiers & Qt::ControlModifier) != 0;
+  if (popup && control && (key == Qt::Key_O || key == Qt::Key_I)) {
+    // History traversal does nothing in VISUAL, matching the window-level shortcuts.
+    if (controller != nullptr && controller->vim()->currentMode() != VimModeController::Mode::Visual) {
       if (key == Qt::Key_O) {
         controller->navigateHistoryBack();
       } else {
@@ -34,6 +36,10 @@ bool InspectionKeys::press(int key, const QString& text, int modifiers, bool aut
       }
     }
     return true;
+  }
+  if (!popup && control && (key == Qt::Key_U || key == Qt::Key_D)) {
+    return controller != nullptr &&
+           controller->handleKey(key == Qt::Key_U ? QStringLiteral("Ctrl+U") : QStringLiteral("Ctrl+D"));
   }
   const auto input = normalized(key, text, popup);
   if (popup && input != " " && input != "Escape" && input != "j" && input != "k" && input != "ArrowUp" &&

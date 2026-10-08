@@ -62,6 +62,8 @@ class VimModeController : public QObject {
   Q_INVOKABLE [[nodiscard]] bool isRowSelected(int row) const;
   Q_INVOKABLE void enterVisual(int currentRow);
   Q_INVOKABLE void extendVisual(int newRow);
+  // Vim's `o` in VISUAL: the selection stays, its moving end becomes the old anchor.
+  void swapVisualEnds();
   Q_INVOKABLE void exitVisual();
 
   // INSERT — REQ-F-006 through REQ-F-017, REQ-F-030 through REQ-F-042

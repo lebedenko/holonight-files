@@ -12,7 +12,7 @@ FileCommand FileCommandRouter::route(const QString& key, FileCommandContext cont
 }
 void FileCommandRouter::reset() {
   pending_count_ = 0;
-  has_pending_count_ = pending_g_ = pending_y_ = pending_d_ = false;
+  has_pending_count_ = pending_g_ = pending_y_ = pending_d_ = pending_f_ = pending_c_ = false;
 }
 int FileCommandRouter::takeCount() {
   const int count = has_pending_count_ ? pending_count_ : 1;
@@ -176,13 +176,39 @@ bool FileCommandRouter::handleKey(const QString& key) {
     pending_d_ = false;
   }
 
+  if (pending_f_ && pending_f_timer_.elapsed() > kPendingGTimeoutMs) {
+    pending_f_ = false;
+  }
+  if (pending_c_ && pending_c_timer_.elapsed() > kPendingGTimeoutMs) {
+    pending_c_ = false;
+  }
+
   const bool isVisual = mode == VimModeController::Mode::Visual;
+  if (handleFinderKey(key)) {
+    return true;
+  }
+  if (key != u"f") {
+    pending_f_ = false;
+  }
+  if (key != u"c") {
+    pending_c_ = false;
+  }
   if (handleFileOperationKey(key, isVisual)) {
     return true;
   }
 
   const bool isDigit = key.size() == 1 && key.at(0) >= u'0' && key.at(0) <= u'9';
   const bool isMotionKey = key == u"g" || key == u"G" || key == u"j" || key == u"k";
+  if (key == u"Ctrl+U" || key == u"Ctrl+D") {
+    pending_g_ = false;
+    command_ = {.kind = FileCommand::Kind::HalfPage, .count = key == u"Ctrl+D" ? takeCount() : -takeCount()};
+    return true;
+  }
+  if (isVisual && key == u"o") {
+    takeCount();
+    command_.kind = FileCommand::Kind::SwapVisualEnd;
+    return true;
+  }
   if (isVisual) {
     if (key == u"Escape") {
       takeCount();
@@ -223,6 +249,38 @@ bool FileCommandRouter::handleQuickLookKey(const QString& key) {
     command_ = {.kind = FileCommand::Kind::MoveQuickLookLine, .count = -1};
   }
   return true;
+}
+// Normal mode only: `ff` opens the file finder and `cd` the directory jumper. The first key of a
+// pair is held for kPendingGTimeoutMs; any other key discards it, like gg/yy/dd.
+bool FileCommandRouter::handleFinderKey(const QString& key) {
+  if (context_.mode != VimModeController::Mode::Normal) {
+    return false;
+  }
+  if (key == u"f") {
+    pending_g_ = pending_y_ = pending_d_ = pending_c_ = false;
+    if (pending_f_) {
+      pending_f_ = false;
+      takeCount();
+      command_.kind = FileCommand::Kind::FindFile;
+      return true;
+    }
+    pending_f_ = true;
+    pending_f_timer_.start();
+    return true;
+  }
+  if (key == u"c") {
+    pending_g_ = pending_y_ = pending_d_ = pending_f_ = false;
+    pending_c_ = true;
+    pending_c_timer_.start();
+    return true;
+  }
+  if (key == u"d" && pending_c_) {
+    pending_c_ = false;
+    takeCount();
+    command_.kind = FileCommand::Kind::ChangeDirectory;
+    return true;
+  }
+  return false;
 }
 bool FileCommandRouter::handleFileOperationKey(const QString& key, bool isVisual) {
   if (key != u"y") {

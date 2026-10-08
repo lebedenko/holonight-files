@@ -105,9 +105,9 @@ status-bar counter tracks the count; no operation consumes the selection yet).
 `/` enters SEARCH: a live fuzzy jump-to-match with substring highlighting, `n`/`N`
 to cycle committed matches (with wraparound) in NORMAL after `Enter`; SEARCH accepts
 literal n/N. `Escape` restores the original entry by filename identity.
-`Ctrl+G` opens Jump to Directory and `Ctrl+P` opens Find File. Each searches recursively
+In NORMAL mode, `cd` opens Jump to Directory and `ff` opens Find File. Each searches recursively
 from Home or the folder visible when the finder opened; choose the root in the popup.
-Type a name or path, use Up/Down to choose, and press Enter. A file result opens its
+Type a name or path, use Up/Down or `Ctrl+P`/`Ctrl+N` to choose, and press Enter. A file result opens its
 parent folder and selects the file. Hidden entries are skipped unless Include hidden
 is selected; symlinked folders are never traversed. Space-separated terms match
 in either order, and uppercase characters make the query case-sensitive.
@@ -256,7 +256,7 @@ On Arch, the [CI Dockerfile](packaging/Dockerfile.ci) lists the packages.
 task deps                 # builds sibling providers locally, without source changes
 task build
 task run
-# f toggles fullscreen, Escape leaves fullscreen (preserving tiling), q quits
+# Ctrl+F toggles fullscreen, Escape leaves fullscreen (preserving tiling), q quits
 # Space opens/closes Quick Look for an image or text/plain file; j/k then move its current line
 task test
 task build PRESET=release

@@ -6,6 +6,7 @@
 
 #include <limits>
 #include <ranges>
+#include <utility>
 
 VimModeController::VimModeController(QObject* parent) : QObject(parent) {}
 
@@ -37,6 +38,14 @@ void VimModeController::extendVisual(int newRow) {
     return;
   }
   visual_current_row_ = newRow;
+  emit changed();
+}
+
+void VimModeController::swapVisualEnds() {
+  if (mode_ != Mode::Visual) {
+    return;
+  }
+  std::swap(visual_anchor_row_, visual_current_row_);
   emit changed();
 }
 

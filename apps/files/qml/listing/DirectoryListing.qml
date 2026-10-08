@@ -219,6 +219,13 @@ Item {
                     positionViewAtIndex(currentIndex, ListView.Contain);
             }
 
+            // Re-evaluated on count changes, which is when delegates (re)appear; Ctrl+U/Ctrl+D use half of this.
+            readonly property int visibleRows: {
+                const item = count > 0 ? itemAtIndex(Math.max(0, Math.min(currentIndex, count - 1))) : null;
+                const rowHeight = item ? item.height : HnMetrics.controlHeight(HnControlSize.Compact);
+                return Math.floor(height / Math.max(1, rowHeight));
+            }
+            onVisibleRowsChanged: root.controller.setViewportRows(visibleRows)
             Keys.priority: Keys.BeforeItem
             Keys.onShortcutOverride: event => {
                 if (InspectionKeys.overrideShortcut(event.key, false, root.controller.vim.currentMode === VimModeController.Visual))
@@ -255,7 +262,10 @@ Item {
                     root.previousMode = mode;
                 }
             }
-            Component.onCompleted: forceActiveFocus()
+            Component.onCompleted: {
+                forceActiveFocus();
+                root.controller.setViewportRows(visibleRows);
+            }
 
             delegate: HnListDelegate {
                 id: delegate

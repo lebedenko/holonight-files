@@ -10,8 +10,10 @@
 #include "state/state_store.h"
 #include "storage_fixtures.h"
 
+#include <QClipboard>
 #include <QDir>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QPersistentModelIndex>
 #include <QScopeGuard>
 #include <QSignalSpy>
@@ -140,6 +142,103 @@ TEST(DirectoryController, PendingGExpiresAfterTimeoutInsteadOfJumping) {
   EXPECT_EQ(controller.cursorRow(), 2);
   EXPECT_TRUE(controller.handleKey("g"));
   EXPECT_EQ(controller.cursorRow(), 0);
+}
+
+TEST(DirectoryController, CtrlDAndCtrlUMoveHalfAViewport) {
+  QTemporaryDir dir(fixturePattern("ctrl-halfpage"));
+  ASSERT_TRUE(dir.isValid());
+  for (int i = 0; i < 20; ++i) {
+    writeFile(dir, QStringLiteral("f%1.txt").arg(i));
+  }
+  DirectoryController controller;
+  controller.setViewportRows(8);
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  EXPECT_TRUE(controller.handleKey("Ctrl+D"));
+  EXPECT_EQ(controller.cursorRow(), 4);
+  EXPECT_TRUE(controller.handleKey("2"));
+  EXPECT_TRUE(controller.handleKey("Ctrl+D"));
+  EXPECT_EQ(controller.cursorRow(), 12);
+  EXPECT_TRUE(controller.handleKey("Ctrl+U"));
+  EXPECT_EQ(controller.cursorRow(), 8);
+  controller.handleKey("v");
+  EXPECT_TRUE(controller.handleKey("Ctrl+U"));
+  EXPECT_EQ(controller.cursorRow(), 4);
+  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Visual);
+}
+
+TEST(DirectoryController, VisualOSwapsTheSelectionEnds) {
+  QTemporaryDir dir(fixturePattern("ctrl-visual-o"));
+  ASSERT_TRUE(dir.isValid());
+  for (int i = 0; i < 6; ++i) {
+    writeFile(dir, QStringLiteral("f%1.txt").arg(i));
+  }
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  controller.handleKey("j");
+  controller.handleKey("j");
+  controller.handleKey("v");
+  const int anchor = controller.cursorRow();
+  controller.handleKey("j");
+  controller.handleKey("j");
+  const int end = controller.cursorRow();
+  EXPECT_TRUE(controller.handleKey("o"));
+  EXPECT_EQ(controller.cursorRow(), anchor);
+  EXPECT_EQ(controller.vim()->visualAnchorRow(), end);
+  EXPECT_TRUE(controller.handleKey("o"));
+  EXPECT_EQ(controller.cursorRow(), end);
+  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Visual);
+}
+
+TEST(DirectoryController, FfAndCdRequestTheFinder) {
+  QTemporaryDir dir(fixturePattern("ctrl-finder-keys"));
+  ASSERT_TRUE(dir.isValid());
+  writeFile(dir, QStringLiteral("a.txt"));
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  QList<bool> requests;
+  QObject::connect(&controller, &DirectoryController::finderRequested, &controller,
+                   [&requests](bool directoriesOnly) { requests.append(directoriesOnly); });
+  controller.handleKey("f");
+  EXPECT_TRUE(requests.isEmpty());
+  controller.handleKey("f");
+  ASSERT_EQ(requests.size(), 1);
+  EXPECT_FALSE(requests.last());
+  controller.handleKey("c");
+  controller.handleKey("d");
+  ASSERT_EQ(requests.size(), 2);
+  EXPECT_TRUE(requests.last());
+  // A lone d after a discarded c is the start of dd, not a finder request.
+  controller.handleKey("c");
+  controller.handleKey("j");
+  controller.handleKey("d");
+  EXPECT_EQ(requests.size(), 2);
+  // Interleaved keys cancel a pending f.
+  controller.handleKey("f");
+  controller.handleKey("j");
+  controller.handleKey("f");
+  EXPECT_EQ(requests.size(), 2);
+  // Neither pair is available in VISUAL.
+  controller.handleKey("v");
+  controller.handleKey("f");
+  controller.handleKey("f");
+  EXPECT_EQ(requests.size(), 2);
+}
+
+TEST(DirectoryController, CopyCursorPathPutsTheAbsolutePathOnTheClipboard) {
+  QTemporaryDir dir(fixturePattern("ctrl-copy-path"));
+  ASSERT_TRUE(dir.isValid());
+  writeFile(dir, QStringLiteral("a.txt"));
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  controller.handleKey("j");
+  controller.copyCursorPath();
+  const QString copied = QGuiApplication::clipboard()->text();
+  EXPECT_TRUE(copied.startsWith(u'/'));
+  EXPECT_TRUE(copied.endsWith(QStringLiteral("a.txt")));
 }
 
 TEST(DirectoryController, HNavigatesToParentDirectory) {

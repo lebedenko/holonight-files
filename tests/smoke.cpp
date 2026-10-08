@@ -1040,10 +1040,10 @@ TEST(Files, WindowAndKeyboard) {
   const auto initial_geometry = window->geometry();
   const auto initial_visibility = window->visibility();
   for (const auto exit_key : {Qt::Key_F, Qt::Key_Escape}) {
-    QTest::keyClick(window, Qt::Key_F);
+    QTest::keyClick(window, Qt::Key_F, Qt::ControlModifier);
     settle();
     ASSERT_EQ(window->visibility(), QWindow::FullScreen);
-    QTest::keyClick(window, exit_key);
+    QTest::keyClick(window, exit_key, exit_key == Qt::Key_F ? Qt::ControlModifier : Qt::NoModifier);
     settle();
     EXPECT_EQ(window->visibility(), initial_visibility);
     EXPECT_EQ(window->geometry(), initial_geometry);
@@ -1056,10 +1056,10 @@ TEST(Files, WindowAndKeyboard) {
   settle();
   ASSERT_EQ(window->visibility(), QWindow::Maximized);
   for (const auto exit_key : {Qt::Key_F, Qt::Key_Escape}) {
-    QTest::keyClick(window, Qt::Key_F);
+    QTest::keyClick(window, Qt::Key_F, Qt::ControlModifier);
     settle();
     ASSERT_EQ(window->visibility(), QWindow::FullScreen);
-    QTest::keyClick(window, exit_key);
+    QTest::keyClick(window, exit_key, exit_key == Qt::Key_F ? Qt::ControlModifier : Qt::NoModifier);
     settle();
     EXPECT_EQ(window->visibility(), QWindow::Maximized);
   }
@@ -1374,7 +1374,7 @@ TEST(Files, ModalEditingWindowKeyboardAndHighlighting) {
       EXPECT_EQ(editor->objectName(), "inlineNameEditor");
       const int expectedCursor = key == 'a' ? static_cast<int>(controller.vim()->insertText().size()) : 0;
       EXPECT_TRUE(QTest::qWaitFor([&] { return editor->property("cursorPosition").toInt() == expectedCursor; }));
-      QTest::keyClick(window, Qt::Key_F);
+      QTest::keyClick(window, Qt::Key_F, Qt::ControlModifier);
       QTest::keyClick(window, Qt::Key_Q);
       EXPECT_NE(window->visibility(), QWindow::FullScreen);
       EXPECT_TRUE(window->isVisible());
@@ -1427,7 +1427,7 @@ TEST(Files, ModalEditingWindowKeyboardAndHighlighting) {
   }
   EXPECT_TRUE(literal);
   EXPECT_TRUE(highlighted);
-  QTest::keyClick(window, Qt::Key_F);
+  QTest::keyClick(window, Qt::Key_F, Qt::ControlModifier);
   QTest::keyClick(window, Qt::Key_Q);
   EXPECT_NE(window->visibility(), QWindow::FullScreen);
   QTest::keyClick(window, Qt::Key_Escape);
@@ -1438,7 +1438,7 @@ TEST(Files, ModalEditingWindowKeyboardAndHighlighting) {
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
   QTest::keyClick(window, Qt::Key_V);
   capture("visual");
-  QTest::keyClick(window, Qt::Key_F);
+  QTest::keyClick(window, Qt::Key_F, Qt::ControlModifier);
   QTest::keyClick(window, Qt::Key_Q);
   EXPECT_NE(window->visibility(), QWindow::FullScreen);
   QTest::keyClick(window, Qt::Key_Escape);
@@ -1607,7 +1607,7 @@ TEST(Files, PromptsCaptureKeysAndCtrlCInEveryModeWithoutChangingEditorState) {
     ASSERT_TRUE(QTest::qWaitFor([&] { return controller.tasks()->hasPrompt(); }));
     EXPECT_FALSE(controller.quickLookOpen());
     QTest::keyClick(window, Qt::Key_Q, Qt::ShiftModifier);
-    QTest::keyClick(window, Qt::Key_F, Qt::ShiftModifier);
+    QTest::keyClick(window, Qt::Key_F, Qt::ControlModifier);
     QTest::keyClick(window, Qt::Key_Escape);
     EXPECT_TRUE(window->isVisible());
     EXPECT_TRUE(controller.tasks()->hasPrompt());

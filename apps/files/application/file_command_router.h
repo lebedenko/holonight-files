@@ -39,6 +39,10 @@ struct FileCommand {
     AutoRename,
     CancelConflict,
     ConfirmTrash,
+    HalfPage,
+    SwapVisualEnd,
+    FindFile,
+    ChangeDirectory,
   };
   Kind kind = Kind::None;
   int count = 1;
@@ -63,6 +67,7 @@ class FileCommandRouter {
   bool handleModeTransitionKey(const QString& key);
   bool handleNormalOnlyKey(const QString& key);
   bool handleKey(const QString& key);
+  bool handleFinderKey(const QString& key);
   bool handleFileOperationKey(const QString& key, bool isVisual);
   bool handlePromptKey(const QString& key);
   bool handleQuickLookKey(const QString& key);
@@ -73,7 +78,11 @@ class FileCommandRouter {
   bool pending_g_ = false;
   bool pending_y_ = false;
   bool pending_d_ = false;
+  bool pending_f_ = false;
+  bool pending_c_ = false;
   QElapsedTimer pending_g_timer_;
   QElapsedTimer pending_y_timer_;
   QElapsedTimer pending_d_timer_;
+  QElapsedTimer pending_f_timer_;
+  QElapsedTimer pending_c_timer_;
 };

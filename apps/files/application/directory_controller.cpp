@@ -1,8 +1,10 @@
 #include "directory_controller.h"
 
+#include <QClipboard>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QGuiApplication>
 
 DirectoryController::DirectoryController(QObject* parent) : DirectoryController(nullptr, parent) {}
 DirectoryController::DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
@@ -136,6 +138,27 @@ void DirectoryController::toggleSortDirection() {
 void DirectoryController::setCursorRow(qint64 row) { navigation_.setCursorRow(row); }
 void DirectoryController::clampCursorRow() { navigation_.clampCursorRow(); }
 bool DirectoryController::canPreviewSelection() const { return preview_selection_.canPreviewSelection(); }
+void DirectoryController::copyCursorPath() {
+  QString path = navigation_.current_path_;
+  const int row = navigation_.cursor_row_;
+  if (directoryError().isEmpty() && row >= 0 && row < navigation_.proxy_.rowCount()) {
+    const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(row, 0));
+    if (!navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
+      const auto rowPath = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+      if (!rowPath.isEmpty()) {
+        path = rowPath;
+      }
+    }
+  }
+  if (path.isEmpty()) {
+    return;
+  }
+  if (auto* clipboard = QGuiApplication::clipboard(); clipboard != nullptr) {
+    clipboard->setText(path);
+  }
+  status_message_ = tr("Copied path: %1").arg(path);
+  emit changed();
+}
 QString DirectoryController::cursorPath() const {
   QString path = navigation_.current_path_;
   const int row = navigation_.cursor_row_;
@@ -311,6 +334,21 @@ void DirectoryController::execute(const FileCommand& command) {
     case Kind::MoveQuickLookLine:
       // Only the viewer's current line moves; the listing did not change, so no changed() and no retarget.
       preview_.moveCurrentLine(command.count);
+      break;
+    case Kind::HalfPage:
+      setCursorRow(qint64{cursorRow()} + (qint64{command.count} * qMax(1, viewport_rows_ / 2)));
+      break;
+    case Kind::SwapVisualEnd: {
+      const int target = vim_.visualAnchorRow();
+      vim_.swapVisualEnds();
+      setCursorRow(target);
+      break;
+    }
+    case Kind::FindFile:
+      emit finderRequested(false);
+      break;
+    case Kind::ChangeDirectory:
+      emit finderRequested(true);
       break;
     case Kind::Visual:
       cancelPendingRestore();
