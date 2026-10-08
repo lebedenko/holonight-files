@@ -7,7 +7,7 @@ import sys
 root = Path(__file__).resolve().parents[1]
 check = '--check' in sys.argv
 qml_only = '--qml-only' in sys.argv
-files = sorted(p for directory in ('apps', 'tests') for p in (root / directory).rglob('*')
+files = sorted(p for directory in ('apps', 'libs', 'tests') for p in (root / directory).rglob('*')
                if p.is_file() and p.suffix in ('.cpp', '.h', '.qml'))
 if not qml_only:
     subprocess.run(['clang-format', *(['--dry-run', '--Werror'] if check else ['-i']),

@@ -1,8 +1,7 @@
-#include "icon_name_resolver.h"
-
 #include <QMimeDatabase>
 #include <QMimeType>
 
+#include <HolonightFileBrowser/icon_name_resolver.h>
 #include <sys/stat.h>
 
 namespace {

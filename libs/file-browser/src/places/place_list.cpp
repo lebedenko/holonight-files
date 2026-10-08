@@ -1,10 +1,9 @@
-#include "places/place_list.h"
-
-#include "places/user_dirs_parser.h"
-
 #include <QCoreApplication>
 #include <QDir>
 #include <QSet>
+
+#include <HolonightFileBrowser/places/place_list.h>
+#include <HolonightFileBrowser/places/user_dirs_parser.h>
 
 namespace PlaceList {
 

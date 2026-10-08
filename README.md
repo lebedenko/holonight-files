@@ -612,3 +612,37 @@ warmth and tree size affect these measurements; persisted indexes still require
 validation and reconstruction before results are ready.
 
 See the [lifecycle acceptance evidence](docs/sdd/search-index-lifecycle/VERIFICATION.md) for checks and limitations.
+
+## Installed browsing provider
+
+Files also owns the focused `HolonightFileBrowser` package. `Core` provides asynchronous current-folder
+listing (`HolonightFileBrowser::DirectoryReader`), the existing natural sort/hidden-file proxy
+(`DirectoryProxyModel`), standard Home/XDG places, and entry/icon metadata. `loadNative()` / `nativeDirectoryPath` and the `nativePath` role preserve Linux path bytes
+independently of display strings. Navigation, file operations,
+editing, restore/history and previews remain private to Files. `Quick` installs the passive
+`Holonight.FileBrowser` QML module with `DirectoryListing`, `DirectoryReader` and `DirectorySortModel`.
+The application retains `HolonightFiles` and its existing delegates and keyboard behavior.
+
+Provider-only build and install (no Files runtime providers):
+
+```sh
+cmake -S . -B build/browser -G Ninja -DBUILD_FILES_APP=OFF -DBUILD_TESTING=ON \
+  -DCMAKE_PREFIX_PATH=/path/to/holonight-qt-prefix \
+  -DQML_IMPORT_PATH=/path/to/holonight-qt-prefix/lib/qt6/qml
+cmake --build build/browser
+ctest --test-dir build/browser --output-on-failure
+cmake --install build/browser --prefix /path/to/browser-prefix
+```
+
+For a Qt Core-only build, also set `-DBUILD_FILE_BROWSER_QUICK=OFF`; no HoloNight provider is then needed.
+C++ consumers use `find_package(HolonightFileBrowser REQUIRED COMPONENTS Core)` or `COMPONENTS Core Quick`
+and link `HolonightFileBrowser::Core` / `HolonightFileBrowser::Quick`. Quick consumers call
+`HolonightFileBrowser::initializeEngine(engine)` before loading QML to install the themed icon provider.
+The installed QML import root is `lib/qt6/qml`; add it alongside the installed HoloNight Qt modules.
+`DirectoryListing` takes externally owned `model`, `currentIndex`, `selectedPaths`, an optional
+`iconProvider` prefix, and a replaceable `delegate`; its cursor/activation/selection signals do not mutate
+selection. Consumers own keyboard commands. Call `shutdown()` and retain readers through
+`shutdownFinished` for asynchronous worker retirement; destructors join any remaining filesystem call.
+
+Provider regression and installed external C++/QML consumer tests are included in `BUILD_TESTING`.
+See [provider SDD](docs/sdd/filechooser-provider/README.md) for the extraction contract and verification.

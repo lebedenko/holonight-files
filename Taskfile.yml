@@ -43,6 +43,7 @@ tasks:
     desc: Check runtime-control import policy
     cmds:
     - python3 scripts/check-qml-import-policy.py
+    - python3 scripts/check-qml-import-policy.py libs/file-browser/qml
   qmltypes-check:
     desc: Check generated application QML metadata
     cmds:

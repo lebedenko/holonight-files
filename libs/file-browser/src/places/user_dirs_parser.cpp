@@ -1,10 +1,9 @@
-#include "places/user_dirs_parser.h"
-
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QRegularExpression>
 
+#include <HolonightFileBrowser/places/user_dirs_parser.h>
 #include <array>
 
 namespace UserDirsParser {

@@ -1,8 +1,7 @@
-#include "icon_image_provider.h"
-
-#include "icon_name_resolver.h"
-
 #include <QIcon>
+
+#include <HolonightFileBrowser/icon_image_provider.h>
+#include <HolonightFileBrowser/icon_name_resolver.h>
 namespace {
 
 // Cost is in pixels; 4096 KiB of ARGB covers thousands of 20 px row icons at 1.5x scale plus the

@@ -5,6 +5,7 @@ import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import Holonight.Core
 import Holonight.Controls
+import Holonight.FileBrowser as Browser
 
 Item {
     id: root
@@ -182,7 +183,7 @@ Item {
             }
         }
 
-        ListView {
+        Browser.DirectoryListing {
             id: listView
             objectName: "directoryListView"
 
@@ -204,21 +205,8 @@ Item {
             }
             clip: false
             focus: true
-            Controls.ScrollBar.vertical: Controls.ScrollBar {}
             model: root.controller ? root.controller.listing : null
             currentIndex: root.controller ? root.controller.cursorRow : -1
-            onCurrentIndexChanged: {
-                if (currentIndex < 0)
-                    return;
-                // Contain ignores the header/footer inset items, so the ends are positioned explicitly.
-                if (currentIndex === 0)
-                    positionViewAtBeginning();
-                else if (currentIndex === count - 1)
-                    positionViewAtEnd();
-                else
-                    positionViewAtIndex(currentIndex, ListView.Contain);
-            }
-
             // Re-evaluated on count changes, which is when delegates (re)appear; Ctrl+U/Ctrl+D use half of this.
             readonly property int visibleRows: {
                 const item = count > 0 ? itemAtIndex(Math.max(0, Math.min(currentIndex, count - 1))) : null;

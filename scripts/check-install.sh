@@ -2,10 +2,18 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 stage=$(mktemp -d "$root/build/install-check.XXXXXX")
-DESTDIR="$stage" cmake --install "$root/build/release"
+build_dir=${1:-"$root/build/release"}
+DESTDIR="$stage" cmake --install "$build_dir"
 for file in bin/hn-files share/applications/org.holonight.Files.desktop \
   share/icons/hicolor/scalable/apps/org.holonight.Files.svg \
   share/licenses/holonight-files/LICENSE share/licenses/holonight-files/GPL-3.0-or-later.txt; do
+  test -s "$stage/usr/$file"
+done
+for file in lib/libholonight_file_browser_core.a lib/libholonight_file_browser_quick.so \
+  lib/cmake/HolonightFileBrowser/HolonightFileBrowserConfig.cmake \
+  lib/qt6/qml/Holonight/FileBrowser/qmldir \
+  lib/qt6/qml/Holonight/FileBrowser/holonight_file_browser_quick.qmltypes \
+  lib/qt6/qml/Holonight/FileBrowser/libholonight_file_browser_quickplugin.so; do
   test -s "$stage/usr/$file"
 done
 test ! -e "$stage/usr/bin/holonight-files"
@@ -26,8 +34,8 @@ cat "$stage/mime.log"
 rg -F 'org.holonight.Files.desktop' "$stage/mime.log"
 test ! -e "$stage/xdg/config/mimeapps.list"
 # Only installed provider imports are available; no source or build QML paths.
-export QML_IMPORT_PATH="${HOLONIGHT_QML_IMPORT_PATH:-${HOLONIGHT_DEPENDENCY_PREFIX:-$root/build/deps/prefix}/lib/qt6/qml}"
-export LD_LIBRARY_PATH="${HOLONIGHT_DEPENDENCY_PREFIX:-$root/build/deps/prefix}/lib"
+export QML_IMPORT_PATH="$stage/usr/lib/qt6/qml:${HOLONIGHT_QML_IMPORT_PATH:-${HOLONIGHT_DEPENDENCY_PREFIX:-$root/build/deps/prefix}/lib/qt6/qml}"
+export LD_LIBRARY_PATH="$stage/usr/lib:${HOLONIGHT_DEPENDENCY_PREFIX:-$root/build/deps/prefix}/lib"
 unset QML2_IMPORT_PATH QT_QUICK_CONTROLS_STYLE QT_QUICK_CONTROLS_CONF QT_QUICK_CONTROLS_FALLBACK_STYLE
 cd "$stage"
 QT_QPA_PLATFORM=offscreen "$stage/usr/bin/hn-files" --version

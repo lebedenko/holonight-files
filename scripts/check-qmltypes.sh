@@ -8,4 +8,9 @@ test -s "$metadata"
 for type in DirectoryController DirectoryProxyModel PlacesModel VimModeController TaskManager PreviewService PreviewImageItem QuickLookPresentationModel WindowState IconFallbacks InspectionKeys SizeFormat; do
   grep -q "HolonightFiles/$type 1.0" "$metadata" || { echo "Missing metadata: $type" >&2; exit 1; }
 done
-echo 'Files QML metadata check passed.'
+browser="$build_dir/libs/file-browser/qml/Holonight/FileBrowser/holonight_file_browser_quick.qmltypes"
+test -s "$browser"
+for type in DirectoryReader DirectorySortModel; do
+  rg -q "Holonight.FileBrowser/$type 1.0" "$browser" || { echo "Missing browser metadata: $type" >&2; exit 1; }
+done
+echo 'Files and FileBrowser QML metadata checks passed.'

@@ -10,60 +10,20 @@
 #include <QSet>
 #include <QThread>
 
+#include <HolonightFileBrowser/directory_entry.h>
+#include <HolonightFileBrowser/directory_roles.h>
 #include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
 
-struct DirectoryEntry {
-  QString name;
-  QString absolute_path;
-  bool is_dir = false;
-  qint64 size = -1;
-  QDateTime modified;
-  quint32 mode = 0;
-  bool stat_failed = false;
-  QString stat_error;
-  // IconNameResolver's candidate chain joined with IconNameResolver::kChainSeparator, computed on
-  // the worker thread alongside stat(). Participates in operator== so a refresh diff that changes it
-  // emits dataChanged() like any other metadata.
-  QString icon_name;
-  // Stage 3 (vim-modal-editing): a synchronous, UI-thread-only row standing in for an INSERT-mode
-  // (o/O) create-in-progress — never produced by the walker, never diffed against. See
-  // insertPlaceholderRow()/removePlaceholderRow().
-  bool is_placeholder = false;
-  bool is_parent = false;
-  // True when the entry's own listed path is a symlink (via lstat()), regardless of whether its
-  // target resolves or what type the target is. Independent of is_dir/mode, which stay
-  // target-resolved so icon resolution and directories-first sort are unaffected.
-  bool is_symlink = false;
-  bool operator==(const DirectoryEntry&) const = default;
-};
-
+// Shared worker metadata; application-only placeholder rows use the same value type.
 // Raw, unsorted listing of one directory's immediate entries. Populated asynchronously on a
 // worker thread so a large or slow (network-mounted) directory never blocks the UI thread.
 // Sorting and hidden-file filtering are the DirectoryProxyModel's job, not this model's.
-class DirectoryModel : public QAbstractListModel {
+class DirectoryModel : public QAbstractListModel, public DirectoryRoles {
   Q_OBJECT
  public:
-  // Qt model roles/QML properties require implicit integer conversion.
-  // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
-  enum Role : std::uint16_t {
-    NameRole = Qt::UserRole + 1,
-    PathRole,
-    IsDirRole,
-    SizeRole,
-    ModifiedRole,
-    ModeRole,
-    IsHiddenRole,
-    StatFailedRole,
-    StatErrorRole,
-    // SPEC.md REQ-C-001 (main-view-icons): the '/'-joined icon-name candidate chain, consumed from
-    // QML only as "image://icon/" + iconName and split apart only by IconImageProvider.
-    IconNameRole,
-    IsParentRole,
-    IsSymlinkRole,
-  };
   explicit DirectoryModel(QObject* parent = nullptr);
   ~DirectoryModel() override;
   DirectoryModel(const DirectoryModel&) = delete;

@@ -23,8 +23,6 @@ add_library(files-private STATIC
   application/vim_mode_controller.h
   browsing/directory_model.cpp
   browsing/directory_model.h
-  browsing/directory_proxy_model.cpp
-  browsing/directory_proxy_model.h
   browsing/fuzzy_matcher.cpp
   browsing/fuzzy_matcher.h
   browsing/path_finder_model.cpp
@@ -57,10 +55,6 @@ add_library(files-private STATIC
   places/bookmark_store.h
   places/place_availability_checker.cpp
   places/place_availability_checker.h
-  places/place_list.cpp
-  places/place_list.h
-  places/user_dirs_parser.cpp
-  places/user_dirs_parser.h
   preview/exif_reader.cpp
   preview/exif_reader.h
   preview/preview_selection.cpp
@@ -104,7 +98,8 @@ target_include_directories(files-private PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/state"
   "${CMAKE_CURRENT_SOURCE_DIR}/places"
 )
-target_link_libraries(files-private PUBLIC HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images HolonightThumbnails::Thumbnails HolonightSearch::Search PRIVATE tomlplusplus::tomlplusplus)
+target_include_directories(files-private PRIVATE "${PROJECT_SOURCE_DIR}/libs/file-browser/src")
+target_link_libraries(files-private PUBLIC HolonightFileBrowser::Core HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images HolonightThumbnails::Thumbnails HolonightSearch::Search PRIVATE tomlplusplus::tomlplusplus)
 
 qt_extract_metatypes(files-private)
 
@@ -139,8 +134,8 @@ function(add_files_application target)
     URI HolonightFiles VERSION 1.0
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qml/${target}/HolonightFiles"
     RESOURCE_PREFIX "/qt/qml"
-    IMPORT_PATH "${CMAKE_CURRENT_BINARY_DIR}/qml/${target}" ${QML_IMPORT_PATH}
-    DEPENDENCIES QtQuick
+    IMPORT_PATH "${PROJECT_BINARY_DIR}/libs/file-browser/qml" "${CMAKE_CURRENT_BINARY_DIR}/qml/${target}" ${QML_IMPORT_PATH}
+    DEPENDENCIES QtQuick Holonight.FileBrowser
     QML_FILES ${module_qml}
     RESOURCES ${module_icons}
     SOURCES
@@ -148,10 +143,6 @@ function(add_files_application target)
       "${app_dir}/presentation/engine_setup.h"
       "${app_dir}/presentation/icon_fallbacks.cpp"
       "${app_dir}/presentation/icon_fallbacks.h"
-      "${app_dir}/presentation/icon_image_provider.cpp"
-      "${app_dir}/presentation/icon_image_provider.h"
-      "${app_dir}/presentation/icon_name_resolver.cpp"
-      "${app_dir}/presentation/icon_name_resolver.h"
       "${app_dir}/presentation/inspection_keys.cpp"
       "${app_dir}/presentation/inspection_keys.h"
       "${app_dir}/presentation/preview_image_item.cpp"
@@ -166,7 +157,7 @@ function(add_files_application target)
       "${app_dir}/presentation/qml_types.h"
     NO_IMPORT_SCAN)
   qt_add_resources(${target} files-config PREFIX "/" BASE "${app_dir}" FILES "${app_dir}/qtquickcontrols2.conf")
-  target_link_libraries(${target} PRIVATE files-private Qt6::QuickControls2 HolonightQt::Core HolonightQt::Controls)
+  target_link_libraries(${target} PRIVATE files-private HolonightFileBrowser::Quick Qt6::QuickControls2 HolonightQt::Core HolonightQt::Controls)
   target_compile_definitions(${target} PRIVATE FILES_VERSION="${PROJECT_VERSION}")
 endfunction()
 

@@ -248,3 +248,10 @@ the native timing. The isolated runtime publication gate remains blocked; see
 Stable matching sidebar icons and on-demand text loading supersede unconditional fallback
 resets and selection-time text parsing. Early Space opens a pinned loading overlay. Automated
 and manual acceptance are tracked in [verification](sdd/sidebar-icons-demand-text/VERIFICATION.md).
+
+## FileChooser browsing provider
+
+- Locally verified; publication/pin handoff pending: [FileChooser provider SDD](sdd/filechooser-provider/README.md), umbrella I-001.
+  Extract current-folder enumeration, sort/hidden behavior, standard places and passive listing;
+  preserve Files commands, editing, navigation, persistence and previews. Portal protocol and
+  chooser behavior belong to the separate backend repository after the published provider handoff.

@@ -1,5 +1,6 @@
 #include "directory_model.h"
 
+#include "directory_scan.h"
 #include "icon_name_resolver.h"
 
 #include <QDir>
@@ -16,71 +17,6 @@
 #include <utility>
 
 namespace {
-constexpr int kBatchEntryThreshold = 250;
-constexpr int kBatchTimeThresholdMs = 25;
-
-struct DirectoryCloser {
-  void operator()(DIR* directory) const { ::closedir(directory); }
-};
-dirent* readNext(DIR* directory, int readCount, int readErrorAfter) {
-  errno = 0;
-  if (readErrorAfter >= 0 && readCount >= readErrorAfter) {
-    errno = EIO;
-    return nullptr;
-  }
-  return ::readdir(directory);
-}
-// "" when there is no map or the exact cleaned path is not a standard place.
-QString namedIconFor(const PlaceList::IconMap* places, const QString& cleanedPath) {
-  return places == nullptr ? QString() : places->value(cleanedPath);
-}
-DirectoryEntry readEntry(const QString& path, const QString& name, const PlaceList::IconMap* places) {
-  DirectoryEntry entry;
-  entry.name = name;
-  entry.absolute_path = QDir(path).absoluteFilePath(name);
-  const auto encoded = QFile::encodeName(entry.absolute_path);
-  // One lstat() per entry, ahead of the target-resolving stat() below, so both the success and
-  // failure branches can read entry.is_symlink without a second syscall (REQ-F-010/011/012/013).
-  struct stat linkInfo{};
-  entry.is_symlink = ::lstat(encoded.constData(), &linkInfo) == 0 && S_ISLNK(linkInfo.st_mode);
-  struct stat info{};
-  if (::stat(encoded.constData(), &info) == 0) {
-    entry.is_dir = S_ISDIR(info.st_mode);
-    entry.size = entry.is_dir ? -1 : info.st_size;
-    entry.mode = info.st_mode;
-    entry.modified =
-        QDateTime::fromMSecsSinceEpoch((qint64{info.st_mtim.tv_sec} * 1000) + (info.st_mtim.tv_nsec / 1000000));
-    // Only the entry's own listed path is looked up: no realpath/readlink, so a symlink to a place stays generic.
-    const auto named = entry.is_dir ? namedIconFor(places, entry.absolute_path) : QString();
-    entry.icon_name =
-        IconNameResolver::candidateIconNames(info.st_mode, name, named).join(IconNameResolver::kChainSeparator);
-  } else {
-    const int error = errno;
-    entry.stat_failed = true;
-    // A dangling link's own extension says nothing about a target that doesn't exist (REQ-F-006).
-    entry.icon_name = IconNameResolver::genericFallbackName(false);
-    const bool dangling = (error == ENOENT || error == ENOTDIR) && entry.is_symlink;
-    entry.stat_error =
-        dangling ? DirectoryModel::tr("Broken symbolic link") : QString::fromLocal8Bit(std::strerror(error));
-  }
-  return entry;
-}
-// The ".." row stands for the parent folder itself, so it carries the parent's real metadata; the
-// synthetic row is kept when the parent cannot be stat'ed.
-DirectoryEntry readParentEntry(const QString& path, const PlaceList::IconMap* places) {
-  const auto parentPath = QDir::cleanPath(QFileInfo(path).absolutePath());
-  auto entry = readEntry(parentPath, QStringLiteral("."), nullptr);
-  if (entry.stat_failed) {
-    return DirectoryModel::syntheticParentEntry(path, places);
-  }
-  entry.name = QStringLiteral("..");
-  entry.absolute_path = parentPath;
-  entry.is_parent = true;
-  entry.icon_name = IconNameResolver::candidateIconNames(entry.mode, entry.name, namedIconFor(places, parentPath))
-                        .join(IconNameResolver::kChainSeparator);
-  return entry;
-}
-
 // At most two batch deliveries may be queued. Cancellation makes the worker wait
 // interruptible, including when the model destructor stops processing GUI events.
 std::shared_ptr<QSemaphore> acquireBatchSlot(const std::shared_ptr<QSemaphore>& deliverySlots,
@@ -91,55 +27,6 @@ std::shared_ptr<QSemaphore> acquireBatchSlot(const std::shared_ptr<QSemaphore>& 
     }
   }
   return {};
-}
-using PublishBatch = std::function<void(QList<DirectoryEntry>, bool, QString)>;
-void walkDirectory(const QString& path, const std::shared_ptr<std::atomic_bool>& cancel,
-                   const std::function<void()>& beforeOpen, int readErrorAfter,
-                   const std::shared_ptr<const PlaceList::IconMap>& places, const PublishBatch& publish) {
-  QList<DirectoryEntry> buffer;
-  QElapsedTimer sinceFlush;
-  sinceFlush.start();
-  auto flush = [&](bool finished, QString error = {}) {
-    publish(std::exchange(buffer, {}), finished, std::move(error));
-    sinceFlush.restart();
-  };
-  if (beforeOpen) {
-    beforeOpen();
-  }
-  if (cancel->load()) {
-    flush(true);
-    return;
-  }
-  const std::unique_ptr<DIR, DirectoryCloser> directory(::opendir(QFile::encodeName(path).constData()));
-  if (!directory) {
-    const int error = errno;
-    flush(true, DirectoryModel::tr("Cannot open folder: %1").arg(QString::fromLocal8Bit(std::strerror(error))));
-    return;
-  }
-  if (!QDir(path).isRoot()) {
-    buffer.append(readParentEntry(path, places.get()));
-  }
-  int readCount = 0;
-  while (!cancel->load()) {
-    auto* item = readNext(directory.get(), readCount, readErrorAfter);
-    if (item == nullptr) {
-      const int error = errno;
-      flush(true, error == 0
-                      ? QString{}
-                      : DirectoryModel::tr("Cannot read folder: %1").arg(QString::fromLocal8Bit(std::strerror(error))));
-      return;
-    }
-    const auto name = QFile::decodeName(static_cast<const char*>(item->d_name));
-    if (name == u"." || name == u"..") {
-      continue;
-    }
-    ++readCount;
-    buffer.append(readEntry(path, name, places.get()));
-    if (buffer.size() >= kBatchEntryThreshold || sinceFlush.elapsed() >= kBatchTimeThresholdMs) {
-      flush(false);
-    }
-  }
-  flush(true);
 }
 }  // namespace
 
@@ -167,6 +54,8 @@ QVariant DirectoryModel::data(const QModelIndex& index, int role) const {
   }
   const auto& entry = entries_[index.row()];
   switch (role) {
+    case NativePathRole:
+      return entry.native_path;
     case NameRole:
       return entry.name;
     case PathRole:
@@ -197,25 +86,23 @@ QVariant DirectoryModel::data(const QModelIndex& index, int role) const {
 }
 QHash<int, QByteArray> DirectoryModel::roleNames() const {
   return {
-      {NameRole, "name"},           {PathRole, "path"},
-      {IsDirRole, "isDir"},         {SizeRole, "size"},
-      {ModifiedRole, "modified"},   {ModeRole, "mode"},
-      {IsHiddenRole, "isHidden"},   {StatFailedRole, "statFailed"},
-      {StatErrorRole, "statError"}, {IconNameRole, "iconName"},
-      {IsParentRole, "isParent"},   {IsSymlinkRole, "isSymlink"},
+      {NameRole, "name"},
+      {PathRole, "path"},
+      {IsDirRole, "isDir"},
+      {SizeRole, "size"},
+      {ModifiedRole, "modified"},
+      {ModeRole, "mode"},
+      {IsHiddenRole, "isHidden"},
+      {StatFailedRole, "statFailed"},
+      {StatErrorRole, "statError"},
+      {IconNameRole, "iconName"},
+      {IsParentRole, "isParent"},
+      {IsSymlinkRole, "isSymlink"},
+      {NativePathRole, "nativePath"},
   };
 }
 DirectoryEntry DirectoryModel::syntheticParentEntry(const QString& path, const PlaceList::IconMap* places) {
-  DirectoryEntry parent;
-  parent.name = QStringLiteral("..");
-  parent.absolute_path = QDir::cleanPath(QFileInfo(path).absolutePath());
-  parent.is_dir = true;
-  parent.is_parent = true;
-  parent.mode = S_IFDIR | 0755;
-  parent.icon_name =
-      IconNameResolver::candidateIconNames(parent.mode, parent.name, namedIconFor(places, parent.absolute_path))
-          .join(IconNameResolver::kChainSeparator);
-  return parent;
+  return HolonightFileBrowser::detail::syntheticParentEntry(path, places);
 }
 void DirectoryModel::setPlaceIcons(std::shared_ptr<const PlaceList::IconMap> icons) { place_icons_ = std::move(icons); }
 void DirectoryModel::load(const QString& path) {
@@ -371,44 +258,45 @@ void DirectoryModel::startWalk(const QString& path, bool diff) {
         if (!cancel->load()) {
           resolveLocation(path, generation);
         }
-        walkDirectory(path, cancel, beforeOpen, readErrorAfter, placeIcons,
-                      [this, path, generation, diff, cancel, deliverySlots, classifier, acceptedLoad](
-                          QList<DirectoryEntry> entries, bool finished, QString error) {
-                        const auto slot = acquireBatchSlot(deliverySlots, cancel);
-                        if (!slot && !finished) {
-                          return;
-                        }
-                        const bool succeeded = finished && classifier && error.isEmpty() && !cancel->load();
-                        QMetaObject::invokeMethod(
-                            this,
-                            [this, generation, diff, entries = std::move(entries), finished, error = std::move(error),
-                             slot, acceptedLoad] {
-                              if (finished && !diff && error.isEmpty() && generation == generation_ && !stopping_ &&
-                                  !updates_suspended_) {
-                                *acceptedLoad = true;
-                              }
-                              applyBatch(Batch{
-                                  .generation = generation,
-                                  .diff = diff,
-                                  .entries = entries,
-                                  .finished = finished,
-                                  .directory_error = error,
-                              });
-                            },
-                            Qt::QueuedConnection);
-                        if (succeeded) {
-                          // Posted after the final batch, so the listing is never held back by a slow mount.
-                          const auto classification = classifier->classify(path);
-                          QMetaObject::invokeMethod(
-                              this,
-                              [this, path, classification, acceptedLoad] {
-                                if (*acceptedLoad) {
-                                  emit loadSucceeded(path, classification);
-                                }
-                              },
-                              Qt::QueuedConnection);
-                        }
-                      });
+        HolonightFileBrowser::detail::walkDirectory(
+            path, cancel, beforeOpen, readErrorAfter, placeIcons,
+            [this, path, generation, diff, cancel, deliverySlots, classifier, acceptedLoad](
+                QList<DirectoryEntry> entries, bool finished, QString error) {
+              const auto slot = acquireBatchSlot(deliverySlots, cancel);
+              if (!slot && !finished) {
+                return;
+              }
+              const bool succeeded = finished && classifier && error.isEmpty() && !cancel->load();
+              QMetaObject::invokeMethod(
+                  this,
+                  [this, generation, diff, entries = std::move(entries), finished, error = std::move(error), slot,
+                   acceptedLoad] {
+                    if (finished && !diff && error.isEmpty() && generation == generation_ && !stopping_ &&
+                        !updates_suspended_) {
+                      *acceptedLoad = true;
+                    }
+                    applyBatch(Batch{
+                        .generation = generation,
+                        .diff = diff,
+                        .entries = entries,
+                        .finished = finished,
+                        .directory_error = error,
+                    });
+                  },
+                  Qt::QueuedConnection);
+              if (succeeded) {
+                // Posted after the final batch, so the listing is never held back by a slow mount.
+                const auto classification = classifier->classify(path);
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, path, classification, acceptedLoad] {
+                      if (*acceptedLoad) {
+                        emit loadSucceeded(path, classification);
+                      }
+                    },
+                    Qt::QueuedConnection);
+              }
+            });
       },
       Qt::QueuedConnection);
 }

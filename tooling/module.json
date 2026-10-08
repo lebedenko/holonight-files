@@ -45,7 +45,8 @@
     }
   ],
   "qml_modules": [
-    "HolonightFiles"
+    "HolonightFiles",
+    "Holonight.FileBrowser"
   ],
   "wayland": false
 }
