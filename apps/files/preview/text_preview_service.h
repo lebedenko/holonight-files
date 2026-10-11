@@ -11,6 +11,8 @@
 namespace TextPreviewService {
 
 struct TextPreviewResult {
+  QString source;
+  QString canonical_parent;
   QStringList lines;
   QString error;
   qint64 total_size = -1;

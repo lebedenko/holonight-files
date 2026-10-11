@@ -5,6 +5,7 @@
 #include "text_preview_service.h"
 #include "thumbnail_service.h"
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QMimeDatabase>
@@ -317,7 +318,8 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
   result.mime_type_description = mime.comment();
   if (textOnly) {
     const bool supported =
-        mime.name() == QLatin1String("text/plain") || mime.name() == QLatin1String("application/x-zerosize");
+        mime.name() == QLatin1String("text/plain") || mime.name() == QLatin1String("application/x-zerosize") ||
+        mime.name() == QLatin1String("text/markdown") || mime.name() == QLatin1String("text/x-markdown");
     if (!supported || TextPreviewService::looksBinary(sniff)) {
       result.error = {
           .kind = PreviewService::PreviewErrorKind::Unsupported,
@@ -325,6 +327,7 @@ PreviewResult runPreviewJob(const QString& path, quint64 generation, const std::
       };
     } else if (!cancel->load()) {
       result.text = TextPreviewService::readHead(file, kTextViewerMaxBytes);
+      result.text.canonical_parent = QFileInfo(path).dir().canonicalPath();
       result.has_text = result.text.error.isEmpty();
       if (!result.has_text) {
         result.error = {.kind = PreviewService::PreviewErrorKind::DecodeFailed, .message = result.text.error};
@@ -711,7 +714,23 @@ void PreviewService::notifyCurrentLine() {
 }
 
 bool PreviewService::quickLookText() const {
-  return gate_mime_ == QStringLiteral("text/plain") || gate_mime_ == QStringLiteral("application/x-zerosize");
+  return gate_mime_ == QStringLiteral("text/plain") || gate_mime_ == QStringLiteral("application/x-zerosize") ||
+         quickLookMarkdown();
+}
+
+bool PreviewService::quickLookMarkdown() const {
+  if (gate_mime_ == QLatin1String("text/markdown") || gate_mime_ == QLatin1String("text/x-markdown")) {
+    return true;
+  }
+  const auto suffix = QFileInfo(path_).suffix();
+  return (gate_mime_ == QLatin1String("text/plain") || gate_mime_ == QLatin1String("application/x-zerosize")) &&
+         (suffix.compare(QLatin1String("md"), Qt::CaseInsensitive) == 0 ||
+          suffix.compare(QLatin1String("markdown"), Qt::CaseInsensitive) == 0);
+}
+
+QList<QUrl> PreviewService::markdownFileRoots() const {
+  const auto& parent = text_.canonical_parent;
+  return parent.isEmpty() ? QList<QUrl>() : QList<QUrl>{QUrl::fromLocalFile(parent + QLatin1Char('/'))};
 }
 
 PreviewService::QuickLookEligibility PreviewService::quickLookEligibility() const {

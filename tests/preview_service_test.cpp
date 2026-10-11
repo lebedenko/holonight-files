@@ -764,7 +764,7 @@ TEST(PreviewService, QuickLookEligibilityFollowsTheMimeGate) {
   EXPECT_TRUE(eligible(writeJpegWithoutExif(dir)));
   EXPECT_TRUE(eligible(writeBytes(dir, "empty-no-extension", {})));  // application/x-zerosize
   EXPECT_FALSE(eligible(writeBytes(dir, "data.json", "{\"a\": 1}\n")));
-  EXPECT_FALSE(eligible(writeBytes(dir, "notes.md", "# title\n")));
+  EXPECT_TRUE(eligible(writeBytes(dir, "notes.md", "# title\n")));
   EXPECT_FALSE(eligible(writeBytes(dir, "run.sh", "#!/bin/sh\necho hi\n")));
   EXPECT_FALSE(eligible(dir.path()));  // directory
   service.clear();
@@ -1270,7 +1270,8 @@ class ObsoleteTextRequest : public testing::TestWithParam<int> {};
 TEST_P(ObsoleteTextRequest, RefreshRetargetAndShutdownInvalidateBlockedResults) {
   QTemporaryDir dir(fixturePattern("obsolete-text"));
   PreviewService service;
-  const auto path = writeNumberedLines(dir, "a.txt", 3);
+  const auto name = GetParam() >= 3 ? QStringLiteral("a.md") : QStringLiteral("a.txt");
+  const auto path = writeNumberedLines(dir, name, 3);
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   QSemaphore entered;
@@ -1288,17 +1289,17 @@ TEST_P(ObsoleteTextRequest, RefreshRetargetAndShutdownInvalidateBlockedResults) 
   service.setQuickLookActive(true);
   ASSERT_TRUE(entered.tryAcquire(1, 2000));
   PreviewServiceTestAccess::beforeText(service, {});
-  if (GetParam() == 0) {
-    writeNumberedLines(dir, "a.txt", 6);
+  if (GetParam() % 3 == 0) {
+    writeNumberedLines(dir, name, 6);
     setTargetFromFile(service, path);
-  } else if (GetParam() == 1) {
-    setTargetFromFile(service, writeNumberedLines(dir, "b.txt", 6));
+  } else if (GetParam() % 3 == 1) {
+    setTargetFromFile(service, writeNumberedLines(dir, GetParam() >= 3 ? "b.md" : "b.txt", 6));
   } else {
     service.shutdown();
   }
   release.release();
   ASSERT_TRUE(settled(service));
-  if (GetParam() == 2) {
+  if (GetParam() % 3 == 2) {
     EXPECT_FALSE(service.hasText());
     EXPECT_EQ(service.textLineCount(), 0);
   } else {
@@ -1307,4 +1308,82 @@ TEST_P(ObsoleteTextRequest, RefreshRetargetAndShutdownInvalidateBlockedResults) 
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(Invalidation, ObsoleteTextRequest, testing::Values(0, 1, 2));
+INSTANTIATE_TEST_SUITE_P(Invalidation, ObsoleteTextRequest, testing::Values(0, 1, 2, 3, 4, 5));
+
+TEST(PreviewService, MarkdownLoadsOnlyWhileActiveAndPreservesSource) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  for (const auto& name :
+       {QStringLiteral("README.md"), QStringLiteral("README.MARKDOWN"), QStringLiteral("empty.MD")}) {
+    const auto path = dir.filePath(name);
+    QFile file(path);
+    ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+    const QByteArray source =
+        name.startsWith(QLatin1String("empty")) ? QByteArray() : QByteArray("# Heading\n\nBody  \n\n");
+    ASSERT_EQ(file.write(source), source.size());
+    file.close();
+    PreviewService service;
+    setTargetFromFile(service, path);
+    ASSERT_TRUE(settled(service));
+    ASSERT_TRUE(service.quickLookMarkdown());
+    EXPECT_FALSE(service.hasText());
+    EXPECT_TRUE(service.markdownSource().isEmpty());
+    EXPECT_EQ(service.quickLookEligibility(), PreviewService::QuickLookEligibility::Supported);
+    service.setQuickLookActive(true);
+    ASSERT_TRUE(settled(service));
+    ASSERT_TRUE(service.hasText());
+    EXPECT_EQ(service.markdownSource(), QString::fromUtf8(source));
+    EXPECT_EQ(service.markdownBaseUrl(), QUrl::fromLocalFile(path));
+    EXPECT_EQ(service.markdownFileRoots(), QList<QUrl>{QUrl::fromLocalFile(dir.path() + QLatin1Char('/'))});
+    service.setQuickLookActive(false);
+    EXPECT_TRUE(service.markdownSource().isEmpty());
+    service.setQuickLookActive(true);
+    ASSERT_TRUE(settled(service));
+    EXPECT_EQ(service.markdownSource(), QString::fromUtf8(source));
+  }
+}
+
+TEST(PreviewService, BinaryMarkdownIsRejected) {
+  QTemporaryDir dir;
+  const auto path = dir.filePath(QStringLiteral("binary.md"));
+  QFile file(path);
+  ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+  const QByteArray bytes("# Heading\nabc\0def", 17);
+  ASSERT_EQ(file.write(bytes), bytes.size());
+  file.close();
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  service.setQuickLookActive(true);
+  ASSERT_TRUE(settled(service));
+  EXPECT_FALSE(service.hasText());
+  EXPECT_TRUE(service.markdownSource().isEmpty());
+  EXPECT_EQ(service.quickLookErrorKind(), PreviewService::PreviewErrorKind::Unsupported);
+}
+
+TEST(PreviewService, ClosingBlockedMarkdownThenReopeningRejectsOldSource) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  const auto path = writeBytes(dir, "readme.md", "# Original\n");
+  PreviewService service;
+  setTargetFromFile(service, path);
+  ASSERT_TRUE(settled(service));
+  QSemaphore entered;
+  QSemaphore release;
+  const auto guard = qScopeGuard([&] { release.release(); });
+  PreviewServiceTestAccess::beforeText(service, [&] {
+    entered.release();
+    release.acquire();
+  });
+  service.setQuickLookActive(true);
+  ASSERT_TRUE(entered.tryAcquire(1, 2000));
+  EXPECT_TRUE(service.markdownSource().isEmpty());
+  service.setQuickLookActive(false);
+  EXPECT_FALSE(service.hasText());
+  PreviewServiceTestAccess::beforeText(service, {});
+  ASSERT_FALSE(writeBytes(dir, "readme.md", "# Replacement\n").isEmpty());
+  service.setQuickLookActive(true);
+  release.release();
+  ASSERT_TRUE(settled(service));
+  EXPECT_EQ(service.markdownSource(), QStringLiteral("# Replacement\n"));
+}

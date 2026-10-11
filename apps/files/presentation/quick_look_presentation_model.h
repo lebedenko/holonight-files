@@ -16,7 +16,7 @@ class QuickLookPresentationModel : public QObject, public QQmlParserStatus {
   QML_ELEMENT
   Q_INTERFACES(QQmlParserStatus)
  public:
-  enum class Kind : std::uint8_t { None, Pending, Image, Text, Compact };
+  enum class Kind : std::uint8_t { None, Pending, Image, Text, Markdown, Compact };
   Q_ENUM(Kind)
 
   Q_PROPERTY(PreviewService* preview READ preview WRITE setPreview NOTIFY previewChanged)
@@ -29,6 +29,7 @@ class QuickLookPresentationModel : public QObject, public QQmlParserStatus {
   Q_PROPERTY(qreal iconExtent READ iconExtent WRITE setIconExtent NOTIFY inputsChanged)
   Q_PROPERTY(qreal hintImplicitWidth READ hintImplicitWidth WRITE setHintImplicitWidth NOTIFY inputsChanged)
   Q_PROPERTY(Kind kind READ kind NOTIFY presentationChanged)
+  Q_PROPERTY(bool markdownFrame READ markdownFrame NOTIFY presentationChanged)
   Q_PROPERTY(QSizeF cardSize READ cardSize NOTIFY presentationChanged)
   Q_PROPERTY(QSizeF frameSize READ frameSize NOTIFY presentationChanged)
 
@@ -55,8 +56,12 @@ class QuickLookPresentationModel : public QObject, public QQmlParserStatus {
   qreal hintImplicitWidth() const { return hint_implicit_width_; }
   void setHintImplicitWidth(qreal value);
   Kind kind() const { return kind_; }
+  bool markdownFrame() const { return retained_kind_ == Kind::Markdown && kind_ != Kind::None; }
   QSizeF cardSize() const { return card_size_; }
   QSizeF frameSize() const { return frame_size_; }
+
+  Q_INVOKABLE qreal markdownScrollTarget(qreal position, qreal viewportHeight, qreal contentHeight, qreal lineHeight,
+                                         int direction) const;
 
  signals:
   void previewChanged();

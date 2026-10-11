@@ -157,7 +157,7 @@ function(add_files_application target)
       "${app_dir}/presentation/qml_types.h"
     NO_IMPORT_SCAN)
   qt_add_resources(${target} files-config PREFIX "/" BASE "${app_dir}" FILES "${app_dir}/qtquickcontrols2.conf")
-  target_link_libraries(${target} PRIVATE files-private HolonightFileBrowser::Quick Qt6::QuickControls2 HolonightQt::Core HolonightQt::Controls)
+  target_link_libraries(${target} PRIVATE files-private HolonightFileBrowser::Quick Qt6::QuickControls2 HolonightQt::Core HolonightQt::Controls QMarkdown::QMarkdown)
   target_compile_definitions(${target} PRIVATE FILES_VERSION="${PROJECT_VERSION}")
 endfunction()
 

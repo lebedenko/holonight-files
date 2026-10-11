@@ -42,6 +42,16 @@
       "module": "holonight-search",
       "package": "HolonightSearch",
       "source_variable": "HOLONIGHT_SEARCH_SOURCE"
+    },
+    {
+      "module": "qmarkdown",
+      "package": "QMarkdown",
+      "source_variable": "QMARKDOWN_SOURCE",
+      "options": [
+        "-DBUILD_SHARED_LIBS=ON",
+        "-DQMARKDOWN_BUILD_EXAMPLES=OFF",
+        "-DQMARKDOWN_BUILD_BENCHMARKS=OFF"
+      ]
     }
   ],
   "qml_modules": [

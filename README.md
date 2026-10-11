@@ -57,10 +57,11 @@ cut off. The sidebar scrolls vertically when its content exceeds the window heig
 Size text matches the listing exactly, and folders show `Dir`. The
 sidebar no longer shows text content or permissions; press `Space` to open
 Quick Look, a centered card over the dimmed window (at most 92% of it). It opens
-for images and `text/plain` files, or as a pinned loading view while type detection
-is pending. On directories and already classified unsupported types (including JSON
-and Markdown), `Space` does nothing. Text is loaded only while Quick Look is open. Images are framed at their own
-aspect ratio. Text files get a read-only monospace line viewer with a line-number
+for images, Markdown and `text/plain` files, or as a pinned loading view while type detection
+is pending. On directories and already classified unsupported types (including JSON), `Space` does nothing. Text is loaded only while Quick Look is open. Images are framed at their own
+aspect ratio. Markdown (`text/markdown`, `text/x-markdown`, or `.md`/`.markdown` with plain-text/empty sniffing) gets a wrapped rendered preview using HoloNight styling. Its keyboard scrolling advances one body line; wheel scrolling is available. Only local PNG/JPEG images within the document directory and descendants are authorized; links remain inert. Closing releases the renderer; reopening starts at the top and refresh preserves/clamps scrolling. Both text formats reuse the 100 KiB cap and truncation notice. See the [Markdown cycle](docs/sdd/markdown-quick-look/SPEC.md).
+
+Plain text files get a read-only monospace line viewer with a line-number
 gutter and a highlighted current line: at most the first 100 KiB is loaded (the
 caption then adds `· truncated`), `LF`, `CRLF` and `CR` all end a line, invalid
 UTF-8 shows as `�`, and an empty file shows one empty line. Long lines are clipped,
@@ -646,3 +647,5 @@ selection. Consumers own keyboard commands. Call `shutdown()` and retain readers
 
 Provider regression and installed external C++/QML consumer tests are included in `BUILD_TESTING`.
 See [provider SDD](docs/sdd/filechooser-provider/README.md) for the extraction contract and verification.
+
+Files consumes installed shared [qmarkdown](https://github.com/lebedenko/qmarkdown) 1.0. Set `QMARKDOWN_SOURCE` to a local checkout when running `task deps`. Subsequent builds reuse the last successfully configured provider sources, so `task run` does not require exporting the override again. Explicit source overrides take precedence; CI pins `595ca4fea32155766c2eafb3b670995d2ea75a2f`. Build the provider with the same Qt/toolchain as Files. Its public QML/CMake API is compatible through 1.x; private C++ ABI is excluded. Runtime deployment needs `libQMarkdown`, the QMarkdown QML plugin/metadata and installed MIT/cmark notices. Passive FileBrowser consumers do not require qmarkdown.

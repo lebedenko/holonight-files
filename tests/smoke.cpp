@@ -11,6 +11,7 @@
 #include <QAccessible>
 #include <QCoreApplication>
 #include <QDesktopServices>
+#include <QFontMetricsF>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QImage>
@@ -2928,4 +2929,189 @@ TEST(Files, RuntimeStyleEditingShowsValidationAndCommits) {
   controller.commitInsertEditing();
   EXPECT_TRUE(QFileInfo::exists(dir.filePath("created.txt")));
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+}
+
+TEST(Files, MarkdownQuickLookWrapsScrollsAndReleasesTheView) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  QByteArray source(
+      "# Heading\n\n**strong** and *emphasis* with `code` and [inert](https://example.invalid).\n\n> quote\n\n---\n\n");
+  for (int i = 0; i < 80; ++i) {
+    source += "A paragraph long enough to wrap when the preview becomes narrow, preserving rendered formatting.\n\n";
+  }
+  ASSERT_FALSE(files_test::writeFile(dir, "readme.md", source).isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path(), {900, 500}));
+  EXPECT_EQ(harness.window->findChild<QQuickItem*>("quickLookMarkdownView"), nullptr);
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  auto* view = harness.window->findChild<QQuickItem*>("quickLookMarkdownView");
+  auto* scroller = harness.window->findChild<QQuickItem*>("quickLookMarkdown");
+  ASSERT_NE(view, nullptr);
+  ASSERT_NE(scroller, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return scroller->property("contentHeight").toReal() > scroller->height(); }));
+  auto* style = view->property("style").value<QObject*>();
+  ASSERT_NE(style, nullptr);
+  EXPECT_EQ(style->property("bodyColor").value<QColor>(), paletteColor(harness.engine, "textPrimary"));
+  EXPECT_TRUE(style->property("h1Font").value<QFont>().bold());
+  EXPECT_TRUE(view->property("markdown").toString().contains(QStringLiteral("**strong**")));
+  EXPECT_FALSE(harness.window->findChild<QQuickItem*>("quickLookText")->isVisible());
+  QString rendered;
+  bool formatted = false;
+  QList<QQuickItem*> renderedItems{view};
+  for (qsizetype index = 0; index < renderedItems.size(); ++index) {
+    auto* item = renderedItems[index];
+    rendered += item->property("text").toString();
+    formatted |= !item->property("formatRanges").toList().isEmpty();
+    renderedItems.append(item->childItems());
+  }
+  EXPECT_TRUE(rendered.contains(QStringLiteral("Heading")));
+  EXPECT_TRUE(rendered.contains(QStringLiteral("strong and emphasis")));
+  EXPECT_FALSE(rendered.contains(QStringLiteral("**strong**")));
+  EXPECT_TRUE(formatted);
+  EXPECT_EQ(descendantsNamed(view, QStringLiteral("quoteRule")).size(), 1);
+  const auto capture = qEnvironmentVariable("FILES_CAPTURE_PREFIX");
+  if (!capture.isEmpty()) {
+    EXPECT_TRUE(harness.window->grabWindow().save(capture + "-markdown.png"));
+  }
+  const auto wideHeight = view->property("contentHeight").toReal();
+  harness.window->resize({500, 500});
+  ASSERT_TRUE(QTest::qWaitFor([&] { return view->property("contentHeight").toReal() > wideHeight; }));
+  const int pinned = harness.controller.cursorRow();
+  const auto lineHeight = QFontMetricsF(style->property("bodyFont").value<QFont>()).height();
+  QTest::keyClick(harness.window, Qt::Key_J);
+  EXPECT_NEAR(scroller->property("contentY").toReal(), lineHeight, 1);
+  QTest::keyClick(harness.window, Qt::Key_Down);
+  EXPECT_NEAR(scroller->property("contentY").toReal(), 2 * lineHeight, 1);
+  QTest::keyClick(harness.window, Qt::Key_K);
+  QTest::keyClick(harness.window, Qt::Key_Up);
+  EXPECT_EQ(scroller->property("contentY").toReal(), 0);
+  const auto local = scroller->mapToScene(QPointF(scroller->width() / 2, scroller->height() / 2));
+  QWheelEvent wheel(local, harness.window->mapToGlobal(local.toPoint()), {}, {0, -120}, Qt::NoButton, Qt::NoModifier,
+                    Qt::NoScrollPhase, false);
+  wheel.setTimestamp(10000);
+  QCoreApplication::sendEvent(harness.window, &wheel);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return scroller->property("contentY").toReal() > 0; }));
+  EXPECT_EQ(harness.controller.cursorRow(), pinned);
+  EXPECT_TRUE(harness.controller.quickLookOpen());
+  // Reporting a destination has no host navigation handler.
+  ASSERT_TRUE(
+      QMetaObject::invokeMethod(view, "linkActivated", Q_ARG(QString, QStringLiteral("https://example.invalid"))));
+  EXPECT_EQ(harness.controller.cursorRow(), pinned);
+  QPointer<QQuickItem> oldView(view);
+  ASSERT_NO_FATAL_FAILURE(closeQuickLook(harness));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return oldView.isNull(); }));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  scroller = harness.window->findChild<QQuickItem*>("quickLookMarkdown");
+  ASSERT_NE(scroller, nullptr);
+  EXPECT_EQ(scroller->property("contentY").toReal(), 0);
+}
+
+TEST(Files, MarkdownQuickLookAuthorizesOnlyImagesWithinTheDocumentDirectory) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("documents"));
+  QImage image(40, 30, QImage::Format_RGB32);
+  image.fill(Qt::green);
+  ASSERT_TRUE(image.save(dir.filePath("documents/local.png")));
+  ASSERT_TRUE(image.save(dir.filePath("outside.png")));
+  ASSERT_TRUE(QFile::link(dir.filePath("outside.png"), dir.filePath("documents/escape.png")));
+  const QByteArray source(
+      "![local](local.png)\n\n![traversal denied](../outside.png)\n\n![symlink denied](escape.png)\n\n![remote "
+      "denied](https://example.invalid/photo.png)\n\n![qrc denied](qrc:/photo.png)\n");
+  ASSERT_FALSE(files_test::writeFile(dir, "documents/readme.md", source).isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.filePath("documents")));
+  ASSERT_NO_FATAL_FAILURE(showQuickLookOn(harness, "readme.md"));
+  auto* view = harness.window->findChild<QQuickItem*>("quickLookMarkdownView");
+  ASSERT_NE(view, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !descendantsNamed(view, QStringLiteral("markdownImage")).isEmpty(); }));
+  const auto images = descendantsNamed(view, QStringLiteral("markdownImage"));
+  ASSERT_EQ(images.size(), 1);
+  EXPECT_EQ(images.first()->property("image").value<QImage>().size(), image.size());
+  auto* policy = view->property("resourcePolicy").value<QObject*>();
+  ASSERT_NE(policy, nullptr);
+  EXPECT_FALSE(policy->property("allowQrc").toBool());
+  EXPECT_TRUE(policy->property("allowedHttpsOrigins").toList().isEmpty());
+  QString rendered;
+  QList<QQuickItem*> items{view};
+  for (qsizetype index = 0; index < items.size(); ++index) {
+    rendered += items[index]->property("text").toString();
+    items.append(items[index]->childItems());
+  }
+  EXPECT_TRUE(rendered.contains(QStringLiteral("traversal denied")));
+  EXPECT_TRUE(rendered.contains(QStringLiteral("symlink denied")));
+  EXPECT_TRUE(rendered.contains(QStringLiteral("remote denied")));
+  EXPECT_TRUE(rendered.contains(QStringLiteral("qrc denied")));
+}
+
+TEST(Files, MarkdownQuickLookRefreshPreservesAndClampsScrolling) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  const QByteArray source = QByteArray("Paragraph of Markdown.\n\n").repeated(100);
+  const auto path = files_test::writeFile(dir, "readme.md", source);
+  ASSERT_FALSE(path.isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path(), {700, 450}));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  QPointer<QQuickItem> view = harness.window->findChild<QQuickItem*>("quickLookMarkdownView");
+  auto* scroller = harness.window->findChild<QQuickItem*>("quickLookMarkdown");
+  ASSERT_NE(scroller, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return scroller->property("contentHeight").toReal() > 500; }));
+  pressKeyTimes(harness, Qt::Key_J, 8);
+  const auto position = scroller->property("contentY").toReal();
+  ASSERT_GT(position, 0);
+  auto* preview = harness.controller.preview();
+  const auto refresh = [&](quint64 revision) {
+    const QFileInfo info(path);
+    preview->setTarget(path, false, info.size(), info.lastModified(), 0100644, false, {}, {}, revision);
+  };
+  refresh(100);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !preview->quickLookBusy() && preview->hasText(); }));
+  ASSERT_FALSE(view.isNull());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return qAbs(scroller->property("contentY").toReal() - position) < 1; }));
+  ASSERT_FALSE(files_test::writeFile(dir, "readme.md", "# Short\n").isEmpty());
+  refresh(101);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !preview->quickLookBusy() && preview->hasText(); }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return scroller->property("contentY").toReal() == 0; }));
+  ASSERT_FALSE(files_test::writeFile(dir, "readme.md", source).isEmpty());
+  refresh(102);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !preview->quickLookBusy() && preview->hasText(); }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return scroller->property("contentHeight").toReal() > 500; }));
+  EXPECT_EQ(scroller->property("contentY").toReal(), 0);
+}
+
+TEST(Files, MarkdownQuickLookStyleTracksThemeChanges) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  const files_test::ScopedEnvironmentVariable configGuard("XDG_CONFIG_HOME", dir.filePath("config"));
+  ASSERT_TRUE(QDir().mkpath(dir.filePath("config/holonight")));
+  const auto appearance = [&](const QByteArray& scheme) {
+    return files_test::writeFile(dir, "config/holonight/appearance.toml",
+                                 "version = 1\n[theme]\nscheme = \"" + scheme + "\"\naccent = \"blue\"\n" +
+                                     "[typography]\nui_family = \"sans-serif\"\nui_size = 12\nmonospace_family = "
+                                     "\"monospace\"\nmonospace_size = 12\ntitle_family = \"sans-serif\"\ntitle_size = "
+                                     "20\ndisplay_family = \"sans-serif\"\ndisplay_size = 24\n" +
+                                     "[icons]\ntheme = \"HoloNight\"\nfallback = \"Papirus\"\ncursor = "
+                                     "\"default\"\n[layout]\nscale = 1.0\n[shape]\nstyle = \"inherit\"\nscale = 1.0\n");
+  };
+  ASSERT_FALSE(appearance("holonight-dark").isEmpty());
+  ASSERT_TRUE(QDir(dir.path()).mkdir("documents"));
+  ASSERT_FALSE(files_test::writeFile(dir, "documents/readme.md", "# Heading\n\nBody with `code`\n").isEmpty());
+  QuickLookHarness harness;
+  ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.filePath("documents")));
+  ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
+  auto* view = harness.window->findChild<QQuickItem*>("quickLookMarkdownView");
+  ASSERT_NE(view, nullptr);
+  auto* style = view->property("style").value<QObject*>();
+  ASSERT_NE(style, nullptr);
+  const auto dark = style->property("bodyColor").value<QColor>();
+  ASSERT_FALSE(appearance("holonight-light").isEmpty());
+  auto* theme = harness.engine.singletonInstance<QObject*>("Holonight.Core", "HolonightTheme");
+  ASSERT_NE(theme, nullptr);
+  ASSERT_TRUE(QMetaObject::invokeMethod(theme, "reload"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return style->property("bodyColor").value<QColor>() != dark; }));
+  EXPECT_EQ(style->property("bodyColor").value<QColor>(), paletteColor(harness.engine, "textPrimary"));
+  EXPECT_EQ(style->property("codeBlockColor").value<QColor>(), paletteColor(harness.engine, "textPrimary"));
+  EXPECT_EQ(style->property("linkColor").value<QColor>(), paletteColor(harness.engine, "accentBlue"));
+  EXPECT_EQ(style->property("quoteRuleColor").value<QColor>(), paletteColor(harness.engine, "borderSubtle"));
 }

@@ -51,6 +51,8 @@ def main():
         variable = "HOLONIGHT_" + provider.upper().replace("-", "_") + "_SOURCE"
         source = Path(os.environ.get(variable, ROOT.parent / f"holonight-{provider}")).resolve()
         snapshot(source, sources / f"holonight-{provider}")
+    markdown_source = Path(os.environ.get("QMARKDOWN_SOURCE", ROOT.parent / "qmarkdown")).resolve()
+    snapshot(markdown_source, sources / "qmarkdown")
     ci_id = work / "ci-image-id"
     run(["docker", "build", "-t", "files-ci", "--iidfile", str(ci_id), "-f",
          str(sources / "files/packaging/Dockerfile.ci"), str(sources / "files")])

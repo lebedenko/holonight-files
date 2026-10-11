@@ -204,3 +204,31 @@ TEST(TextPreviewService, WorstCaseShapesAtTheCapLoadQuickly) {
   EXPECT_EQ(manyLines.lines.size(), 102400);  // every terminator ends an (empty) line; none is synthesized after
   EXPECT_LT(timer.elapsed(), 500);
 }
+
+TEST(TextPreviewService, DecodedSourcePreservesMarkdownWhitespaceAndTrailingNewlines) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  const QByteArray bytes = QByteArray::fromHex("efbbbf") + "# Heading\r\n\r\n  body  \n\n";
+  const auto path = dir.filePath(QStringLiteral("source.md"));
+  QFile file(path);
+  ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+  ASSERT_EQ(file.write(bytes), bytes.size());
+  file.close();
+  const auto result = TextPreviewService::readHead(path, 102400);
+  EXPECT_TRUE(result.error.isEmpty());
+  EXPECT_EQ(result.source, QStringLiteral("# Heading\r\n\r\n  body  \n\n"));
+}
+
+TEST(TextPreviewService, MarkdownSourceDropsIncompleteUtf8AtTheCap) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  const auto path = dir.filePath(QStringLiteral("large.md"));
+  QFile file(path);
+  ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+  const QByteArray bytes = QByteArray(102399, 'a') + QByteArray::fromHex("e282ac") + "\n";
+  ASSERT_EQ(file.write(bytes), bytes.size());
+  file.close();
+  const auto result = TextPreviewService::readHead(path, 102400);
+  EXPECT_TRUE(result.was_truncated);
+  EXPECT_EQ(result.source, QString(102399, QLatin1Char('a')));
+}

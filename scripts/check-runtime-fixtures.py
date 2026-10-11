@@ -14,6 +14,10 @@ EXECUTABLE = "/usr/bin/hn-files"
 DESKTOP = "/usr/share/applications/org.holonight.Files.desktop"
 CASES = {
     "healthy": ("true", None),
+    "missing-markdown-plugin": ("rm /usr/lib/qt6/qml/QMarkdown/libQMarkdownPlugin.so", "Runtime verification failed"),
+    "missing-markdown-library": ("rm /usr/lib/libQMarkdown.so.1", "Runtime verification failed"),
+    "missing-markdown-metadata": ("rm /usr/lib/qt6/qml/QMarkdown/qmldir", "Runtime verification failed"),
+    "missing-markdown-license": ("rm /usr/share/licenses/QMarkdown/LICENSE", "Runtime verification failed"),
     "unwritable-home": ("chmod 000 /home/files-test", 'test -w "$HOME"'),
     "delayed-exit": ("""cc -x c -o /usr/bin/hn-files - <<'C'
 #include <string.h>

@@ -503,7 +503,7 @@ TEST(DirectoryController, ArrowKeysAreIgnoredOutsideQuickLook) {
   EXPECT_EQ(controller.cursorRow(), 0);
 }
 
-TEST(DirectoryController, SpaceOpensQuickLookOnlyForImagesAndPlainText) {
+TEST(DirectoryController, SpaceOpensQuickLookForImagesPlainTextAndMarkdown) {
   QTemporaryDir dir(fixturePattern("ctrl-quicklook-gate"));
   ASSERT_TRUE(dir.isValid());
   ASSERT_TRUE(QDir(dir.path()).mkdir("adir"));
@@ -537,13 +537,13 @@ TEST(DirectoryController, SpaceOpensQuickLookOnlyForImagesAndPlainText) {
     return controller.handleKey(" ");
   };
 
-  for (const auto* name : {"adir", "data.json", "readme.md", "bundle.tar.gz"}) {
+  for (const auto* name : {"adir", "data.json", "bundle.tar.gz"}) {
     SCOPED_TRACE(name);
     EXPECT_TRUE(pressSpaceOn(QString::fromLatin1(name)));  // consumed...
     EXPECT_FALSE(controller.quickLookOpen());              // ...but a no-op
     EXPECT_EQ(controller.cursorRow(), rowNamed(QString::fromLatin1(name)));
   }
-  for (const auto* name : {"note.txt", "photo.jpg"}) {
+  for (const auto* name : {"note.txt", "photo.jpg", "readme.md"}) {
     SCOPED_TRACE(name);
     ASSERT_TRUE(pressSpaceOn(QString::fromLatin1(name)));
     ASSERT_TRUE(QTest::qWaitFor([&] { return controller.quickLookOpen(); }, 1000));

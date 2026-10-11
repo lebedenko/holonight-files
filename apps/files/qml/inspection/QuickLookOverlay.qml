@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls as Controls
 import QtQuick.Window
+import QMarkdown 1.0
 import Holonight.Core
 import Holonight.Controls
 
@@ -104,6 +105,12 @@ Controls.Popup {
                 event.accepted = true;
         }
         Keys.onPressed: event => {
+            if (markdownLoader.item && (event.key === Qt.Key_J || event.key === Qt.Key_K || event.key === Qt.Key_Up || event.key === Qt.Key_Down) && event.modifiers === Qt.NoModifier) {
+                const direction = event.key === Qt.Key_J || event.key === Qt.Key_Down ? 1 : -1;
+                (markdownLoader.item as MarkdownScroller).scrollLine(direction);
+                event.accepted = true;
+                return;
+            }
             if (InspectionKeys.press(event.key, event.text, event.modifiers, event.isAutoRepeat, root.controller, true))
                 event.accepted = true;
         }
@@ -233,6 +240,14 @@ Controls.Popup {
                 }
             }
 
+            Loader {
+                id: markdownLoader
+                objectName: "quickLookMarkdownLoader"
+                anchors.fill: parent
+                active: root.controller.quickLookOpen && presentation.markdownFrame
+                sourceComponent: MarkdownScroller {}
+            }
+
             HnIcon {
                 id: compactIcon
                 objectName: "quickLookIcon"
@@ -317,6 +332,119 @@ Controls.Popup {
                 color: HoloniightPalette.textDisabled
                 rawText: qsTr("Close")
                 Accessible.ignored: true
+            }
+        }
+    }
+
+    component MarkdownScroller: Flickable {
+        id: markdownScroller
+        objectName: "quickLookMarkdown"
+        clip: true
+        flickableDirection: Flickable.VerticalFlick
+        boundsBehavior: Flickable.StopAtBounds
+        contentWidth: width
+        contentHeight: markdownView.contentHeight + 2 * root.cardPadding
+        // Retain the user's position while a refreshed document is being read and laid out.
+        property real retainedPosition: 0
+        property bool wasBusy: false
+        property string loadedSource: ""
+        property list<url> authorizedRoots: []
+        function syncDocument(): void {
+            const busy = root.preview.quickLookBusy;
+            if (busy && !wasBusy)
+                retainedPosition = contentY;
+            wasBusy = busy;
+            if (root.preview.hasText) {
+                authorizedRoots = root.preview.markdownFileRoots;
+                loadedSource = root.preview.markdownSource;
+                Qt.callLater(clampPosition);
+            }
+        }
+        Component.onCompleted: syncDocument()
+        Connections {
+            target: root.preview
+            function onChanged() {
+                markdownScroller.syncDocument();
+            }
+        }
+        onMovementEnded: retainedPosition = contentY
+        onContentYChanged: if (moving)
+            retainedPosition = contentY
+        function scrollLine(direction: int): void {
+            contentY = presentation.markdownScrollTarget(contentY, height, contentHeight, bodyMetrics.height, direction);
+            retainedPosition = contentY;
+        }
+        function clampPosition(): void {
+            if (!root.preview.quickLookBusy) {
+                contentY = presentation.markdownScrollTarget(retainedPosition, height, contentHeight, 0, 0);
+            }
+        }
+        onContentHeightChanged: Qt.callLater(clampPosition)
+        onHeightChanged: Qt.callLater(clampPosition)
+        TextMetrics {
+            id: bodyMetrics
+            font.family: HolonightTheme.uiFont
+            font.pointSize: HolonightTheme.bodySize
+            text: "Ag"
+        }
+        MarkdownView {
+            id: markdownView
+            objectName: "quickLookMarkdownView"
+            x: root.cardPadding
+            y: root.cardPadding
+            width: Math.max(1, markdownScroller.width - 2 * root.cardPadding)
+            markdown: markdownScroller.loadedSource
+            baseUrl: root.preview.markdownBaseUrl
+            resourcePolicy: MarkdownResourcePolicy {
+                allowedFileRoots: markdownScroller.authorizedRoots
+                allowedHttpsOrigins: []
+                allowQrc: false
+            }
+            style: MarkdownStyle {
+                bodyFont: bodyMetrics.font
+                bodyColor: HoloniightPalette.textPrimary
+                h1Font: Qt.font({
+                    family: HolonightTheme.uiFont,
+                    pointSize: HolonightTheme.headingSize,
+                    bold: true
+                })
+                h2Font: Qt.font({
+                    family: HolonightTheme.uiFont,
+                    pointSize: HolonightTheme.subheadingSize,
+                    bold: true
+                })
+                h3Font: Qt.font({
+                    family: HolonightTheme.uiFont,
+                    pointSize: HolonightTheme.bodySize * 1.1,
+                    bold: true
+                })
+                h4Font: Qt.font({
+                    family: HolonightTheme.uiFont,
+                    pointSize: HolonightTheme.bodySize,
+                    bold: true
+                })
+                h5Font: h4Font
+                h6Font: h4Font
+                h1Color: HoloniightPalette.textPrimary
+                h2Color: HoloniightPalette.textPrimary
+                h3Color: HoloniightPalette.textPrimary
+                h4Color: HoloniightPalette.textPrimary
+                h5Color: HoloniightPalette.textPrimary
+                h6Color: HoloniightPalette.textPrimary
+                codeBlockFont: Qt.font({
+                    family: HolonightTheme.monospaceFont,
+                    pointSize: HolonightTheme.monospaceFontSize
+                })
+                inlineCodeFont.family: HolonightTheme.monospaceFont
+                codeBlockColor: HoloniightPalette.textPrimary
+                linkColor: HoloniightPalette.accentBlue
+                quoteRuleColor: HoloniightPalette.borderSubtle
+                thematicBreakColor: HoloniightPalette.borderSubtle
+                quoteRuleThickness: HnMetrics.borderWidth
+                thematicBreakThickness: HnMetrics.borderWidth
+                blockSpacing: root.captionSpacing
+                listIndent: root.cardPadding * 2
+                quoteIndent: root.cardPadding
             }
         }
     }

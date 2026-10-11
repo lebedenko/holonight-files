@@ -53,7 +53,8 @@ TextPreviewResult readHead(QFile& file, qint64 maxBytes) {
   }
   result.was_truncated = result.total_size > bytes.size();
   const QByteArrayView loaded = result.was_truncated ? TextLines::trimIncompleteUtf8Tail(bytes) : QByteArrayView(bytes);
-  result.lines = TextLines::splitLines(TextLines::decodeUtf8(loaded));
+  result.source = TextLines::decodeUtf8(loaded);
+  result.lines = TextLines::splitLines(result.source);
   return result;
 }
 

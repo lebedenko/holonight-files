@@ -48,6 +48,7 @@ fetch_provider holonight-images ac11f23e9ff2d70b1c142b643bc2abb6dd69f6c1
 fetch_provider holonight-thumbnails d27addc044f277686850588147ec825c40c0f252
 fetch_provider holonight-system-services f93ae00fcb850426c433e4e9f97b569979f330d6
 fetch_provider holonight-search d12e441c06d1df87450514136c5a2d458d985ed3
+fetch_provider qmarkdown 595ca4fea32155766c2eafb3b670995d2ea75a2f
 task deps
 cp build/deps/provider-revisions.tsv build/ci-provenance/
 export LD_LIBRARY_PATH="$PWD/build/deps/prefix/lib"

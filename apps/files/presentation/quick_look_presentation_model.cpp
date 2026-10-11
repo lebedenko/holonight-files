@@ -151,11 +151,14 @@ QSizeF QuickLookPresentationModel::previewBounds() const {
 }
 
 void QuickLookPresentationModel::updateGeometry() {
-  const auto kind =
-      preview_ != nullptr
-          ? classify(preview_->hasEntry(), preview_->quickLookBusy(), preview_->mimeType(), preview_->quickLookText(),
-                     preview_->quickLookErrorKind() != PreviewService::PreviewErrorKind::None)
-          : Kind::None;
+  auto kind = preview_ != nullptr ? classify(preview_->hasEntry(), preview_->quickLookBusy(), preview_->mimeType(),
+                                             preview_->quickLookText(),
+                                             preview_->quickLookErrorKind() != PreviewService::PreviewErrorKind::None)
+                                  : Kind::None;
+  if (preview_ != nullptr && preview_->quickLookMarkdown() &&
+      preview_->quickLookErrorKind() == PreviewService::PreviewErrorKind::None) {
+    kind = Kind::Markdown;
+  }
   if (kind != Kind::Pending && kind != Kind::None) {
     retained_kind_ = kind;
     retained_source_size_ = preview_->documentSize();
@@ -206,4 +209,12 @@ void QuickLookPresentationModel::reportRequestedSize() {
   last_requested_size_ = pixels;
   ++requested_size_call_count_;
   preview_->setRequestedSize(PreviewService::PreviewConsumer::QuickLook, pixels);
+}
+
+// QML invokes this method on the overlay-owned presentation object.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+qreal QuickLookPresentationModel::markdownScrollTarget(qreal position, qreal viewportHeight, qreal contentHeight,
+                                                       qreal lineHeight, int direction) const {
+  return std::clamp(nonnegative(position) + (nonnegative(lineHeight) * direction), qreal{0},
+                    std::max(qreal{0}, nonnegative(contentHeight) - nonnegative(viewportHeight)));
 }

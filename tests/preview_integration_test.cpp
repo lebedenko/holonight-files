@@ -200,7 +200,7 @@ class PendingQuickLook : public testing::TestWithParam<bool> {};
 TEST_P(PendingQuickLook, EarlySpaceOpensPinnedLoadingThenResolvesSupportedOrUnsupported) {
   QTemporaryDir dir(fixturePattern("pending-quicklook"));
   ASSERT_TRUE(dir.isValid());
-  files_test::writeBytes(dir, GetParam() ? "a.txt" : "a.md", "hello\nworld\n");
+  files_test::writeBytes(dir, GetParam() ? "a.txt" : "a.json", GetParam() ? "hello\nworld\n" : "{\"a\": 1}\n");
   DirectoryController controller;
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));

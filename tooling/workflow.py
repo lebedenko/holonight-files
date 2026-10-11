@@ -53,9 +53,9 @@ def packages(config, location):
     return result
 
 
-def dependency_source(dep):
+def dependency_source(dep, previous):
     key = dep['source_variable']
-    source = Path(os.environ.get(key, ROOT.parent / dep['module'])).resolve()
+    source = Path(os.environ.get(key, previous.get('source', ROOT.parent / dep['module']))).resolve()
     if not (source / 'CMakeLists.txt').is_file():
         raise RuntimeError(f'Missing {dep["module"]} source: {source}. Set {key} to a local checkout, '
                            'or supply HOLONIGHT_DEPENDENCY_PREFIX. Sources are never downloaded.')
@@ -69,13 +69,15 @@ def prepare(config):
     if os.environ.get('HOLONIGHT_DEPENDENCY_PREFIX'):
         packages(config, location)
         return
-    # Preflight every source before doing any build.
-    sources = [(dep, dependency_source(dep)) for dep in config['dependencies']]
     state_path = ROOT / 'build/deps/provider-state.json'
     try:
         old_state = json.loads(state_path.read_text())
     except (OSError, ValueError):
         old_state = {}
+    # Remember successful source overrides; explicit environment overrides still win.
+    # Preflight every source before doing any build.
+    sources = [(dep, dependency_source(dep, old_state.get(dep['module'], {})))
+               for dep in config['dependencies']]
     state = {}
     revision_lines = []
     for dep, source in sources:
@@ -141,6 +143,11 @@ def refresh(config, preset='test'):
     if config.get('qml'):
         build = (ROOT / 'build' / preset).resolve()
         imports = [build, build / 'qml', configured_prefix(preset) / 'lib/qt6/qml']
+        cache = build / 'CMakeCache.txt'
+        if cache.is_file():
+            match = re.search(r'^QML_IMPORT_PATH:(?:STRING|UNINITIALIZED|PATH)=(.*)$', cache.read_text(), re.M)
+            if match:
+                imports += [Path(path) for path in match[1].split(';') if path]
         imports += [p.parent for p in build.rglob('qmldir')]
         text = '[General]\nno-cmake-calls=true\nbuildDir=' + str(build) + '\nimportPaths=' + ','.join(map(str, dict.fromkeys(imports))) + '\n'
         local = ROOT / '.cache/tooling/qmlls/.qmlls.ini'

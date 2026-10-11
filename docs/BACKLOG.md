@@ -255,3 +255,7 @@ and manual acceptance are tracked in [verification](sdd/sidebar-icons-demand-tex
   Extract current-folder enumeration, sort/hidden behavior, standard places and passive listing;
   preserve Files commands, editing, navigation, persistence and previews. Portal protocol and
   chooser behavior belong to the separate backend repository after the published provider handoff.
+
+## Markdown Quick Look
+
+Rendered Markdown Quick Look is locally complete with installed shared qmarkdown. Focused regressions, full quality checks, isolated installed runtime, payload fixtures and user-reported native acceptance passed. AI/viewer adoption and umbrella ownership remain separate. See [tasks](sdd/markdown-quick-look/TASKS.md) and [verification](sdd/markdown-quick-look/VERIFICATION.md).

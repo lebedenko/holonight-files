@@ -29,6 +29,13 @@ for file in /usr/bin/hn-files \
     exit 1
   fi
 done
+for file in /usr/lib/libQMarkdown.so.1 /usr/lib/qt6/qml/QMarkdown/libQMarkdownPlugin.so \
+  /usr/lib/qt6/qml/QMarkdown/qmldir /usr/lib/qt6/qml/QMarkdown/QMarkdown.qmltypes \
+  /usr/lib/qt6/qml/QMarkdown/MarkdownView.qml /usr/lib/qt6/qml/QMarkdown/Private/qmldir \
+  /usr/share/licenses/QMarkdown/LICENSE /usr/share/licenses/QMarkdown/cmark/COPYING; do
+  test -r "$file"
+  test -s "$file"
+done
 test -x /usr/bin/hn-files
 test ! -e /usr/bin/holonight-files
 test ! -L /usr/bin/holonight-files
@@ -39,7 +46,7 @@ while IFS= read -r -d '' file; do
     printf 'Development runtime path in %s\n' "$file" >&2
     exit 1
   fi
-done < <(find /usr/bin/hn-files /usr/lib -type f \( -name 'hn-files' -o -iname '*holonight*' \) -print0)
+done < <(find /usr/bin/hn-files /usr/lib -type f \( -name 'hn-files' -o -iname '*holonight*' -o -iname '*qmarkdown*' \) -print0)
 
 QT_QPA_PLATFORM=offscreen hn-files --version
 

@@ -13,6 +13,7 @@
 #include <QString>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <QtQml/qqmlregistration.h>
 
 #include <atomic>
@@ -86,6 +87,10 @@ class PreviewService : public QObject {
   Q_PROPERTY(QuickLookEligibility quickLookEligibility READ quickLookEligibility NOTIFY changed)
   Q_PROPERTY(bool quickLookBusy READ quickLookBusy NOTIFY changed)
   Q_PROPERTY(bool quickLookText READ quickLookText NOTIFY changed)
+  Q_PROPERTY(bool quickLookMarkdown READ quickLookMarkdown NOTIFY changed)
+  Q_PROPERTY(QString markdownSource READ markdownSource NOTIFY changed)
+  Q_PROPERTY(QUrl markdownBaseUrl READ markdownBaseUrl NOTIFY changed)
+  Q_PROPERTY(QList<QUrl> markdownFileRoots READ markdownFileRoots NOTIFY changed)
   Q_PROPERTY(PreviewErrorKind quickLookErrorKind READ quickLookErrorKind NOTIFY changed)
   Q_PROPERTY(QString quickLookErrorMessage READ quickLookErrorMessage NOTIFY changed)
   Q_PROPERTY(bool hasText READ hasText NOTIFY changed)
@@ -136,6 +141,10 @@ class PreviewService : public QObject {
   [[nodiscard]] QuickLookEligibility quickLookEligibility() const;
   [[nodiscard]] bool quickLookBusy() const { return busy_ || text_busy_; }
   [[nodiscard]] bool quickLookText() const;
+  [[nodiscard]] bool quickLookMarkdown() const;
+  [[nodiscard]] QString markdownSource() const { return quickLookMarkdown() ? text_.source : QString(); }
+  [[nodiscard]] QUrl markdownBaseUrl() const { return QUrl::fromLocalFile(path_); }
+  [[nodiscard]] QList<QUrl> markdownFileRoots() const;
   [[nodiscard]] PreviewErrorKind quickLookErrorKind() const { return quick_look_error_.kind; }
   [[nodiscard]] QString quickLookErrorMessage() const { return quick_look_error_.message; }
   [[nodiscard]] bool hasText() const { return has_text_; }

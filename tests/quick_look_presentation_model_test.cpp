@@ -288,3 +288,29 @@ TEST_F(QuickLookPresentationTest, SvgFractionalGeometryAndDprDriveSharpPreview) 
       QTest::qWaitFor([&] { return !PreviewServiceTestAccess::resizePending(service()) && !service().busy(); }));
   EXPECT_EQ(Access::requestedSizeCallCount(model()), requests);
 }
+
+TEST(QuickLookPresentationModel, MarkdownScrollTargetsStayWithinViewportBounds) {
+  QuickLookPresentationModel model;
+  EXPECT_EQ(model.markdownScrollTarget(0, 100, 300, 20, -1), 0);
+  EXPECT_EQ(model.markdownScrollTarget(0, 100, 300, 20, 1), 20);
+  EXPECT_EQ(model.markdownScrollTarget(190, 100, 300, 20, 1), 200);
+  EXPECT_EQ(model.markdownScrollTarget(200, 100, 150, 0, 0), 50);
+  EXPECT_EQ(model.markdownScrollTarget(200, 100, 50, 20, 1), 0);
+}
+
+TEST(QuickLookPresentationModel, MarkdownUsesTheFullFrameBeforeSourceLoading) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  const auto path = files_test::writeFile(dir, "README.md", "# Heading\n");
+  PreviewService service;
+  QuickLookPresentationModel model;
+  configure(model);
+  model.setPreview(&service);
+  selectFile(service, path);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !service.busy(); }));
+  ASSERT_FALSE(service.hasText());
+  EXPECT_EQ(model.kind(), QuickLookPresentationModel::Kind::Markdown);
+  EXPECT_TRUE(model.markdownFrame());
+  EXPECT_GT(model.frameSize().width(), 800);
+  EXPECT_GT(model.frameSize().height(), 600);
+}
