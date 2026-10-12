@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls as Controls
 import QtQuick.Window
-import QMarkdown 1.0
+import QMarkdown 1.1
 import Holonight.Core
 import Holonight.Controls
 
@@ -401,50 +401,55 @@ Controls.Popup {
                 allowQrc: false
             }
             style: MarkdownStyle {
+                preset: HoloniightPalette.surface.hslLightness < 0.5 ? MarkdownStyle.PolishedDark : MarkdownStyle.PolishedLight
                 bodyFont: bodyMetrics.font
                 bodyColor: HoloniightPalette.textPrimary
-                h1Font: Qt.font({
+                headings.h1.font: Qt.font({
                     family: HolonightTheme.uiFont,
                     pointSize: HolonightTheme.headingSize,
                     bold: true
                 })
-                h2Font: Qt.font({
+                headings.h2.font: Qt.font({
                     family: HolonightTheme.uiFont,
                     pointSize: HolonightTheme.subheadingSize,
                     bold: true
                 })
-                h3Font: Qt.font({
+                headings.h3.font: Qt.font({
                     family: HolonightTheme.uiFont,
                     pointSize: HolonightTheme.bodySize * 1.1,
                     bold: true
                 })
-                h4Font: Qt.font({
+                headings.h4.font: Qt.font({
                     family: HolonightTheme.uiFont,
                     pointSize: HolonightTheme.bodySize,
                     bold: true
                 })
-                h5Font: h4Font
-                h6Font: h4Font
-                h1Color: HoloniightPalette.textPrimary
-                h2Color: HoloniightPalette.textPrimary
-                h3Color: HoloniightPalette.textPrimary
-                h4Color: HoloniightPalette.textPrimary
-                h5Color: HoloniightPalette.textPrimary
-                h6Color: HoloniightPalette.textPrimary
-                codeBlockFont: Qt.font({
+                headings.h5.font: headings.h4.font
+                headings.h6.font: headings.h4.font
+                headings.h1.color: HoloniightPalette.textPrimary
+                headings.h2.color: HoloniightPalette.textPrimary
+                headings.h3.color: HoloniightPalette.textPrimary
+                headings.h4.color: HoloniightPalette.textPrimary
+                headings.h5.color: HoloniightPalette.textPrimary
+                headings.h6.color: HoloniightPalette.textPrimary
+                codeBlock.font: Qt.font({
                     family: HolonightTheme.monospaceFont,
                     pointSize: HolonightTheme.monospaceFontSize
                 })
-                inlineCodeFont.family: HolonightTheme.monospaceFont
-                codeBlockColor: HoloniightPalette.textPrimary
+                inlineCode.font.family: HolonightTheme.monospaceFont
+                codeBlock.color: HoloniightPalette.textPrimary
+                inlineCode.backgroundColor: HoloniightPalette.surfaceRaised
+                codeBlock.backgroundColor: HoloniightPalette.surfaceElevated
+                codeBlock.borderColor: HoloniightPalette.borderSubtle
+                headings.h1.separatorColor: HoloniightPalette.borderSubtle
+                headings.h2.separatorColor: HoloniightPalette.borderSubtle
+                headings.h3.separatorColor: HoloniightPalette.borderSubtle
+                headings.h4.separatorColor: HoloniightPalette.borderSubtle
+                headings.h5.separatorColor: HoloniightPalette.borderSubtle
+                headings.h6.separatorColor: HoloniightPalette.borderSubtle
                 linkColor: HoloniightPalette.accentBlue
                 quoteRuleColor: HoloniightPalette.borderSubtle
                 thematicBreakColor: HoloniightPalette.borderSubtle
-                quoteRuleThickness: HnMetrics.borderWidth
-                thematicBreakThickness: HnMetrics.borderWidth
-                blockSpacing: root.captionSpacing
-                listIndent: root.cardPadding * 2
-                quoteIndent: root.cardPadding
             }
         }
     }

@@ -2935,7 +2935,9 @@ TEST(Files, MarkdownQuickLookWrapsScrollsAndReleasesTheView) {
   QTemporaryDir dir;
   ASSERT_TRUE(dir.isValid());
   QByteArray source(
-      "# Heading\n\n**strong** and *emphasis* with `code` and [inert](https://example.invalid).\n\n> quote\n\n---\n\n");
+      "# Heading\n\n## Subheading\n\n```cpp\nconst int answer = 42;\n```\n\n    indented code\n\n**strong** and "
+      "*emphasis* with `code` and [inert](https://example.invalid).\n\n`inline code with enough words to wrap across "
+      "multiple lines in a narrow preview while retaining its background`\n\n> quote\n\n---\n\n");
   for (int i = 0; i < 80; ++i) {
     source += "A paragraph long enough to wrap when the preview becomes narrow, preserving rendered formatting.\n\n";
   }
@@ -2969,6 +2971,20 @@ TEST(Files, MarkdownQuickLookWrapsScrollsAndReleasesTheView) {
   EXPECT_FALSE(rendered.contains(QStringLiteral("**strong**")));
   EXPECT_TRUE(formatted);
   EXPECT_EQ(descendantsNamed(view, QStringLiteral("quoteRule")).size(), 1);
+  int visibleSeparators = 0;
+  for (auto* separator : descendantsNamed(view, QStringLiteral("headingSeparator"))) {
+    if (separator->height() > 0) {
+      ++visibleSeparators;
+      EXPECT_EQ(separator->property("color").value<QColor>(), paletteColor(harness.engine, "borderSubtle"));
+    }
+  }
+  EXPECT_EQ(visibleSeparators, 2);
+  const auto surfaces = descendantsNamed(view, QStringLiteral("codeSurface"));
+  ASSERT_EQ(surfaces.size(), 2);
+  for (auto* surface : surfaces) {
+    EXPECT_EQ(surface->property("color").value<QColor>(), paletteColor(harness.engine, "surfaceElevated"));
+    EXPECT_GT(surface->property("radius").toReal(), 0);
+  }
   const auto capture = qEnvironmentVariable("FILES_CAPTURE_PREFIX");
   if (!capture.isEmpty()) {
     EXPECT_TRUE(harness.window->grabWindow().save(capture + "-markdown.png"));
@@ -2976,6 +2992,9 @@ TEST(Files, MarkdownQuickLookWrapsScrollsAndReleasesTheView) {
   const auto wideHeight = view->property("contentHeight").toReal();
   harness.window->resize({500, 500});
   ASSERT_TRUE(QTest::qWaitFor([&] { return view->property("contentHeight").toReal() > wideHeight; }));
+  if (!capture.isEmpty()) {
+    EXPECT_TRUE(harness.window->grabWindow().save(capture + "-markdown-narrow.png"));
+  }
   const int pinned = harness.controller.cursorRow();
   const auto lineHeight = QFontMetricsF(style->property("bodyFont").value<QFont>()).height();
   QTest::keyClick(harness.window, Qt::Key_J);
@@ -3085,14 +3104,15 @@ TEST(Files, MarkdownQuickLookStyleTracksThemeChanges) {
   ASSERT_TRUE(dir.isValid());
   const files_test::ScopedEnvironmentVariable configGuard("XDG_CONFIG_HOME", dir.filePath("config"));
   ASSERT_TRUE(QDir().mkpath(dir.filePath("config/holonight")));
-  const auto appearance = [&](const QByteArray& scheme) {
-    return files_test::writeFile(dir, "config/holonight/appearance.toml",
-                                 "version = 1\n[theme]\nscheme = \"" + scheme + "\"\naccent = \"blue\"\n" +
-                                     "[typography]\nui_family = \"sans-serif\"\nui_size = 12\nmonospace_family = "
-                                     "\"monospace\"\nmonospace_size = 12\ntitle_family = \"sans-serif\"\ntitle_size = "
-                                     "20\ndisplay_family = \"sans-serif\"\ndisplay_size = 24\n" +
-                                     "[icons]\ntheme = \"HoloNight\"\nfallback = \"Papirus\"\ncursor = "
-                                     "\"default\"\n[layout]\nscale = 1.0\n[shape]\nstyle = \"inherit\"\nscale = 1.0\n");
+  const auto appearance = [&](const QByteArray& scheme, int size = 12) {
+    QByteArray contents =
+        "version = 1\n[theme]\nscheme = \"" + scheme + "\"\naccent = \"blue\"\n" +
+        "[typography]\nui_family = \"sans-serif\"\nui_size = 12\nmonospace_family = \"monospace\"\n"
+        "monospace_size = 12\ntitle_family = \"sans-serif\"\ntitle_size = 20\ndisplay_family = \"sans-serif\"\n"
+        "display_size = 24\n[icons]\ntheme = \"HoloNight\"\nfallback = \"Papirus\"\ncursor = \"default\"\n"
+        "[layout]\nscale = 1.0\n[shape]\nstyle = \"inherit\"\nscale = 1.0\n";
+    contents.replace("size = 12", QByteArray("size = ") + QByteArray::number(size));
+    return files_test::writeFile(dir, "config/holonight/appearance.toml", contents);
   };
   ASSERT_FALSE(appearance("holonight-dark").isEmpty());
   ASSERT_TRUE(QDir(dir.path()).mkdir("documents"));
@@ -3104,14 +3124,62 @@ TEST(Files, MarkdownQuickLookStyleTracksThemeChanges) {
   ASSERT_NE(view, nullptr);
   auto* style = view->property("style").value<QObject*>();
   ASSERT_NE(style, nullptr);
-  const auto dark = style->property("bodyColor").value<QColor>();
-  ASSERT_FALSE(appearance("holonight-light").isEmpty());
   auto* theme = harness.engine.singletonInstance<QObject*>("Holonight.Core", "HolonightTheme");
   ASSERT_NE(theme, nullptr);
+  const auto initialFont = style->property("bodyFont").value<QFont>();
+  const auto initialHeading = style->property("h1Font").value<QFont>();
+  QByteArray previousScheme("holonight-dark");
+  for (const auto& scheme : {
+           QByteArray("holonight-dark"),
+           QByteArray("holonight-light"),
+           QByteArray("holonight-dark"),
+           QByteArray("holonight-latte"),
+       }) {
+    SCOPED_TRACE(scheme.constData());
+    const auto previousColor = style->property("bodyColor").value<QColor>();
+    ASSERT_FALSE(appearance(scheme).isEmpty());
+    ASSERT_TRUE(QMetaObject::invokeMethod(theme, "reload"));
+    ASSERT_TRUE(QTest::qWaitFor(
+        [&] { return style->property("bodyColor").value<QColor>() == paletteColor(harness.engine, "textPrimary"); }));
+    if (scheme != previousScheme) {
+      ASSERT_TRUE(QTest::qWaitFor([&] { return style->property("bodyColor").value<QColor>() != previousColor; }));
+    }
+    previousScheme = scheme;
+    const bool dark = scheme == "holonight-dark";
+    EXPECT_EQ(style->property("preset").toInt(), dark ? 2 : 1);
+    EXPECT_EQ(style->property("codeBlockColor").value<QColor>(), paletteColor(harness.engine, "textPrimary"));
+    EXPECT_EQ(style->property("linkColor").value<QColor>(), paletteColor(harness.engine, "accentBlue"));
+    EXPECT_EQ(style->property("quoteRuleColor").value<QColor>(), paletteColor(harness.engine, "borderSubtle"));
+    EXPECT_EQ(style->property("thematicBreakColor").value<QColor>(), paletteColor(harness.engine, "borderSubtle"));
+    auto* headings = style->property("headings").value<QObject*>();
+    ASSERT_NE(headings, nullptr);
+    for (const auto* name : {"h1", "h2", "h3", "h4", "h5", "h6"}) {
+      auto* heading = headings->property(name).value<QObject*>();
+      ASSERT_NE(heading, nullptr);
+      EXPECT_EQ(heading->property("color").value<QColor>(), paletteColor(harness.engine, "textPrimary"));
+      EXPECT_EQ(heading->property("separatorColor").value<QColor>(), paletteColor(harness.engine, "borderSubtle"));
+      EXPECT_EQ(heading->property("separatorVisible").toBool(), QByteArray(name) == "h1" || QByteArray(name) == "h2");
+    }
+    auto* code = style->property("codeBlock").value<QObject*>();
+    auto* inlineCode = style->property("inlineCode").value<QObject*>();
+    ASSERT_NE(code, nullptr);
+    ASSERT_NE(inlineCode, nullptr);
+    EXPECT_EQ(code->property("backgroundColor").value<QColor>(), paletteColor(harness.engine, "surfaceElevated"));
+    EXPECT_EQ(code->property("borderColor").value<QColor>(), paletteColor(harness.engine, "borderSubtle"));
+    EXPECT_EQ(inlineCode->property("backgroundColor").value<QColor>(), paletteColor(harness.engine, "surfaceRaised"));
+    EXPECT_EQ(code->property("horizontalPadding").toReal(), 12);
+    EXPECT_EQ(code->property("verticalPadding").toReal(), 12);
+    EXPECT_GT(code->property("borderWidth").toReal(), 0);
+    EXPECT_GT(code->property("cornerRadius").toReal(), 0);
+    EXPECT_GT(inlineCode->property("cornerRadius").toReal(), 0);
+    EXPECT_EQ(style->property("blockSpacing").toReal(), 12);
+    EXPECT_EQ(harness.window->findChild<QQuickItem*>("quickLookMarkdownView"), view);
+  }
+  ASSERT_FALSE(appearance("holonight-latte", 16).isEmpty());
   ASSERT_TRUE(QMetaObject::invokeMethod(theme, "reload"));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return style->property("bodyColor").value<QColor>() != dark; }));
-  EXPECT_EQ(style->property("bodyColor").value<QColor>(), paletteColor(harness.engine, "textPrimary"));
-  EXPECT_EQ(style->property("codeBlockColor").value<QColor>(), paletteColor(harness.engine, "textPrimary"));
-  EXPECT_EQ(style->property("linkColor").value<QColor>(), paletteColor(harness.engine, "accentBlue"));
-  EXPECT_EQ(style->property("quoteRuleColor").value<QColor>(), paletteColor(harness.engine, "borderSubtle"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return style->property("bodyFont").value<QFont>() != initialFont; }));
+  EXPECT_EQ(style->property("bodyFont").value<QFont>().pointSizeF(), 16);
+  EXPECT_NE(style->property("h1Font").value<QFont>(), initialHeading);
+  EXPECT_EQ(style->property("codeBlockFont").value<QFont>().pointSizeF(), 16);
+  EXPECT_EQ(harness.window->findChild<QQuickItem*>("quickLookMarkdownView"), view);
 }

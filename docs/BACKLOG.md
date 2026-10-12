@@ -259,3 +259,5 @@ and manual acceptance are tracked in [verification](sdd/sidebar-icons-demand-tex
 ## Markdown Quick Look
 
 Rendered Markdown Quick Look is locally complete with installed shared qmarkdown. Focused regressions, full quality checks, isolated installed runtime, payload fixtures and user-reported native acceptance passed. AI/viewer adoption and umbrella ownership remain separate. See [tasks](sdd/markdown-quick-look/TASKS.md) and [verification](sdd/markdown-quick-look/VERIFICATION.md).
+
+QMarkdown 1.1 Polished adoption is implemented with live HoloNight fonts/colors. Focused theme/typography, surface, scrolling and resource regressions, dark/light visual inspection and user-reported native acceptance passed; isolated installed-runtime acceptance and all full quality gates passed. See the same SDD cycle for current evidence.
