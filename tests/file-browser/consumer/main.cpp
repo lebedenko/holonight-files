@@ -74,7 +74,9 @@ DirectoryListing {
     return 4;
   }
   auto* view = qobject_cast<QQuickItem*>(object.get());
-  if (!view) return 5;
+  if (view == nullptr) {
+    return 5;
+  }
   view->setProperty("model", QVariant::fromValue(&sorted));
   view->setProperty("currentIndex", 1);
   QQuickWindow window;
@@ -82,8 +84,12 @@ DirectoryListing {
   view->setParentItem(window.contentItem());
   window.show();
   QCoreApplication::processEvents();
-  if (view->property("selectedPaths").toStringList() != QStringList{"/explicit"}) return 6;
-  if (view->property("count").toInt() != 2) return 7;
+  if (view->property("selectedPaths").toStringList() != QStringList{"/explicit"}) {
+    return 6;
+  }
+  if (view->property("count").toInt() != 2) {
+    return 7;
+  }
   view->setParentItem(nullptr);
 #endif
   return 0;
