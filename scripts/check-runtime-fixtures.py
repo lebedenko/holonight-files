@@ -46,7 +46,7 @@ chmod 755 /usr/bin/hn-files
 for name, (setup, expected_error) in CASES.items():
     # Only fixture setup is privileged. The real verifier always runs as files-test.
     command = [
-        os.environ.get("FILES_CONTAINER_RUNTIME", "docker"), "run", "--rm", "--platform", "linux/amd64", "--network", "none", "--user", "root",
+        os.environ.get("FILES_CONTAINER_RUNTIME", "docker"), "run", "--rm", "--pull=never", "--platform", "linux/amd64", "--network", "none", "--user", "root",
         IMAGE, "bash", "-euc",
         setup + "\nexec runuser -u files-test -- bash scripts/isolated-runtime.sh",
     ]

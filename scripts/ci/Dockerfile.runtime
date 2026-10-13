@@ -1,10 +1,6 @@
-# Reuse the exact Qt runtime used to build providers (their private Qt ABI matters).
-ARG FILES_CI_IMAGE=ghcr.io/lebedenko/holonight-shell-ci@sha256:4a1a177988c441c523bd31952a58953343ac8e6f031c7563e5b1e90ffb7d8bd6
+# Installed payload atop the same immutable qualified environment; no acquisition.
+ARG FILES_CI_IMAGE=ghcr.io/lebedenko/holonight-deps@sha256:37ca051c39d1688d6413c47d94b8c0f221152dac6981ec67d155f2c43ea17b40
 FROM ${FILES_CI_IMAGE}
-# Apply the same checksum-verified supplements as the build container, offline.
-COPY packages/ /ci/packages/
-COPY packages.json install-runtime-tools.py /ci/
-RUN python3 /ci/install-runtime-tools.py
 COPY --chown=root:root payload/usr/ /usr/
 COPY check/ /opt/check/
 RUN useradd -m files-test \

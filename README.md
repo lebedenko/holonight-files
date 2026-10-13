@@ -245,16 +245,16 @@ Requires C++23, Qt 6.11+ (including the Svg component), CMake 3.25+, Ninja,
 Task, libexif (via pkg-config), tomlplusplus 3.4+ (shared library, CMake config), and installed HolonightQt::Core /
 HolonightQt::Controls. Tests use Qt Test and GTest. Checks need clang-format,
 clang-tidy (run-clang-tidy), REUSE, desktop-file-utils and Python 3.
-`task isolated-runtime-check` additionally needs Docker. It builds the legacy development container
-image, snapshots the current working sources (including nonignored untracked files),
-and builds providers and Files inside that image before verifying its installed payload.
-Host build directories are preserved. Sources, image IDs and logs are retained under
-`build/container-runtime.*`. Provider source overrides and `JOBS` /
-`CMAKE_BUILD_PARALLEL_LEVEL` are supported; parallelism defaults to four.
-On Arch, the [CI Dockerfile](packaging/Dockerfile.ci) lists the packages.
+`task ci:prepare` explicitly acquires the qualified immutable Arch/REUSE images and exact
+provider sources, builds installed providers unprivileged, and records hash-validated
+compatibility evidence under `build/ci-prepared`. `task ci` consumes that preparation
+in fresh offline containers with read-only inputs and `--pull=never`. Both Docker and
+Podman are supported. `task isolated-runtime-check` uses the same build/runtime lane;
+prepare first. Logs, versions and installed payload evidence remain under `build/ci`.
+QMarkdown >=1.1 is installed separately in the qualified runtime image.
 
 ```sh
-task deps                 # builds sibling providers locally, without source changes
+task deps                 # prepares supplied local providers; validates installed prerequisites
 task build
 task run
 # Ctrl+F toggles fullscreen, Escape leaves fullscreen (preserving tiling), q quits
@@ -269,7 +269,8 @@ task license-check
 task install-check
 task check                # (alias: verify) build×2, test, format-check, lint, license-check, install-check, QML policy/metadata, in order
 task visual-check         # captures under build/visual for inspection
-task isolated-runtime-check  # builds in Docker, verifies the installed payload without network or host mounts
+task ci:prepare              # explicit image/source acquisition and installed provider preparation
+task isolated-runtime-check  # prepared offline build, installed runtime and verifier fixtures
 task clean                   # removes build/{debug,release,test}; preserves build/deps and check evidence
 
 # Coordinated system installation/removal is owned by the umbrella:
@@ -284,9 +285,8 @@ one positional argument is rejected.
 
 Provider defaults are ../holonight-config and ../holonight-qt. Override their
 locations with HOLONIGHT_CONFIG_SOURCE and HOLONIGHT_QT_SOURCE for `task deps`.
-Builds and the staging prefix live under build/deps. Files and dependency builds
-use CMake/Ninja automatic parallelism by default, including in CI. Ninja chooses
-its worker count; this is not necessarily exactly the logical CPU count.
+Builds and the staging prefix live under build/deps. Files and dependency builds default to two jobs, including in CI. Set JOBS for
+an explicit worker limit.
 Dependency providers remain sequential because later providers use earlier
 installations. `task check`, `task lint`, and tidy's prerequisite build also run
 in sequence, while each build or analysis stage can use the available CPUs.
@@ -300,21 +300,16 @@ JOBS=2 task deps                        # explicit provider limit; overrides CMa
 cmake --build --preset debug --parallel 2  # direct CMake override
 ```
 
-Unset or empty `JOBS` adds no parallel option, so CMake's environment override
-or Ninja's default applies. `JOBS` only affects dependency builds.
-`run-clang-tidy` keeps its default of all detected CPUs: compiler job limits
-(`JOBS`, `CMAKE_BUILD_PARALLEL_LEVEL`, or build `--parallel`) do not limit tidy
-workers. See the [build parallelism verification](docs/sdd/automatic-parallelism/VERIFICATION.md)
-for observed results; automatic scheduling does not promise a specific speedup.
-
-Override HOLONIGHT_DEPENDENCY_PREFIX and
-HOLONIGHT_QML_IMPORT_PATH as Task variables for an existing installation.
-Direct CMake users can set those cache variables with `cmake --preset debug
--D...`; CMAKE_PREFIX_PATH and QML_IMPORT_PATH select providers without being overridden by generic CMake. The
-debug/release/test presets default to the local prefix. Task run/test set the
-installed QML and library search paths. Each build checks the selected Config and Qt provider
-Git revisions against `build/deps/provider-revisions.tsv`; changed providers are rebuilt before
-configuration, while unchanged providers are reused.
+Provider and application builds default to two jobs; set `JOBS` to an explicit limit.
+Tidy checks each source once against the selected compilation database. Internal
+providers resolve only from `HOLONIGHT_DEPENDENCY_PREFIX` (or approved CMake prefixes),
+while external libraries use `HOLONIGHT_EXTERNAL_PREFIX` or normal system discovery.
+Set these as environment variables for Task commands or cache variables for direct CMake.
+`task deps` reuses compatible source/toolchain/package identities and archives incompatible
+artifacts. Configure, build and test validate installed dependencies without acquisition
+or provider preparation. Core-only builds need no internal providers; Quick-only builds
+require HolonightQt and its transitive Config. Use `HOLONIGHT_BUILD_FEATURES='BUILD_FILES_APP=OFF BUILD_FILE_BROWSER_QUICK=OFF'`
+with Task commands, or the corresponding CMake options for component builds.
 
 System installation and removal are owned by the umbrella's `scripts/install.sh` and
 `scripts/uninstall.sh`. The installer rejects unmanaged payload collisions; it does not
@@ -322,16 +317,16 @@ adopt or remove legacy Files installations. The uninstaller preserves modified o
 Standalone builds and `DESTDIR` staging remain supported. Complete onboarding requires a
 published Files revision and an explicit umbrella pin update.
 
-`task ci` rehearses every push validation lane in fresh snapshots, using the same
-repository scripts, immutable SDK/REUSE 6.2.0 images and checksum-pinned supplements
-as GitHub. Install Python 3 and Docker (or Podman), with daemon/registry access and
-network access for the six pinned providers. Run it from this repository; current
-tracked edits and non-ignored new inputs are included. Add reported new files before
-pushing. Existing development commands remain available.
+`task ci` rehearses all three push validation lanes from current tracked edits and
+non-ignored new inputs after `task ci:prepare`. Preparation hashes the provider artifacts,
+source revisions and environment evidence. Stale or tampered preparation is rejected;
+explicit preparation archives it before rebuilding. `--provider-source-root /path/to/umbrella`
+on `scripts/ci/run.py --prepare` uses exact commits from local repositories instead of
+cloning remotes. Add reported new source files before committing.
 
 The build lane runs full `task check` as unprivileged files-test in C.UTF-8, then
 additional en_US.UTF-8 tests. The host builds its captured installed payload and
-runs the runtime image plus all nine verifier fixtures without networking or host
+runs the runtime image plus all runtime verifier fixtures without networking or host
 mounts. A separate lane builds both filesystem executables and requires namespace
 coverage offline. Where AppArmor is active, the host must already have the supplied
 holonight-files-isolation profile loaded; the launcher never changes host policy.
@@ -648,4 +643,10 @@ selection. Consumers own keyboard commands. Call `shutdown()` and retain readers
 Provider regression and installed external C++/QML consumer tests are included in `BUILD_TESTING`.
 See [provider SDD](docs/sdd/filechooser-provider/README.md) for the extraction contract and verification.
 
-Files consumes installed shared [qmarkdown](https://github.com/lebedenko/qmarkdown) ≥1.1. Markdown Quick Look uses Polished spacing and decoration with live HoloNight typography and palette colors. Set `QMARKDOWN_SOURCE` to a local checkout when running `task deps`. Subsequent builds reuse the last successfully configured provider sources, so `task run` does not require exporting the override again. Explicit source overrides take precedence; CI pins `b71740c7e0f26b0709f5e929a79e8d01dba56071`. Build the provider with the same Qt/toolchain as Files. Its public QML/CMake API is compatible through 1.x; private C++ ABI is excluded. Runtime deployment needs `libQMarkdown`, the QMarkdown QML plugin/metadata and installed MIT/cmark notices. Passive FileBrowser consumers do not require qmarkdown.
+Files consumes installed shared [qmarkdown](https://github.com/lebedenko/qmarkdown) ≥1.1.
+Markdown Quick Look retains the public/private QML imports. Discover the installed package
+from the system or `HOLONIGHT_EXTERNAL_PREFIX`. `QMARKDOWN_SOURCE` is used exclusively
+by explicit `task deps` preparation; ordinary commands never build it. The package must
+match Files' Qt/toolchain and supply its library, QML plugin/metadata and MIT/cmark notices.
+The qualified runtime owns this external package; Files stages no QMarkdown payload.
+Passive FileBrowser consumers do not require QMarkdown.

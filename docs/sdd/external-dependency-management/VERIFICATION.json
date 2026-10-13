@@ -1,0 +1,216 @@
+{
+  "work_package": "EDM-015",
+  "verification_date": "2026-10-13",
+  "status": "passed locally",
+  "audit_baseline": "e8af0a8312133609f2ddd30e87d084be78971a8c",
+  "implementation_baseline": "b1022c9297712878114ba3d827f970d7b16f3ce6",
+  "umbrella_checkpoint": "5438cecea111cd54de33b6bdb1bf477555707811",
+  "cleanup_commit": "d94aa5298d46394c1168c8568096be88279e81c5",
+  "preparation_identity": {
+    "images": {
+      "build": "ghcr.io/lebedenko/holonight-deps@sha256:37ca051c39d1688d6413c47d94b8c0f221152dac6981ec67d155f2c43ea17b40",
+      "licensing": "docker.io/fsfe/reuse@sha256:85462a75c0f8efda09ddd190b92816b70e7662577c8427429e11e1b9f25a992e"
+    },
+    "platform": "linux/amd64",
+    "providers": {
+      "holonight-config": "0ccd25f323662f50a47bb048be636160f2b7c135",
+      "holonight-system-services": "70614eb70329af7014853c2973e5624acf0b251e",
+      "holonight-qt": "7c3ce074a8c2e02e4ee8cad8cd19eb8627aa4f68",
+      "holonight-images": "ae827d78db9cc21f9537c27f50f49baf879324da",
+      "holonight-thumbnails": "c9ae0ad9a64e8ce28ee669b5463ef1bec74bc16d",
+      "holonight-search": "5e71fd7c6494084b4fcc1b5b7a8df9bb2e690bdc"
+    },
+    "inputs": {
+      "tooling/VERSION": "c28fcca53637bc88e124af1725df13cb98c69dedefd62fb3cdbe1cdb6b760624",
+      "tooling/module.json": "69eace4c194cec49f0a22e78dd575c31e2d19f9a437c10524c07ff34551bd82a",
+      "tooling/dependencies.cmake": "a0bb743027dfa82c5a429f498aa9a3b041a1531598575f5a68e86e7c41e9c354",
+      "tooling/providers.cmake": "5d6e7aae9f7f6874d9fa3cf5efca17cab8c3df88ea3b312633ece6341b592876",
+      "tooling/external.py": "2e87dc012d7cdda7235d5ea2e311a2a49272ff82eac5cf3ccec7841ec610df27",
+      "tooling/workflow.py": "6c9d0a80396e61072509437cd39168caf11ca31c8abd8259f50ce2c55434837e",
+      "tooling/external-packages.json": "fbe02f85a17db3583b02fb48659ccfb54e77b0480f76eb23c4a425353cc350a3",
+      "CMakeLists.txt": "f0a37521e769ee250e3759f6b0342b840b60ae7b78b83e0f1ed7dfc875808e84",
+      "CMakePresets.json": "d355717b4e7aee0c7fc02c1cffc762161829c72b1f88416170de46da8a2ca95f",
+      "Taskfile.yml": "fff3e01eda644a62d51df334070f9d67ad4223575f337582b481cb3c3b920495",
+      "scripts/ci/lane.sh": "0ef0fc11ee1a2e1dd5056cd7a03fe637edd7ccd36157fa355941cf3a11fc9682",
+      "scripts/ci/run.py": "c99f877095d2fdeaf76b81ec380d720e72f043cbfcc530ed044bd03fb23d0e5e",
+      "scripts/workflow.py": "19e84f1c1d60e7be5e2505a55c194b9ade7b05559c6705ee14993482d6e4e7c4"
+    }
+  },
+  "prepared_manifest_sha256": "476d422981efe49ce698e6a3c851953f35a0f77cf8cdb118ef4025343d42b965",
+  "image_ids": {
+    "build": "sha256:51bb1aed43c0ad4e9336ed49962862ec78293f4380fd05e73b954e88c6c479c7",
+    "licensing": "sha256:2575b4ad3a736a14323c7705b708e0027109930a1511cce4e65cd09b9dfc1cc4"
+  },
+  "packages": {
+    "qt6-base": "6.11.2-3",
+    "qt6-declarative": "6.11.2-2",
+    "qt6-svg": "6.11.2-1",
+    "gtest": "1.18.0-1",
+    "qmarkdown": "1.1.0-1",
+    "tomlplusplus": "3.4.0-2",
+    "gcc": "16.2.1+r23+gd564253eb6c8-1",
+    "clang": "22.1.8-1",
+    "cmake": "4.4.3-2",
+    "ninja": "1.13.2-3",
+    "go-task": "3.53.1-1",
+    "reuse": "6.2.0-2",
+    "libexif": "0.6.26-1"
+  },
+  "provider_options": {
+    "holonight-config": [
+      "-DBUILD_TESTING=OFF"
+    ],
+    "holonight-images": [
+      "-DBUILD_TESTING=OFF"
+    ],
+    "holonight-qt": [
+      "-DBUILD_TESTS=OFF",
+      "-DBUILD_DEMO=OFF",
+      "-DBUILD_CONTROLS_GALLERY=OFF",
+      "-DBUILD_WAYLAND=OFF"
+    ],
+    "holonight-search": [
+      "-DBUILD_TESTING=OFF"
+    ],
+    "holonight-system-services": [
+      "-DBUILD_TESTS=OFF",
+      "-DBUILD_COMPOSITOR_WAYLAND=OFF",
+      "-DBUILD_AUDIO=OFF",
+      "-DBUILD_STORAGE=ON"
+    ],
+    "holonight-thumbnails": [
+      "-DBUILD_TESTING=OFF"
+    ]
+  },
+  "cxx_standard": 23,
+  "checks": {
+    "launcher_tests": 13,
+    "tidy_adapter_tests": 4,
+    "dependency_tests": 20,
+    "provider_preparation_fixture": 1,
+    "canonical_tooling_tests": 11,
+    "canonical_external_tests": 21,
+    "core_ctest": {
+      "passed": 2,
+      "total": 2
+    },
+    "quick_ctest": {
+      "passed": 4,
+      "total": 4
+    },
+    "full_ctest_C_UTF8": {
+      "passed": 25,
+      "total": 25
+    },
+    "full_ctest_en_US_UTF8": {
+      "passed": 25,
+      "total": 25
+    },
+    "mandatory_namespace_worker": {
+      "passed": 16,
+      "skipped": 0
+    },
+    "mandatory_namespace_window": {
+      "passed": 3,
+      "skipped": 0
+    },
+    "strict_tidy_units": {
+      "apps": 49,
+      "libs": 8,
+      "tests": 64
+    },
+    "installed_consumer_contexts": 3,
+    "runtime_fixtures": 13,
+    "format": "passed",
+    "qml_lint": "passed",
+    "qml_import_policy": "passed",
+    "qml_metadata": "passed",
+    "reuse": "passed",
+    "staged_install": "passed",
+    "installed_startup_desktop_permissions_search_paths": "passed",
+    "declaration_equality": "passed",
+    "bundle_drift": "passed",
+    "installer_profile_consistency": "passed"
+  },
+  "runtime": {
+    "exit_code": 0,
+    "base_image": "ghcr.io/lebedenko/holonight-deps@sha256:37ca051c39d1688d6413c47d94b8c0f221152dac6981ec67d155f2c43ea17b40",
+    "runtime_image": "sha256:22cb70d56199011b79e043621cca01c7c1a55801245a034ff708c53f1aec78d3"
+  },
+  "log_hashes": {
+    "build/ci/20261013T153428Z-acms82pf/build.log": "186fe2b03cd836cf6871db61b58abc4ecb7c6539862ea589838854d5432bc515",
+    "build/ci/20261013T153428Z-acms82pf/isolation.log": "04267233e81768f05d61466ef1065a8f7f30176fc589b87b9b88aff17809322d",
+    "build/ci/20261013T153428Z-acms82pf/isolation-test.log": "3c43f5c8dbb51170539c65644085a58961d45b759aa1a462a201161ae639b7fd",
+    "build/ci/20261013T153428Z-acms82pf/licensing.log": "844bc4777020acf9a51195901065dadaeddc5569ed5f723818d7f21a62840705",
+    "build/ci/20261013T192112Z-4q_bfkjs/prepare.log": "b0dc1480dbd3c16a4294d316795b5bef227e58b9224150d361b7456a7d452434",
+    "build/edm015-resume/check.log": "f23d585211aa309b8218854d402c29c9f7b7644d6b2ec93cae3aafcce85978b5",
+    "build/edm015-resume/consumers-correction.log": "f980810a1e677cd86b2dabfaa106e010ac52d8bdae90953fe2b95e64442a7f65",
+    "build/edm015-resume/dependencies-final.log": "29728c1d3e0082c4f7aa00d884e3070cc3eb5174d159f1f7234fefb3bd15cb8f",
+    "build/edm015-resume/format-final.log": "dab8eac6cf7e5e782de7340fbdcea9224b560f915a527ea2b1edeca688c45e5d",
+    "build/edm015-resume/install-final.log": "ba5c6cc3f9558207be767176df34d0e2ea5696ed1a3e70c86362cc873442e6ab",
+    "build/edm015-resume/installed-runtime.log": "38ef7d501a7b606cdaaaf20936cd927a953fe9febe22faf807d165e8de784c55",
+    "build/edm015-resume/license-final.log": "a106f0c586486672683c230f6d3709270e5f3916a66115e89c62d2aec651fa71",
+    "build/edm015-resume/locale-test.log": "509ae1e3110633b5cde9969e99244e392a2227aacf5403f91726e8f6163875d6",
+    "build/edm015-resume/qml-import-final.log": "5993bb85ce8ca4d67b6dba9c289a8060c78d15454377610dff75cb7d3ac47f05",
+    "build/edm015-resume/qml-lint-final.log": "e5790330e39944b4dfe5620aa8d7392af1ac94882fbd92c052eef04430037c28",
+    "build/edm015-resume/qmltypes-final.log": "dea8c241aa4839e28d5525289d8a9eecca96be687c059298872aad5fd11c96f2",
+    "build/edm015-resume/runtime-fixtures.log": "3620781562225c56ce2e542cc12414ed7c99d71e3562cfd291ee83d7ab487a19",
+    "build/edm015-resume/staging.log": "e3d7c07fab07f11869df9007e276ea861f70d34895086495edeb09651aba4624",
+    "build/edm015-resume/tidy-consumer-final.log": "996afaa25281a7219e4f6c0ae46e8a71e02c2150f616eddd4b4c458533b2227a",
+    "build/edm015-resume/tidy-tests-final.log": "3d8d25bfdd1507989b2e00dd8344f347ce35cc8e7707a075c36399d388d25b55"
+  },
+  "changed_files": [
+    ".clang-tidy",
+    ".github/workflows/build.yml",
+    ".github/workflows/license.yml",
+    "CMakeLists.txt",
+    "CONTRIBUTING.md",
+    "README.md",
+    "Taskfile.yml",
+    "docs/sdd/external-dependency-management/DESIGN.md",
+    "docs/sdd/external-dependency-management/SPEC.md",
+    "docs/sdd/external-dependency-management/TASKS.md",
+    "packaging/Dockerfile.ci",
+    "packaging/Dockerfile.runtime-check",
+    "scripts/check-container-runtime.py",
+    "scripts/check-runtime-fixtures.py",
+    "scripts/ci/Dockerfile.runtime",
+    "scripts/ci/bootstrap.sh",
+    "scripts/ci/images.json",
+    "scripts/ci/install-runtime-tools.py",
+    "scripts/ci/isolation-test.sh",
+    "scripts/ci/lane.sh",
+    "scripts/ci/packages.json",
+    "scripts/ci/prepare-tools.py",
+    "scripts/ci/run.py",
+    "scripts/ci/test_dependencies.py",
+    "scripts/ci/test_launcher.py",
+    "scripts/ci/test_provider_preparation.py",
+    "scripts/ci/test_tooling_tidy.py",
+    "scripts/prepare-deps.sh",
+    "scripts/prepare-runtime-check.sh",
+    "scripts/qml-format.sh",
+    "scripts/qt-tool.py",
+    "scripts/tidy.py",
+    "scripts/workflow.py",
+    "tests/CMakeLists.txt",
+    "tests/file-browser/consumer/main.cpp",
+    "tests/shared_provider_revisions_test.sh",
+    "tooling/README.md",
+    "tooling/VERSION",
+    "tooling/dependencies.cmake",
+    "tooling/external-packages.json",
+    "tooling/external.py",
+    "tooling/module.json",
+    "tooling/providers.cmake",
+    "tooling/workflow.py",
+    "docs/sdd/external-dependency-management/VERIFICATION.json"
+  ],
+  "acceptance_method": "Clean offline run, then focused incremental corrections with compatible compiler/provider artifacts; preserved initial failed reports are not relabelled successful.",
+  "limitations": [
+    "Seven existing native/performance/reserved-block application probes skipped; mandatory namespace suites ran without skips.",
+    "No new native interaction matrix or performance campaign."
+  ],
+  "publication": "not performed",
+  "umbrella_pin": "unchanged"
+}

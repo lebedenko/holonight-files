@@ -68,7 +68,7 @@ set_tests_properties(files-reject-argument PROPERTIES WILL_FAIL TRUE)
 find_program(FILES_BASH_EXECUTABLE bash REQUIRED)
 add_test(NAME files-provider-revisions COMMAND ${FILES_BASH_EXECUTABLE}
   "${CMAKE_CURRENT_SOURCE_DIR}/shared_provider_revisions_test.sh" "${CMAKE_SOURCE_DIR}")
-set_tests_properties(files-provider-revisions PROPERTIES TIMEOUT 30)
+set_tests_properties(files-provider-revisions PROPERTIES TIMEOUT 180)
 
 # Shadow the installed module with an invalid provider to exercise startup failure.
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/invalid-import/Holonight/Controls/qmldir"

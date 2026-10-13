@@ -15,12 +15,13 @@ An explicitly approved implementation plan authorizes its specified scope;
 routine implementation choices do not need repeated approval. Scope changes that
 alter requirements return to the relevant approval step.
 
-Start with `task deps`, then `task build` and `task test`. Before submitting, run
+Install external prerequisites, then run explicit `task deps` for supplied local providers.
+Ordinary configure/build/test never prepare dependencies. Start with `task deps`, then `task build` and `task test`. Before submitting, run
 `task check` (alias `task verify`), which sequentially runs `task build`
 (debug then release), `task test`, `task format-check`, `task lint` (`tidy` +
 `qml-lint`), `task license-check`, `task install-check`, and QML import policy/metadata
 checks, stopping on the first failure — equivalent to running each individually. Run `task format` to format sources. Run
-`task isolated-runtime-check` (requires Docker) before pushing changes that
+`task ci:prepare` before `task ci` or `task isolated-runtime-check` (requires Docker/Podman) before pushing changes that
 touch install payloads, `CMakeLists.txt` install() rules, or the desktop
 entry, since it is slower and not part of `task check`.
 Use C++23, Qt 6.11+, shared HoloNight controls and tokens, translated UI strings,

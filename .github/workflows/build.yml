@@ -21,6 +21,7 @@ jobs:
              [[ $(cat /sys/module/apparmor/parameters/enabled) == Y ]]; then
             sudo apparmor_parser -r packaging/apparmor.files-isolation
           fi
+      - run: python3 scripts/ci/run.py --prepare
       - run: python3 scripts/ci/run.py --lane ${{ matrix.lane }}
       - name: Retain verification evidence
         if: always()

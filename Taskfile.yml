@@ -8,18 +8,22 @@ tasks:
     desc: Rehearse every push validation lane in fresh pinned containers
     cmds:
     - python3 scripts/ci/run.py
+  ci:prepare:
+    desc: Explicitly acquire qualified images and exact providers for offline acceptance
+    cmds:
+    - python3 scripts/ci/run.py --prepare
   deps:
     desc: deps using standalone tooling
     cmds:
-    - python3 tooling/workflow.py deps --preset {{.PRESET}}
+    - python3 scripts/workflow.py deps --preset {{.PRESET}}
   configure:
     desc: configure using standalone tooling
     cmds:
-    - python3 tooling/workflow.py configure --preset {{.PRESET}}
+    - python3 scripts/workflow.py configure --preset {{.PRESET}}
   build:
     desc: build using standalone tooling
     cmds:
-    - python3 tooling/workflow.py build --preset {{.PRESET}}
+    - python3 scripts/workflow.py build --preset {{.PRESET}}
   run:
     desc: Build and launch the selected preset with CLI arguments
     cmds:
@@ -30,7 +34,7 @@ tasks:
   test:
     desc: test using standalone tooling
     cmds:
-    - python3 tooling/workflow.py test --preset {{.PRESET}}
+    - python3 scripts/workflow.py test --preset {{.PRESET}}
   format:
     desc: Format recursive C++ and QML sources
     cmds:
@@ -51,7 +55,7 @@ tasks:
   tidy:
     desc: tidy using standalone tooling
     cmds:
-    - python3 tooling/workflow.py tidy --scope all
+    - python3 scripts/tidy.py --scope all --installed-consumers
   qml-lint:
     desc: Run QML lint checks
     deps:
@@ -99,7 +103,7 @@ tasks:
   isolated-runtime-check:
     desc: Build in a fresh CI container and verify its installed payload without networking
     cmds:
-    - python3 scripts/check-container-runtime.py
+    - python3 scripts/ci/run.py --lane build
   visual-check:
     desc: Capture dark/light renders at normal and fractional scale for inspection
     cmds:
@@ -110,11 +114,11 @@ tasks:
   tooling:doctor:
     desc: doctor using standalone tooling
     cmds:
-    - python3 tooling/workflow.py doctor
+    - python3 scripts/workflow.py doctor
   tooling:refresh:
     desc: refresh using standalone tooling
     cmds:
-    - python3 tooling/workflow.py refresh --preset {{default "test" .EDITOR_PRESET}}
+    - python3 scripts/workflow.py refresh --preset {{default "test" .EDITOR_PRESET}}
   serena:serve:
     desc: Start independent Serena server in codex context
     cmds:
@@ -126,24 +130,24 @@ tasks:
   configure-tests:
     desc: configure using standalone tooling
     cmds:
-    - python3 tooling/workflow.py configure --preset test
+    - python3 scripts/workflow.py configure --preset test
   configure:release:
     desc: configure using standalone tooling
     cmds:
-    - python3 tooling/workflow.py configure --preset release
+    - python3 scripts/workflow.py configure --preset release
   build:release:
     desc: build using standalone tooling
     cmds:
-    - python3 tooling/workflow.py build --preset release
+    - python3 scripts/workflow.py build --preset release
   tidy-src:
     desc: tidy using standalone tooling
     cmds:
-    - python3 tooling/workflow.py tidy --scope src
+    - python3 scripts/tidy.py --scope src
   tidy-tests:
     desc: tidy using standalone tooling
     cmds:
-    - python3 tooling/workflow.py tidy --scope tests
+    - python3 scripts/tidy.py --scope tests --installed-consumers
   tooling:qmlls:
     desc: Start configured Qt language server with resolved import paths
     cmds:
-    - python3 tooling/workflow.py qmlls
+    - python3 scripts/workflow.py qmlls

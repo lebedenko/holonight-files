@@ -1,10 +1,4 @@
-FROM archlinux:base
-RUN pacman -Syu --noconfirm && pacman -S --needed --noconfirm \
-    base-devel cmake ninja go-task qt6-base qt6-declarative qt6-svg \
-    qt6-tools qt6-wayland gtest clang python reuse libexif libwebp qt6-imageformats tomlplusplus \
-    desktop-file-utils glib2 dbus binutils procps-ng ripgrep git ttf-dejavu && pacman -Scc --noconfirm
-RUN ln -s /usr/bin/go-task /usr/local/bin/task
-RUN localedef -i en_US -f UTF-8 en_US.UTF-8 && useradd -m files-test \
-    && install -d -o files-test -g files-test -m 0700 /home/files-test
+# Dependencies are acquired only by task ci:prepare; this recipe has no package operations.
+FROM ghcr.io/lebedenko/holonight-deps@sha256:37ca051c39d1688d6413c47d94b8c0f221152dac6981ec67d155f2c43ea17b40
 ENV QT_QPA_PLATFORM=offscreen QSG_RHI_BACKEND=software
 WORKDIR /work/files

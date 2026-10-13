@@ -1,14 +1,6 @@
 #!/bin/sh
 set -eu
 # Offline root setup; only the namespace tests receive relaxed seccomp.
-mkdir /work/ci
-cp -a /evidence/packages /work/ci/packages
-cp /evidence/packages.json /evidence/install-runtime-tools.py /work/ci/
-# Installer resolves /ci; keep it inside this disposable container.
-ln -s /work/ci /ci
-python3 /ci/install-runtime-tools.py
-ldconfig
-ln -s /usr/bin/go-task /usr/local/bin/task
 cp -a /evidence/files /work/files
 chown -R "$CI_UID:$CI_GID" /work/files
 mkdir -p /work/build/home

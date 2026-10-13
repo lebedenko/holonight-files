@@ -3,7 +3,7 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 context=$(mktemp -d "$root/build/runtime-check.XXXXXX")
-for provider in holonight-config holonight-qt holonight-images holonight-thumbnails holonight-system-services holonight-search qmarkdown; do
+for provider in holonight-config holonight-qt holonight-images holonight-thumbnails holonight-system-services holonight-search; do
   provider_build="$root/build/deps/$provider"
   if [[ "$provider" == holonight-config ]]; then
     provider_build=${HOLONIGHT_CONFIG_BUILD:-$provider_build}
@@ -15,20 +15,13 @@ for provider in holonight-config holonight-qt holonight-images holonight-thumbna
     provider_build=${HOLONIGHT_THUMBNAILS_BUILD:-$provider_build}
   elif [[ "$provider" == holonight-search ]]; then
     provider_build=${HOLONIGHT_SEARCH_BUILD:-$provider_build}
-  elif [[ "$provider" == qmarkdown ]]; then
-    provider_build=${QMARKDOWN_BUILD:-$provider_build}
   else
     provider_build=${HOLONIGHT_SYSTEM_SERVICES_BUILD:-$provider_build}
   fi
   DESTDIR="$context/payload" cmake --install "$provider_build" --prefix /usr
 done
 DESTDIR="$context/payload" cmake --install "$root/build/release" --prefix /usr
-for file in lib/libQMarkdown.so.1 lib/qt6/qml/QMarkdown/libQMarkdownPlugin.so \
-  lib/qt6/qml/QMarkdown/qmldir lib/qt6/qml/QMarkdown/QMarkdown.qmltypes \
-  lib/qt6/qml/QMarkdown/MarkdownView.qml lib/qt6/qml/QMarkdown/Private/qmldir \
-  share/licenses/QMarkdown/LICENSE share/licenses/QMarkdown/cmark/COPYING; do
-  test -s "$context/payload/usr/$file"
-done
+# QMarkdown belongs to the qualified runtime image, never the Files payload.
 mkdir -p "$context/check/scripts"
 cp "$root/scripts/isolated-runtime.sh" "$context/check/scripts/"
 cp "$root/packaging/Dockerfile.runtime-check" "$context/Dockerfile"
