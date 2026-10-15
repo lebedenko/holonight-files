@@ -1,29 +1,7 @@
 version: '3'
 vars:
-  PRESET: '{{default "debug" .PRESET}}'
-  HOLONIGHT_DEPENDENCY_PREFIX: '{{default (printf "%s/build/deps/prefix" .TASKFILE_DIR) .HOLONIGHT_DEPENDENCY_PREFIX}}'
-  HOLONIGHT_QML_IMPORT_PATH: '{{default (printf "%s/lib/qt6/qml" .HOLONIGHT_DEPENDENCY_PREFIX) .HOLONIGHT_QML_IMPORT_PATH}}'
+  PRESET: '{{default "dev" .PRESET}}'
 tasks:
-  ci:
-    desc: Rehearse every push validation lane in fresh pinned containers
-    cmds:
-    - python3 scripts/ci/run.py
-  ci:prepare:
-    desc: Explicitly acquire qualified images and exact providers for offline acceptance
-    cmds:
-    - python3 scripts/ci/run.py --prepare
-  deps:
-    desc: deps using standalone tooling
-    cmds:
-    - python3 scripts/workflow.py deps --preset {{.PRESET}}
-  configure:
-    desc: configure using standalone tooling
-    cmds:
-    - python3 scripts/workflow.py configure --preset {{.PRESET}}
-  build:
-    desc: build using standalone tooling
-    cmds:
-    - python3 scripts/workflow.py build --preset {{.PRESET}}
   run:
     desc: Build and launch the selected preset with CLI arguments
     cmds:
@@ -31,18 +9,14 @@ tasks:
       vars:
         PRESET: '{{.PRESET}}'
     - build/{{.PRESET}}/apps/files/hn-files {{.CLI_ARGS}}
-  test:
-    desc: test using standalone tooling
-    cmds:
-    - python3 scripts/workflow.py test --preset {{.PRESET}}
   format:
-    desc: Format recursive C++ and QML sources
+    desc: Format with the pinned container tools
     cmds:
-    - python3 scripts/format-sources.py
+    - python3 scripts/ci/container.py format
   format-check:
-    desc: Check recursive C++ and QML formatting
+    desc: format-check
     cmds:
-    - python3 scripts/format-sources.py --check
+    - python3 scripts/quality.py format-check
   qml-import-check:
     desc: Check runtime-control import policy
     cmds:
@@ -52,21 +26,10 @@ tasks:
     desc: Check generated application QML metadata
     cmds:
     - cmake --build build/{{.PRESET}} --target qmltypes-check
-  tidy:
-    desc: tidy using standalone tooling
-    cmds:
-    - python3 scripts/tidy.py --scope all --installed-consumers
   qml-lint:
-    desc: Run QML lint checks
-    deps:
-    - build
+    desc: qml-lint
     cmds:
     - cmake --build build/{{.PRESET}} --target qml-lint
-  lint:
-    desc: Run C++ and QML lint checks
-    cmds:
-    - task: tidy
-    - task: qml-lint
   license-check:
     desc: Check license metadata with REUSE
     cmds:
@@ -79,75 +42,54 @@ tasks:
         PRESET: release
     - bash scripts/check-install.sh
   check:
-    desc: Sequentially build, test, check formatting, lint, licenses, staged installation
-    aliases:
-    - verify
+    desc: Authoritative container acceptance
     cmds:
-    - task: build
-      vars:
-        PRESET: debug
-    - task: build
-      vars:
-        PRESET: release
-    - task: test
-    - task: format-check
-    - task: lint
-    - task: license-check
-    - task: install-check
-    - task: qml-import-check
-    - task: qmltypes-check
+    - python3 scripts/ci/container.py check {{.CLI_ARGS}}
   clean:
     desc: Remove Files debug/release/test build directories, preserving provider installs
     cmds:
-    - rm -rf -- build/debug build/release build/test
+    - rm -rf -- build/dev build/release build/dev
   isolated-runtime-check:
     desc: Build in a fresh CI container and verify its installed payload without networking
     cmds:
-    - python3 scripts/ci/run.py --lane build
+    - python3 scripts/ci/container.py integration {{.CLI_ARGS}}
   visual-check:
     desc: Capture dark/light renders at normal and fractional scale for inspection
     cmds:
     - task: build
       vars:
-        PRESET: test
+        PRESET: dev
     - bash scripts/check-visual.sh
-  tooling:doctor:
-    desc: doctor using standalone tooling
+  configure:
+    desc: configure
     cmds:
-    - python3 scripts/workflow.py doctor
-  tooling:refresh:
-    desc: refresh using standalone tooling
+    - cmake --preset {{.PRESET}} {{.CLI_ARGS}}
+  build:
+    desc: build
     cmds:
-    - python3 scripts/workflow.py refresh --preset {{default "test" .EDITOR_PRESET}}
-  serena:serve:
-    desc: Start independent Serena server in codex context
+    - cmake --preset {{.PRESET}}
+    - cmake --build --preset {{.PRESET}}
+  test:
+    desc: test
     cmds:
-    - serena start-mcp-server --project "{{.TASKFILE_DIR}}" --context codex
-  serena:index:
-    desc: Explicitly index this module
-    cmds:
-    - serena project index "{{.TASKFILE_DIR}}"
-  configure-tests:
-    desc: configure using standalone tooling
-    cmds:
-    - python3 scripts/workflow.py configure --preset test
+    - task: build
+      vars:
+        PRESET: dev
+    - ctest --preset dev {{.CLI_ARGS}}
   configure:release:
-    desc: configure using standalone tooling
+    desc: configure:release
     cmds:
-    - python3 scripts/workflow.py configure --preset release
+    - cmake --preset release {{.CLI_ARGS}}
   build:release:
-    desc: build using standalone tooling
+    desc: build:release
     cmds:
-    - python3 scripts/workflow.py build --preset release
-  tidy-src:
-    desc: tidy using standalone tooling
+    - cmake --preset release
+    - cmake --build --preset release
+  tidy:
+    desc: tidy
     cmds:
-    - python3 scripts/tidy.py --scope src
-  tidy-tests:
-    desc: tidy using standalone tooling
+    - python3 scripts/quality.py tidy --build build/{{.PRESET}}
+  check:integration:
+    desc: Container acceptance plus Release staging and runtime checks
     cmds:
-    - python3 scripts/tidy.py --scope tests --installed-consumers
-  tooling:qmlls:
-    desc: Start configured Qt language server with resolved import paths
-    cmds:
-    - python3 scripts/workflow.py qmlls
+    - python3 scripts/ci/container.py integration {{.CLI_ARGS}}

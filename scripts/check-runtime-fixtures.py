@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the installed verifier in disposable containers; retain logs in build/."""
 from pathlib import Path
-import os
 import subprocess
 import sys
 import tempfile
@@ -9,7 +8,20 @@ import time
 
 ROOT = Path(__file__).resolve().parent.parent
 WORK = Path(tempfile.mkdtemp(prefix="runtime-fixtures.", dir=ROOT / "build"))
-IMAGE = sys.argv[1] if len(sys.argv) > 1 else "holonight-files-runtime-check"
+if len(sys.argv) != 3:
+    raise SystemExit("Usage: check-runtime-fixtures.py IMAGE INSTALLED_CONTEXT")
+IMAGE = sys.argv[1]
+CONTEXT = Path(sys.argv[2]).resolve()
+INITIALIZE = """cp -a --no-preserve=ownership /payload/usr/. /usr/
+chown -R root:root /usr/bin/hn-* /usr/share/applications/org.holonight.*
+cp -a /checks /opt/check
+ldconfig
+update-desktop-database /usr/share/applications
+useradd -m files-test
+install -d -o files-test -g files-test -m 0700 /home/files-test /run/files-test
+export HOME=/home/files-test XDG_RUNTIME_DIR=/run/files-test QT_QPA_PLATFORM=offscreen QSG_RHI_BACKEND=software
+cd /opt/check
+"""
 EXECUTABLE = "/usr/bin/hn-files"
 DESKTOP = "/usr/share/applications/org.holonight.Files.desktop"
 CASES = {
@@ -46,9 +58,11 @@ chmod 755 /usr/bin/hn-files
 for name, (setup, expected_error) in CASES.items():
     # Only fixture setup is privileged. The real verifier always runs as files-test.
     command = [
-        os.environ.get("FILES_CONTAINER_RUNTIME", "docker"), "run", "--rm", "--pull=never", "--platform", "linux/amd64", "--network", "none", "--user", "root",
-        IMAGE, "bash", "-euc",
-        setup + "\nexec runuser -u files-test -- bash scripts/isolated-runtime.sh",
+        "docker", "run", "--rm", "--pull=never", "--platform", "linux/amd64", "--network", "none", "--user", "root",
+        '--mount', f'type=bind,src={CONTEXT / "payload"},dst=/payload,readonly',
+        '--mount', f'type=bind,src={CONTEXT / "check"},dst=/checks,readonly',
+        '--entrypoint', 'bash', IMAGE, "-euc",
+        INITIALIZE + setup + "\nexec runuser -u files-test -- bash scripts/isolated-runtime.sh",
     ]
     started = time.monotonic()
     result = subprocess.run(command, capture_output=True, text=True, timeout=60)

@@ -61,14 +61,10 @@ def metadata(root, binary, prefix, original, scenarios, required, fixture_identi
     roots = {str(root): '<checkout>', str(binary.parent.parent): '<build>', str(prefix): '<prefix>',
              str(root.parent): '<workspace>'}
     cache = (binary.parent.parent / 'CMakeCache.txt').read_text()
-    providers = {}
-    for name, info in original['providers'].items():
-        provider_cache = root / 'build/deps' / name / 'CMakeCache.txt'
-        providers[name] = {'revision': info['revision'], 'settings': settings(provider_cache.read_text())}
     provenance = {
         'production_sources': original['production_sha256'],
         'compiler': original['compiler'], 'qt': original['qt'],
-        'build_settings': settings(cache), 'providers': providers,
+        'build_settings': settings(cache),
         'provider_artifacts': original['installed_library_sha256'],
         'system': original['system'], 'cpu': '\n'.join(line for line in original['cpu'].splitlines()
                                                      if 'MHz' not in line),

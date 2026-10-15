@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-build_dir=${1:-build/debug}
+build_dir=${1:-build/dev}
 [[ "$build_dir" = /* ]] || build_dir="$root/$build_dir"
 metadata="$build_dir/apps/files/qml/hn-files/HolonightFiles/hn-files.qmltypes"
 test -s "$metadata"

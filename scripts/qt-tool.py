@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 ROOT = Path(__file__).resolve().parents[1]
 
-def qt_tool(name, preset='test'):
+def qt_tool(name, preset='dev'):
     override = os.environ.get(name.upper())
     if override:
         return override
@@ -27,6 +27,6 @@ def qt_tool(name, preset='test'):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--tool", required=True)
-    parser.add_argument("--preset", default="test")
+    parser.add_argument("--preset", default="dev")
     args = parser.parse_args()
     print(qt_tool(args.tool, args.preset))

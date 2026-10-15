@@ -1,31 +1,21 @@
 # Contributing
 
-Use the same specification-driven development sequence as the sibling projects:
+Use `task build` and `task test` for incremental native CMake/CTest work. Native builds
+consume installed packages; use `CMAKE_PREFIX_PATH` for an explicit development prefix.
+Use `task format` for the pinned formatter and `task check` for container acceptance.
+Run `task check:integration` for installation/runtime changes. Container builds use
+fresh build/prefix directories, separate from `build/dev` and `build/release`.
+clangd reads `build/dev/compile_commands.json` directly.
 
-1. Clarify intent, scope, non-goals, and unresolved questions.
-2. Write EARS requirements in docs/sdd/<cycle>/SPEC.md and obtain approval.
-3. Write DESIGN.md and traceable TASKS.md; obtain design and task approval.
-4. Implement the approved work in small, reviewable changes.
-5. Verify requirements with focused tests, build and quality checks, and visual
-   inspection where applicable. Record commands, outcomes, and limitations.
-6. Update the specification, design, task status, README, and backlog. Mark work
-   complete only when its acceptance checks pass; retain pending checks explicitly.
+Routine changes need tests and a commit explanation; update user documentation when
+behavior changes. Substantial designs need one local SDD describing intent, decisions,
+interfaces and acceptance. Cross-project changes need one umbrella note linking local
+designs and stating contracts, dependency order and integration checks. Historical SDDs
+remain historical. No separate planning, readiness, handoff or closure commits are required.
+Keep routine logs and generated evidence in ignored build directories or CI artifacts.
+Provider and consumer implementation may proceed together; publish providers before
+consumer commits that reference them. Update umbrella pins per coherent milestone.
 
-An explicitly approved implementation plan authorizes its specified scope;
-routine implementation choices do not need repeated approval. Scope changes that
-alter requirements return to the relevant approval step.
-
-Install external prerequisites, then run explicit `task deps` for supplied local providers.
-Ordinary configure/build/test never prepare dependencies. Start with `task deps`, then `task build` and `task test`. Before submitting, run
-`task check` (alias `task verify`), which sequentially runs `task build`
-(debug then release), `task test`, `task format-check`, `task lint` (`tidy` +
-`qml-lint`), `task license-check`, `task install-check`, and QML import policy/metadata
-checks, stopping on the first failure — equivalent to running each individually. Run `task format` to format sources. Run
-`task ci:prepare` before `task ci` or `task isolated-runtime-check` (requires Docker/Podman) before pushing changes that
-touch install payloads, `CMakeLists.txt` install() rules, or the desktop
-entry, since it is slower and not part of `task check`.
 Use C++23, Qt 6.11+, shared HoloNight controls and tokens, translated UI strings,
-and native decorations. Add GPL-3.0-or-later metadata for new material and preserve
-third-party attribution. Do not include build output or local dependency installs.
-
-System installation/removal and ownership fixtures belong to the umbrella. Standalone staging remains supported.
+and native decorations. Preserve GPL-3.0-or-later metadata and third-party attribution.
+System installation/removal belongs to the umbrella; standalone DESTDIR staging remains supported.

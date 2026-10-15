@@ -157,38 +157,6 @@ def provenance(binary, prefix):
              'scripts/measure-preview.py', 'tests/preview_performance_test.cpp',
              'tests/preview_service_test_access.h', 'tests/preview_fixtures.h', 'tests/smoke.cpp',
              'tests/CMakeLists.txt']
-    providers = {}
-    for name in ('holonight-config', 'holonight-qt', 'holonight-images'):
-        repo = ROOT.parent / name
-        providers[name] = {'revision': command('git', '-C', str(repo), 'rev-parse', 'HEAD'),
-                           'status': command('git', '-C', str(repo), 'status', '--porcelain')}
-    state = ROOT / 'build/deps/provider-revisions.tsv'
-    provider_builds = {}
-    for line in state.read_text().splitlines():
-        name, source, revision = line.split('\t')
-        if providers[name]['revision'] != revision:
-            raise RuntimeError(f'Provider source does not match installed evidence: {name}')
-        repo = ROOT.parent / name
-        for folder in ('src', 'include'):
-            for path in (repo / folder).rglob('*'):
-                if path.is_file():
-                    committed = subprocess.check_output(['git', '-C', str(repo), 'show',
-                        f'{revision}:{path.relative_to(repo)}'])
-                    if hashlib.sha256(committed).hexdigest() != digest(path):
-                        raise RuntimeError(f'Provider production sources changed: {path}')
-        provider_cache = ROOT / 'build/deps' / name / 'CMakeCache.txt'
-        content = provider_cache.read_text()
-        if f'CMAKE_INSTALL_PREFIX:PATH={prefix}\n' not in content:
-            raise RuntimeError(f'Provider prefix mismatch: {name}')
-        if ('CMAKE_BUILD_TYPE:STRING=Release\n' not in content or
-                f'CMAKE_CXX_COMPILER:FILEPATH={values["CMAKE_CXX_COMPILER"]}\n' not in content):
-            raise RuntimeError(f'Incompatible provider build: {name}')
-        if name != 'holonight-config' and f'Qt6Core_DIR:PATH={values["Qt6Core_DIR"]}\n' not in content:
-            raise RuntimeError(f'Incompatible provider Qt: {name}')
-        provider_builds[name] = {'recorded_source': source, 'recorded_revision': revision,
-                                'cmake_cache': content, 'cmake_cache_sha256': digest(provider_cache)}
-    if set(provider_builds) != set(providers):
-        raise RuntimeError('Incomplete installed provider evidence')
     libraries = {str(path.relative_to(prefix)): digest(path)
                  for path in sorted((prefix / 'lib').glob('libholonight*')) if path.is_file()}
     return {'revision': command('git', 'rev-parse', 'HEAD'),
@@ -200,7 +168,7 @@ def provenance(binary, prefix):
             'compiler': command(values['CMAKE_CXX_COMPILER'], '--version'),
             'qt': command('pkg-config', '--modversion', 'Qt6Core'),
             'system': platform.platform(), 'cpu': command('lscpu'),
-            'providers': providers, 'provider_builds': provider_builds, 'installed_library_sha256': libraries,
+            'providers': {}, 'installed_library_sha256': libraries,
             'configuration': {key: value for key, value in values.items()
                               if key in ('CMAKE_BUILD_TYPE', 'CMAKE_CXX_COMPILER', 'CMAKE_CXX_FLAGS',
                                          'CMAKE_CXX_FLAGS_RELEASE', 'CMAKE_PREFIX_PATH', 'QML_IMPORT_PATH',
@@ -214,7 +182,7 @@ def main():
     parser.add_argument('binary', type=Path)
     parser.add_argument('output', type=Path)
     parser.add_argument('--scenario', choices=[*SCENARIOS, 'all'], default='all')
-    parser.add_argument('--prefix', type=Path, default=ROOT / 'build/deps/prefix')
+    parser.add_argument('--prefix', type=Path, default=Path('/usr'))
     parser.add_argument('--private-bus', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     if not args.private_bus:

@@ -1,5 +1,7 @@
 # HoloNight Files
 
+For current build, test, container acceptance and provider workflows, see [DEVELOPMENT.md](DEVELOPMENT.md).
+
 A keyboard-driven, Vim-like HoloNight file manager for native Wayland. Stage 1
 ("Browse a folder") has its implementation and regression coverage in place;
 acceptance status is tracked in [browse-folder verification](docs/sdd/browse-folder/VERIFICATION.md). It provides an asynchronously populated, naturally
@@ -241,169 +243,18 @@ falls back to its default, and unknown keys or sections are ignored. Each of the
 own stderr warning. An unusable `state.toml` is also reported on stderr and treated as no
 remembered location. See the [app configuration specification](docs/sdd/app-configuration/SPEC.md).
 
-Requires C++23, Qt 6.11+ (including the Svg component), CMake 3.25+, Ninja,
-Task, libexif (via pkg-config), tomlplusplus 3.4+ (shared library, CMake config), and installed HolonightQt::Core /
-HolonightQt::Controls. Tests use Qt Test and GTest. Checks need clang-format,
-clang-tidy (run-clang-tidy), REUSE, desktop-file-utils and Python 3.
-`task ci:prepare` explicitly acquires the qualified immutable Arch/REUSE images and exact
-provider sources, builds installed providers unprivileged, and records hash-validated
-compatibility evidence under `build/ci-prepared`. `task ci` consumes that preparation
-in fresh offline containers with read-only inputs and `--pull=never`. Both Docker and
-Podman are supported. `task isolated-runtime-check` uses the same build/runtime lane;
-prepare first. Logs, versions and installed payload evidence remain under `build/ci`.
-QMarkdown >=1.1 is installed separately in the qualified runtime image.
+## Build and validation
 
-```sh
-task deps                 # prepares supplied local providers; validates installed prerequisites
-task build
-task run
-# Ctrl+F toggles fullscreen, Escape leaves fullscreen (preserving tiling), q quits
-# Space opens/closes Quick Look for an image or text/plain file; j/k then move its current line
-task test
-task build PRESET=release
-task format-check
-task tidy
-task qml-lint
-task lint                 # tidy + qml-lint
-task license-check
-task install-check
-task check                # (alias: verify) build×2, test, format-check, lint, license-check, install-check, QML policy/metadata, in order
-task visual-check         # captures under build/visual for inspection
-task ci:prepare              # explicit image/source acquisition and installed provider preparation
-task isolated-runtime-check  # prepared offline build, installed runtime and verifier fixtures
-task clean                   # removes build/{debug,release,test}; preserves build/deps and check evidence
+See [DEVELOPMENT.md](DEVELOPMENT.md) for prerequisites, native CMake builds, explicit
+provider prefixes and the shared container workflow. Use `task build`, `task test`,
+`task format`, then `task check`. Installation/runtime changes require `task check:integration`.
+`task visual-check` remains available for targeted rendering inspection.
 
-# Coordinated system installation/removal is owned by the umbrella:
-# ../scripts/install.sh / ../scripts/uninstall.sh (after published onboarding)
-```
+`task run -- ~/Downloads` opens a folder. `--help` and `--version` remain supported;
+a missing or unreadable folder falls back to home with a status message.
 
-`--help` and `--version` are supported, along with an optional positional
-folder argument (`task run -- ~/Downloads`, or `hn-files ~/Downloads`
-directly): a missing, nonexistent, non-directory, or unreadable path falls
-back to the home directory with a status message explaining why. More than
-one positional argument is rejected.
-
-Provider defaults are ../holonight-config and ../holonight-qt. Override their
-locations with HOLONIGHT_CONFIG_SOURCE and HOLONIGHT_QT_SOURCE for `task deps`.
-Builds and the staging prefix live under build/deps. Files and dependency builds default to two jobs, including in CI. Set JOBS for
-an explicit worker limit.
-Dependency providers remain sequential because later providers use earlier
-installations. `task check`, `task lint`, and tidy's prerequisite build also run
-in sequence, while each build or analysis stage can use the available CPUs.
-
-Use explicit limits when needed:
-
-```sh
-CMAKE_BUILD_PARALLEL_LEVEL=2 task build  # limit Files compiler jobs
-CMAKE_BUILD_PARALLEL_LEVEL=2 task deps   # limit provider compiler jobs
-JOBS=2 task deps                        # explicit provider limit; overrides CMake's environment limit
-cmake --build --preset debug --parallel 2  # direct CMake override
-```
-
-Provider and application builds default to two jobs; set `JOBS` to an explicit limit.
-Tidy checks each source once against the selected compilation database. Internal
-providers resolve only from `HOLONIGHT_DEPENDENCY_PREFIX` (or approved CMake prefixes),
-while external libraries use `HOLONIGHT_EXTERNAL_PREFIX` or normal system discovery.
-Set these as environment variables for Task commands or cache variables for direct CMake.
-`task deps` reuses compatible source/toolchain/package identities and archives incompatible
-artifacts. Configure, build and test validate installed dependencies without acquisition
-or provider preparation. Core-only builds need no internal providers; Quick-only builds
-require HolonightQt and its transitive Config. Use `HOLONIGHT_BUILD_FEATURES='BUILD_FILES_APP=OFF BUILD_FILE_BROWSER_QUICK=OFF'`
-with Task commands, or the corresponding CMake options for component builds.
-
-System installation and removal are owned by the umbrella's `scripts/install.sh` and
-`scripts/uninstall.sh`. The installer rejects unmanaged payload collisions; it does not
-adopt or remove legacy Files installations. The uninstaller preserves modified owned files.
-Standalone builds and `DESTDIR` staging remain supported. Complete onboarding requires a
-published Files revision and an explicit umbrella pin update.
-
-`task ci` rehearses all three push validation lanes from current tracked edits and
-non-ignored new inputs after `task ci:prepare`. Preparation hashes the provider artifacts,
-source revisions and environment evidence. Stale or tampered preparation is rejected;
-explicit preparation archives it before rebuilding. `--provider-source-root /path/to/umbrella`
-on `scripts/ci/run.py --prepare` uses exact commits from local repositories instead of
-cloning remotes. Add reported new source files before committing.
-
-The build lane runs full `task check` as unprivileged files-test in C.UTF-8, then
-additional en_US.UTF-8 tests. The host builds its captured installed payload and
-runs the runtime image plus all runtime verifier fixtures without networking or host
-mounts. A separate lane builds both filesystem executables and requires namespace
-coverage offline. Where AppArmor is active, the host must already have the supplied
-holonight-files-isolation profile loaded; the launcher never changes host policy.
-
-Every lane uses fresh application and provider build trees. Container layers may
-be cached. Complete logs, revision/dirty status, image/tool/provider identities,
-runtime fixture logs and lane results remain under ignored `build/ci/`. Source is
-read-only during execution and artifacts are host-owned. Missing runtimes or failed
-required checks return nonzero. GitHub retains logs separately for each lane;
-publication/uploads remain remote operations. See [local CI SDD](docs/sdd/local-ci/README.md).
-
-A manual staged install remains available with
-`DESTDIR=/your/stage cmake --install build/release` (prefix /usr). The
-application package installs its executable, desktop entry, icon, and
-license; it depends on separately installed HoloNight provider libraries and
-QML modules. A system installation discovers providers via Qt's normal
-module paths. A custom provider prefix needs
-QML_IMPORT_PATH=<prefix>/lib/qt6/qml and LD_LIBRARY_PATH=<prefix>/lib. No
-source-tree imports are embedded in the binary.
-
-See [contributor workflow](CONTRIBUTING.md), [project brief](docs/PROJECT_BRIEF.md),
-[backlog](docs/BACKLOG.md), and
-[scaffold verification](docs/sdd/project-scaffold/VERIFICATION.md). Licensed
-GPL-3.0-or-later; see LICENSE.
-
-`task run` builds and launches the selected preset directly; it does not
-register any desktop entry, and `${XDG_DATA_HOME:-~/.local/share}` is left
-untouched. Desktop integration is provided by the installed application.
-
-CI builds the committed checkout with contributor tools, stages Files and
-providers under `/usr`, then runs the same checks as
-[holonight-viewer](https://github.com/lebedenko/holonight-viewer)'s workflow.
-No release has been published and no distribution packages are supplied.
-
-
-Counts accept ASCII `0`–`9`, saturate at `INT_MAX`, and clamp movement to the listing
-bounds. A zero count moves zero rows. Both toggles consume pending counts and `g`
-chords. Descending sorting reverses the complete order, including directory grouping.
-Functional CI runs under `C.UTF-8` and `en_US.UTF-8` as an unprivileged user; local
-root runs explicitly skip permission-denied checks.
-
-Native performance acceptance is opt-in on an active Wayland desktop with Qt's
-hardware renderer, installed HoloNight packages, and no competing build/load work.
-After `task test`, run the test executable directly (CTest selects offscreen):
-
-```sh
-QT_QPA_PLATFORM=wayland QSG_INFO=1 LC_ALL=en_US.UTF-8 \
-  QML_IMPORT_PATH="$PWD/build/deps/prefix/lib/qt6/qml" \
-  LD_LIBRARY_PATH="$PWD/build/deps/prefix/lib" \
-  FILES_BROWSE_BENCHMARK=1 build/test/tests/files-smoke \
-  '--gtest_filter=DirectoryPerformance.*' \
-  --gtest_output=xml:build/browse-performance.xml
-```
-
-The benchmark increases real fixtures from 12,000 to 48,000 and 192,000 entries.
-It requires first rendered populated rows within 150ms, active-scrolling frame gaps
-≤100ms, and posted-key cursor latency ≤100ms while loading, with at least ten input
-and scrolling-frame samples and 200ms loading time. Insufficient samples are
-inconclusive; watcher refresh is timed separately. Record hardware, renderer,
-locale, commands, and results with the verification record. Offscreen runs and
-`task visual-check` screenshots under `build/visual/` provide regression evidence,
-not native rendering acceptance. Provider and container-image pinning are deferred.
-
-Inspection performance acceptance (101 images, each >5 MB, native renderer):
-
-```sh
-QT_QPA_PLATFORM=wayland \
-  QML_IMPORT_PATH="$PWD/build/deps/prefix/lib/qt6/qml" \
-  LD_LIBRARY_PATH="$PWD/build/deps/prefix/lib" \
-  FILES_NATIVE_ACCEPTANCE="$PWD/build/native-acceptance.txt" \
-  build/test/tests/files-smoke --gtest_filter=Files.NativeInspectionAcceptance
-```
-
-The result records initial/cached/Quick Look latency, stale-image count, movement
-rate, process peak RSS and rendered FPS. Qt image decoding remains cooperatively
-cancellable between stages; the three-second timeout is a visible deadline, not
-hard preemption of a decoder call.
+System installation and removal belong to the umbrella. Standalone CMake builds and
+DESTDIR staging remain supported; modified owned files survive uninstall.
 
 ### Executable migration and folder handling
 
@@ -440,11 +291,11 @@ Only that test invocation disables Docker seccomp and uses a namespace-permittin
 AppArmor profile where AppArmor is active; it remains unprivileged and network-disabled.
 Ordinary developer test runs retain optional namespace skips.
 To require this coverage locally, run
-`FILES_REQUIRE_FS_ISOLATION=1 ctest --preset test -R '^files-fsops' -V`.
+`FILES_REQUIRE_FS_ISOLATION=1 ctest --preset dev -R '^files-fsops' -V`.
 
 ## Shared raster processing
 
-Build and install `holonight-images` before configuring, or use `task deps` with a sibling checkout
+Build and install `holonight-images` before configuring, using `CMAKE_PREFIX_PATH` for its prefix
 (`HOLONIGHT_IMAGES_SOURCE` overrides its location). `find_package(HolonightImages CONFIG REQUIRED)`
 provides `HolonightImages::Images`; custom builds pass its prefix through `CMAKE_PREFIX_PATH`.
 The provider owns raster decoding and structured EXIF extraction; presentation and scheduling remain here.
@@ -452,7 +303,7 @@ See [migration SDD](docs/sdd/shared-image-architecture/DESIGN.md).
 Raster outcomes retain distinct translated errors, while metadata status remains internal and quiet.
 See the [shared image outcomes cycle](docs/sdd/shared-image-outcomes/SPEC.md).
 
-Build and install `holonight-thumbnails` before configuring, or use `task deps` with a sibling
+Build and install `holonight-thumbnails` before configuring, using an explicit installed
 checkout (`HOLONIGHT_THUMBNAILS_SOURCE` overrides its location). `find_package(HolonightThumbnails CONFIG REQUIRED)`
 provides `HolonightThumbnails::Thumbnails`. Files retains source inspection, decoding and preview scheduling;
 the provider owns freedesktop disk cache lookup and storage. See the
@@ -547,7 +398,7 @@ rejected and nothing is unmounted. A multi-slot card reader is only ever ejected
 displayed filesystem is unmounted or removed, Files returns Home with an explanation. See the
 [device actions specification](docs/sdd/device-actions/SPEC.md).
 
-Development builds also require the sibling `holonight-system-services` repository; `task deps` installs its Storage component without Audio/libpulse.
+Development builds also require the sibling `holonight-system-services` repository; build its Storage component into an explicit development prefix.
 
 Sidebar previews fade the outgoing thumbnail over 120 ms while a new selection loads,
 then reserve the empty square until the existing 150 ms icon deadline. New thumbnails
@@ -560,10 +411,6 @@ Sidebar fallbacks stay visible across selections with the same complete icon can
 Browsing inspects selected-file metadata but does not load text. Quick Look loads supported
 text on demand and discards it on close; Space during type detection opens a pinned loading
 view. See [the demand-text cycle](docs/sdd/sidebar-icons-demand-text/SPEC.md).
-
-## Standalone developer tooling
-
-See [tooling/README.md](tooling/README.md) for presets, dependencies, editor refresh and Serena.
 
 ## Finder indexing exclusions
 
@@ -600,7 +447,7 @@ the last successfully loaded search policy (initially built-ins) and displays er
 Other settings retain startup loading. A Settings page is deferred to the configuration interoperability initiative.
 
 The finder persistence benchmark can be run with
-`build/test/tests/files-finder-benchmark --persist /path/to/tree`. It uses temporary
+`build/dev/tests/files-finder-benchmark --persist /path/to/tree`. It uses temporary
 cache/config directories and built-in exclusions, and reports cold index readiness,
 traversal/persistence time, validated restore and reconstruction time, snapshot size,
 query latency alongside refresh, and process resident/peak memory. Filesystem cache
@@ -643,10 +490,4 @@ selection. Consumers own keyboard commands. Call `shutdown()` and retain readers
 Provider regression and installed external C++/QML consumer tests are included in `BUILD_TESTING`.
 See [provider SDD](docs/sdd/filechooser-provider/README.md) for the extraction contract and verification.
 
-Files consumes installed shared [qmarkdown](https://github.com/lebedenko/qmarkdown) ≥1.1.
-Markdown Quick Look retains the public/private QML imports. Discover the installed package
-from the system or `HOLONIGHT_EXTERNAL_PREFIX`. `QMARKDOWN_SOURCE` is used exclusively
-by explicit `task deps` preparation; ordinary commands never build it. The package must
-match Files' Qt/toolchain and supply its library, QML plugin/metadata and MIT/cmark notices.
-The qualified runtime owns this external package; Files stages no QMarkdown payload.
-Passive FileBrowser consumers do not require QMarkdown.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for current native and container commands.

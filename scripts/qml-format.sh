@@ -14,8 +14,8 @@ if [[ ${QMLFORMAT+x} ]]; then
   fi
 else
   root=$(cd -- "${BASH_SOURCE[0]%/*}/.." && pwd)
-  formatter=$(python3 "$root/scripts/qt-tool.py" --tool qmlformat --preset "${EDITOR_PRESET:-test}") || {
-    echo 'Cannot find qmlformat in configured Qt. Configure build/test or set QMLFORMAT.' >&2
+  formatter=$(python3 "$root/scripts/qt-tool.py" --tool qmlformat --preset "${EDITOR_PRESET:-dev}") || {
+    echo 'Cannot find qmlformat in configured Qt. Configure build/dev or set QMLFORMAT.' >&2
     exit 1
   }
 fi

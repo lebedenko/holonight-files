@@ -1,0 +1,30 @@
+[
+  {
+    "name": "holonight-config",
+    "revision": "0ccd25f323662f50a47bb048be636160f2b7c135"
+  },
+  {
+    "name": "holonight-system-services",
+    "revision": "70614eb70329af7014853c2973e5624acf0b251e",
+    "options": [
+      "-DBUILD_AUDIO=OFF",
+      "-DBUILD_STORAGE=ON"
+    ]
+  },
+  {
+    "name": "holonight-qt",
+    "revision": "7c3ce074a8c2e02e4ee8cad8cd19eb8627aa4f68"
+  },
+  {
+    "name": "holonight-images",
+    "revision": "ae827d78db9cc21f9537c27f50f49baf879324da"
+  },
+  {
+    "name": "holonight-thumbnails",
+    "revision": "c9ae0ad9a64e8ce28ee669b5463ef1bec74bc16d"
+  },
+  {
+    "name": "holonight-search",
+    "revision": "5e71fd7c6494084b4fcc1b5b7a8df9bb2e690bdc"
+  }
+]

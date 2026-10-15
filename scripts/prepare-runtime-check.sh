@@ -24,6 +24,5 @@ DESTDIR="$context/payload" cmake --install "$root/build/release" --prefix /usr
 # QMarkdown belongs to the qualified runtime image, never the Files payload.
 mkdir -p "$context/check/scripts"
 cp "$root/scripts/isolated-runtime.sh" "$context/check/scripts/"
-cp "$root/packaging/Dockerfile.runtime-check" "$context/Dockerfile"
 printf '%s\n' "${context#"$root/"}" > "$root/build/runtime-check-context"
 printf 'Runtime context: %s\n' "$context"

@@ -310,7 +310,6 @@ def launch(args):
                                      for p in args.provider_prefix.rglob('*')
                                      if p.is_file() and ('.so' in p.name or p.suffix in ('.qml', '.cmake'))},
               'provider_prefix': str(args.provider_prefix),
-              'providers': (args.provider_prefix.parent / 'provider-revisions.tsv').read_text(),
               'fixture_directory': str(args.fixtures),
               'fixtures': {p.name: digest(p) for p in args.fixtures.iterdir() if p.is_file()},
               'status': 'incomplete'}
@@ -400,7 +399,7 @@ def report(args):
                 key += (samples[0]['fixture'],)
                 require(key not in startup_seen, 'Duplicate startup trial')
                 startup_seen.add(key)
-            signatures.add((entry['binary_sha256'], entry['providers'],
+            signatures.add((entry['binary_sha256'],
                             json.dumps(entry['provider_artifacts'], sort_keys=True)))
             for phase in (('cold', 'disk') if entry['mode'] == 'pair' else ('startup',)):
                 phase_dir = path.parent / phase
