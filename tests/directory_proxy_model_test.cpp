@@ -18,7 +18,7 @@ namespace {
 bool settled(const DirectoryModel& model) {
   return QTest::qWaitFor([&] { return !model.scanning(); });
 }
-QStringList proxyNames(const DirectoryProxyModel& proxy) {
+QStringList proxyNames(const FilesDirectoryProxyModel& proxy) {
   QStringList names;
   for (int row = 0; row < proxy.rowCount(); ++row) {
     names.append(proxy.data(proxy.index(row, 0), DirectoryModel::NameRole).toString());
@@ -27,12 +27,12 @@ QStringList proxyNames(const DirectoryProxyModel& proxy) {
 }
 }  // namespace
 
-TEST(DirectoryProxyModel, SortsDirectoriesBeforeFilesWithNaturalCaseInsensitiveOrder) {
+TEST(FilesDirectoryProxyModel, SortsDirectoriesBeforeFilesWithNaturalCaseInsensitiveOrder) {
   QTemporaryDir dir(fixturePattern("proxy-sort"));
   ASSERT_TRUE(dir.isValid());
   // Numeric values kept distinct (1 < 2 < 10) to avoid depending on unspecified tie-break
   // behavior between collator-equal keys like "file2" vs "file02" — that nuance is a QCollator
-  // implementation detail, not something DirectoryProxyModel itself is responsible for.
+  // implementation detail, not something FilesDirectoryProxyModel itself is responsible for.
   for (const auto& name : {"File10.txt", "file2.txt", "File1.txt", "Banana.txt"}) {
     ASSERT_FALSE(writeFile(dir, QString::fromUtf8(name)).isEmpty());
   }
@@ -40,7 +40,7 @@ TEST(DirectoryProxyModel, SortsDirectoriesBeforeFilesWithNaturalCaseInsensitiveO
   ASSERT_TRUE(QDir(dir.path()).mkdir("aaa-folder"));
   const auto originalLocale = QLocale();
   DirectoryModel model;
-  DirectoryProxyModel proxy;
+  FilesDirectoryProxyModel proxy;
   EXPECT_EQ(QLocale(), originalLocale);
   proxy.setSourceModel(&model);
   model.load(dir.path());
@@ -54,13 +54,13 @@ TEST(DirectoryProxyModel, SortsDirectoriesBeforeFilesWithNaturalCaseInsensitiveO
   EXPECT_EQ(proxyNames(proxy), reversedExpected);
 }
 
-TEST(DirectoryProxyModel, HiddenFilesAreExcludedByDefaultAndToggleImmediately) {
+TEST(FilesDirectoryProxyModel, HiddenFilesAreExcludedByDefaultAndToggleImmediately) {
   QTemporaryDir dir(fixturePattern("proxy-hidden"));
   ASSERT_TRUE(dir.isValid());
   ASSERT_FALSE(writeFile(dir, ".hidden.txt").isEmpty());
   ASSERT_FALSE(writeFile(dir, "visible.txt").isEmpty());
   DirectoryModel model;
-  DirectoryProxyModel proxy;
+  FilesDirectoryProxyModel proxy;
   proxy.setSourceModel(&model);
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
@@ -72,14 +72,14 @@ TEST(DirectoryProxyModel, HiddenFilesAreExcludedByDefaultAndToggleImmediately) {
   EXPECT_EQ(proxyNames(proxy), (QStringList{"..", "visible.txt"}));
 }
 
-TEST(DirectoryProxyModel, SortDirectionTogglesWithoutFullModelReset) {
+TEST(FilesDirectoryProxyModel, SortDirectionTogglesWithoutFullModelReset) {
   QTemporaryDir dir(fixturePattern("proxy-order"));
   ASSERT_TRUE(dir.isValid());
   ASSERT_FALSE(writeFile(dir, "a.txt").isEmpty());
   ASSERT_FALSE(writeFile(dir, "b.txt").isEmpty());
   ASSERT_FALSE(writeFile(dir, "c.txt").isEmpty());
   DirectoryModel model;
-  DirectoryProxyModel proxy;
+  FilesDirectoryProxyModel proxy;
   proxy.setSourceModel(&model);
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
@@ -94,14 +94,14 @@ TEST(DirectoryProxyModel, SortDirectionTogglesWithoutFullModelReset) {
   EXPECT_EQ(proxyNames(proxy), (QStringList{"..", "a.txt", "b.txt", "c.txt"}));
 }
 
-TEST(DirectoryProxyModel, PlaceholderAdjacentToExactAnchorAcrossDirectionsGroupsAndTies) {
+TEST(FilesDirectoryProxyModel, PlaceholderAdjacentToExactAnchorAcrossDirectionsGroupsAndTies) {
   QTemporaryDir dir(fixturePattern("placeholder-order"));
   for (const auto& name : {"A", "a", "file02", "file2", "z"}) {
     writeFile(dir, name);
   }
   ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
   DirectoryModel model;
-  DirectoryProxyModel proxy;
+  FilesDirectoryProxyModel proxy;
   proxy.setSourceModel(&model);
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
@@ -126,9 +126,9 @@ TEST(DirectoryProxyModel, PlaceholderAdjacentToExactAnchorAcrossDirectionsGroups
   }
 }
 
-TEST(DirectoryProxyModel, EmptyPlaceholderAndEditingLocks) {
+TEST(FilesDirectoryProxyModel, EmptyPlaceholderAndEditingLocks) {
   DirectoryModel model;
-  DirectoryProxyModel proxy;
+  FilesDirectoryProxyModel proxy;
   proxy.setSourceModel(&model);
   for (bool descending : {false, true}) {
     proxy.setSortDescending(descending);
@@ -145,13 +145,13 @@ TEST(DirectoryProxyModel, EmptyPlaceholderAndEditingLocks) {
   EXPECT_FALSE(proxy.hiddenVisible());
 }
 
-TEST(DirectoryProxyModel, ParentRowAlwaysIndexZeroAcrossSortOrders) {
+TEST(FilesDirectoryProxyModel, ParentRowAlwaysIndexZeroAcrossSortOrders) {
   QTemporaryDir dir(fixturePattern("proxy-parent-sort"));
   ASSERT_TRUE(dir.isValid());
   writeFile(dir, "file.txt");
   ASSERT_TRUE(QDir(dir.path()).mkdir("dir"));
   DirectoryModel model;
-  DirectoryProxyModel proxy;
+  FilesDirectoryProxyModel proxy;
   proxy.setSourceModel(&model);
   model.load(dir.path());
   ASSERT_TRUE(settled(model));
@@ -165,11 +165,11 @@ TEST(DirectoryProxyModel, ParentRowAlwaysIndexZeroAcrossSortOrders) {
   EXPECT_EQ(proxy.data(proxy.index(0, 0), DirectoryModel::NameRole).toString(), "..");
 }
 
-TEST(DirectoryProxyModel, ParentRowAlwaysVisibleAcrossHiddenToggle) {
+TEST(FilesDirectoryProxyModel, ParentRowAlwaysVisibleAcrossHiddenToggle) {
   QTemporaryDir dir(fixturePattern("proxy-parent-hidden"));
   ASSERT_TRUE(dir.isValid());
   DirectoryModel model;
-  DirectoryProxyModel proxy;
+  FilesDirectoryProxyModel proxy;
   proxy.setSourceModel(&model);
   model.load(dir.path());
   ASSERT_TRUE(settled(model));

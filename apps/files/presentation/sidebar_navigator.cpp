@@ -1,8 +1,8 @@
 #include "sidebar_navigator.h"
 
-#include "devices_model.h"
 #include "places_model.h"
 
+#include <HolonightFileBrowser/storage/devices_model.h>
 #include <algorithm>
 
 SidebarNavigator::SidebarNavigator(PlacesModel* places, DevicesModel* devices, QObject* parent)

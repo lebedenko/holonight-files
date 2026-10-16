@@ -1,9 +1,8 @@
 #include "vim_mode_controller.h"
 
-#include "fuzzy_matcher.h"
-
 #include <QDir>
 
+#include <HolonightFileBrowser/search/fuzzy_matcher.h>
 #include <limits>
 #include <ranges>
 #include <utility>

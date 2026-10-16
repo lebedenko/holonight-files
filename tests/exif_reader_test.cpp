@@ -1,5 +1,3 @@
-#include "exif_reader.h"
-
 #include "directory_fixtures.h"
 #include "preview_fixtures.h"
 
@@ -9,6 +7,7 @@
 #include <QTemporaryDir>
 #include <QThread>
 
+#include <HolonightFileBrowser/preview/exif_reader.h>
 #include <atomic>
 #include <future>
 #include <gtest/gtest.h>

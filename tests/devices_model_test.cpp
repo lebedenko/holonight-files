@@ -1,5 +1,3 @@
-#include "devices_model.h"
-
 #include "devices_model_test_access.h"
 #include "directory_controller.h"
 #include "engine_setup.h"
@@ -16,6 +14,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <HolonightFileBrowser/storage/devices_model.h>
 #include <StorageBackend.h>
 #include <gtest/gtest.h>
 #include <memory>
@@ -686,12 +685,6 @@ TEST(FilesStorage, CapacityArrivesFromAWorkerAndIsHiddenUntilThen) {
   for (const auto& call : devices.probe->calls()) {
     EXPECT_NE(call.thread, QThread::currentThread());  // REQ-F-042
   }
-}
-
-TEST(FilesStorage, CapacityTextIsATranslatableTwoArgumentFormat) {
-  QFile source(QStringLiteral(FILES_SOURCE_DIR "/apps/files/storage/devices_model.cpp"));
-  ASSERT_TRUE(source.open(QIODevice::ReadOnly));
-  EXPECT_TRUE(source.readAll().contains(R"(tr("%1 free of %2"))"));
 }
 
 TEST(FilesStorage, RowsWithoutAMountHaveNoCapacity) {

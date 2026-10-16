@@ -1,5 +1,6 @@
 #include "path_finder_model.h"
 #include "path_index_store.h"
+#include "settings/search_settings.h"
 
 #include <QCoreApplication>
 #include <QDateTime>

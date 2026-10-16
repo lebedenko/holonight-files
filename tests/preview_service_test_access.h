@@ -1,6 +1,6 @@
 #pragma once
 
-#include "preview_service.h"
+#include <HolonightFileBrowser/preview/preview_service.h>
 
 // Internal synchronization seam, configured before a target dispatches its worker job. Mirrors
 // DirectoryModelTestAccess: a test-only hook, not part of the production API surface.

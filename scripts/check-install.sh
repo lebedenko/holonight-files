@@ -9,13 +9,10 @@ for file in bin/hn-files share/applications/org.holonight.Files.desktop \
   share/licenses/holonight-files/LICENSE share/licenses/holonight-files/GPL-3.0-or-later.txt; do
   test -s "$stage/usr/$file"
 done
-for file in lib/libholonight_file_browser_core.a lib/libholonight_file_browser_quick.so \
-  lib/cmake/HolonightFileBrowser/HolonightFileBrowserConfig.cmake \
-  lib/qt6/qml/Holonight/FileBrowser/qmldir \
-  lib/qt6/qml/Holonight/FileBrowser/holonight_file_browser_quick.qmltypes \
-  lib/qt6/qml/Holonight/FileBrowser/libholonight_file_browser_quickplugin.so; do
-  test -s "$stage/usr/$file"
-done
+# Browsing payload belongs exclusively to the independent toolkit.
+test ! -e "$stage/usr/lib/cmake/HolonightFileBrowser"
+test ! -e "$stage/usr/include/HolonightFileBrowser"
+test ! -e "$stage/usr/lib/qt6/qml/Holonight/FileBrowser"
 test ! -e "$stage/usr/bin/holonight-files"
 test ! -L "$stage/usr/bin/holonight-files"
 # config.toml/state.toml parsing links the system tomlplusplus shared library.

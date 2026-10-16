@@ -1,6 +1,5 @@
 #pragma once
 #include "clipboard_register.h"
-#include "devices_model.h"
 #include "directory_model.h"
 #include "directory_proxy_model.h"
 #include "editing_session.h"
@@ -10,7 +9,6 @@
 #include "path_finder_model.h"
 #include "places_model.h"
 #include "preview_selection.h"
-#include "preview_service.h"
 #include "session_lifecycle.h"
 #include "sidebar_navigator.h"
 #include "state/last_location_tracker.h"
@@ -27,6 +25,8 @@
 #include <QString>
 #include <QtQml/qqmlregistration.h>
 
+#include <HolonightFileBrowser/preview/preview_service.h>
+#include <HolonightFileBrowser/storage/devices_model.h>
 #include <memory>
 
 // QML-facing application coordinator. Private sessions own navigation, editing, preview
@@ -40,7 +40,7 @@ class DirectoryController : public QObject {
   Q_PROPERTY(QString directoryError READ directoryError NOTIFY changed)
   Q_PROPERTY(bool scanning READ scanning NOTIFY changed)
   Q_PROPERTY(int cursorRow READ cursorRow NOTIFY changed)
-  Q_PROPERTY(DirectoryProxyModel* listing READ listing CONSTANT)
+  Q_PROPERTY(FilesDirectoryProxyModel* listing READ listing CONSTANT)
   Q_PROPERTY(PlacesModel* places READ places CONSTANT)
   Q_PROPERTY(PathFinderModel* finder READ finder CONSTANT)
   Q_PROPERTY(DevicesModel* devices READ devices CONSTANT)
@@ -65,7 +65,7 @@ class DirectoryController : public QObject {
   [[nodiscard]] QString directoryError() const { return navigation_.model_.directoryError(); }
   [[nodiscard]] bool scanning() const { return navigation_.model_.scanning(); }
   [[nodiscard]] int cursorRow() const { return navigation_.cursor_row_; }
-  DirectoryProxyModel* listing() { return &navigation_.proxy_; }
+  FilesDirectoryProxyModel* listing() { return &navigation_.proxy_; }
   PlacesModel* places() { return &places_; }
   PathFinderModel* finder() { return &finder_; }
   DevicesModel* devices() { return devices_; }

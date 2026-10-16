@@ -1,13 +1,12 @@
 #pragma once
 
-#include "preview_service.h"
-
 #include <QObject>
 #include <QPointer>
 #include <QQmlParserStatus>
 #include <QSizeF>
 #include <QtQml/qqmlregistration.h>
 
+#include <HolonightFileBrowser/preview/preview_service.h>
 #include <cstdint>
 
 // Per-overlay presentation state. The shared preview service remains independent of card layout.

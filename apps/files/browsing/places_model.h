@@ -1,12 +1,12 @@
 #pragma once
 
-#include "places/place_availability_checker.h"
 #include "places/place_list.h"
 #include "warning_sink.h"
 
 #include <QAbstractListModel>
 #include <QtQml/qqmlregistration.h>
 
+#include <HolonightFileBrowser/places/place_availability_checker.h>
 #include <cstdint>
 #include <memory>
 #include <mutex>

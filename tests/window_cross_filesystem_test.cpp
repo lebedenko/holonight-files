@@ -1,5 +1,6 @@
 #include "engine_setup.h"
-#include "image_policy.h"
+
+#include <HolonightFileBrowser/preview/image_policy.h>
 // T-118/T-119/T-122 (docs/sdd/file-operations/TASKS.md): a rendered VISUAL-selection trash task
 // spanning a real, distinct filesystem, and the same flow against a trash location that fails
 // validation for every item — proving a single confirmation covers the whole selection, per-item

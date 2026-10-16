@@ -1,11 +1,12 @@
 #include "directory_fixtures.h"
 #include "path_finder_model.h"
-#include "path_scanner.h"
+#include "settings/search_settings.h"
 #include "settings_fixtures.h"
 
 #include <QSemaphore>
 #include <QTest>
 
+#include <HolonightFileBrowser/search/path_scanner.h>
 #include <gtest/gtest.h>
 
 using files_test::ScopedEnvironmentVariable;

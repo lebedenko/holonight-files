@@ -1,10 +1,8 @@
 add_library(files-private STATIC
-  storage/devices_model.cpp
-  storage/devices_model.h
-  storage/storage_filter.h
-  storage/storage_policy.h
-  storage/capacity_probe.cpp
-  storage/capacity_probe.h
+  browsing/directory_proxy_model.cpp
+  browsing/directory_proxy_model.h
+  browsing/path_index_store.cpp
+  browsing/path_index_store.h
   presentation/sidebar_navigator.cpp
   presentation/sidebar_navigator.h
   application/directory_controller.cpp
@@ -23,16 +21,8 @@ add_library(files-private STATIC
   application/vim_mode_controller.h
   browsing/directory_model.cpp
   browsing/directory_model.h
-  browsing/fuzzy_matcher.cpp
-  browsing/fuzzy_matcher.h
   browsing/path_finder_model.cpp
   browsing/path_finder_model.h
-  browsing/path_index_store.cpp
-  browsing/path_index_store.h
-  browsing/path_scanner.cpp
-  browsing/path_scanner.h
-  browsing/search_exclusion_policy.cpp
-  browsing/search_exclusion_policy.h
   settings/search_settings.h
   browsing/jump_list.cpp
   browsing/jump_list.h
@@ -53,22 +43,8 @@ add_library(files-private STATIC
   operations/trash_service.h
   places/bookmark_store.cpp
   places/bookmark_store.h
-  places/place_availability_checker.cpp
-  places/place_availability_checker.h
-  preview/exif_reader.cpp
-  preview/exif_reader.h
   preview/preview_selection.cpp
   preview/preview_selection.h
-  preview/preview_service.cpp
-  preview/preview_service.h
-  preview/text_line_model.cpp
-  preview/text_line_model.h
-  preview/text_lines.cpp
-  preview/text_lines.h
-  preview/text_preview_service.cpp
-  preview/text_preview_service.h
-  preview/thumbnail_service.cpp
-  preview/thumbnail_service.h
   settings/app_settings.cpp
   settings/app_settings.h
   settings/general_settings.cpp
@@ -98,8 +74,7 @@ target_include_directories(files-private PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/state"
   "${CMAKE_CURRENT_SOURCE_DIR}/places"
 )
-target_include_directories(files-private PRIVATE "${PROJECT_SOURCE_DIR}/libs/file-browser/src")
-target_link_libraries(files-private PUBLIC HolonightFileBrowser::Core HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images HolonightThumbnails::Thumbnails HolonightSearch::Search PRIVATE tomlplusplus::tomlplusplus)
+target_link_libraries(files-private PUBLIC HolonightFileBrowser::Search HolonightFileBrowser::Storage HolonightFileBrowser::Preview HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images HolonightThumbnails::Thumbnails HolonightSearch::Search PRIVATE tomlplusplus::tomlplusplus)
 
 qt_extract_metatypes(files-private)
 
@@ -134,7 +109,7 @@ function(add_files_application target)
     URI HolonightFiles VERSION 1.0
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qml/${target}/HolonightFiles"
     RESOURCE_PREFIX "/qt/qml"
-    IMPORT_PATH "${PROJECT_BINARY_DIR}/libs/file-browser/qml" "${CMAKE_CURRENT_BINARY_DIR}/qml/${target}" ${QML_IMPORT_PATH}
+    IMPORT_PATH "${CMAKE_CURRENT_BINARY_DIR}/qml/${target}" ${QML_IMPORT_PATH}
     DEPENDENCIES QtQuick Holonight.FileBrowser
     QML_FILES ${module_qml}
     RESOURCES ${module_icons}
@@ -145,8 +120,6 @@ function(add_files_application target)
       "${app_dir}/presentation/icon_fallbacks.h"
       "${app_dir}/presentation/inspection_keys.cpp"
       "${app_dir}/presentation/inspection_keys.h"
-      "${app_dir}/presentation/preview_image_item.cpp"
-      "${app_dir}/presentation/preview_image_item.h"
       "${app_dir}/presentation/quick_look_presentation_model.cpp"
       "${app_dir}/presentation/quick_look_presentation_model.h"
       "${app_dir}/presentation/size_format.cpp"
@@ -157,7 +130,7 @@ function(add_files_application target)
       "${app_dir}/presentation/qml_types.h"
     NO_IMPORT_SCAN)
   qt_add_resources(${target} files-config PREFIX "/" BASE "${app_dir}" FILES "${app_dir}/qtquickcontrols2.conf")
-  target_link_libraries(${target} PRIVATE files-private HolonightFileBrowser::Quick Qt6::QuickControls2 HolonightQt::Core HolonightQt::Controls QMarkdown::QMarkdown)
+  target_link_libraries(${target} PRIVATE files-private HolonightFileBrowser::Markdown HolonightFileBrowser::PreviewQuick Qt6::QuickControls2 HolonightQt::Core HolonightQt::Controls QMarkdown::QMarkdown)
   target_compile_definitions(${target} PRIVATE FILES_VERSION="${PROJECT_VERSION}")
 endfunction()
 

@@ -1,7 +1,4 @@
-#include "image_policy.h"
-#include "preview_service.h"
 #include "preview_service_test_access.h"
-#include "thumbnail_service.h"
 
 #include <QCoreApplication>
 #include <QDirIterator>
@@ -10,6 +7,9 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <HolonightFileBrowser/preview/image_policy.h>
+#include <HolonightFileBrowser/preview/preview_service.h>
+#include <HolonightFileBrowser/preview/thumbnail_service.h>
 #include <gtest/gtest.h>
 
 namespace {

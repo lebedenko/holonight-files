@@ -37,7 +37,7 @@ class NavigationSession {
   friend struct DirectoryControllerTestAccess;
   DirectoryController& controller_;
   DirectoryModel model_;
-  DirectoryProxyModel proxy_;
+  FilesDirectoryProxyModel proxy_;
   QFileSystemWatcher watcher_;
   QString current_path_;
   JumpList jump_list_;

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "location_classifier.h"
-#include "places/place_availability_checker.h"
 #include "warning_sink.h"
 
 #include <QHash>
@@ -9,6 +8,7 @@
 #include <QStringList>
 #include <QThread>
 
+#include <HolonightFileBrowser/places/place_availability_checker.h>
 #include <atomic>
 #include <chrono>
 #include <memory>

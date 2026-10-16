@@ -1,5 +1,3 @@
-#include "places/place_availability_checker.h"
-
 #include "directory_fixtures.h"
 #include "settings_fixtures.h"
 
@@ -7,6 +5,7 @@
 #include <QTest>
 #include <QThread>
 
+#include <HolonightFileBrowser/places/place_availability_checker.h>
 #include <atomic>
 #include <gtest/gtest.h>
 #include <sys/stat.h>

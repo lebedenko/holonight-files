@@ -1,9 +1,9 @@
 add_files_application(files-smoke smoke.cpp separator_window_test.cpp size_format_test.cpp inspection_helpers_test.cpp directory_model_test.cpp directory_proxy_model_test.cpp
   devices_model_test.cpp storage_policy_test.cpp capacity_probe_test.cpp sidebar_navigator_test.cpp
   directory_controller_test.cpp directory_performance_test.cpp initial_directory_test.cpp
-  thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp text_lines_test.cpp text_line_model_test.cpp preview_service_test.cpp
+  thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp preview_service_test.cpp
   preview_consumer_dpr_test.cpp quick_look_presentation_model_test.cpp preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp preview_performance_test.cpp
-  name_validator_test.cpp fuzzy_matcher_test.cpp path_finder_test.cpp path_index_store_test.cpp search_exclusion_test.cpp vim_mode_controller_test.cpp
+  name_validator_test.cpp path_finder_test.cpp path_index_store_test.cpp search_exclusion_test.cpp vim_mode_controller_test.cpp
   clipboard_register_test.cpp file_operation_service_test.cpp trash_service_test.cpp
   task_manager_test.cpp directory_controller_file_ops_test.cpp icon_name_resolver_test.cpp icon_image_provider_test.cpp
   jump_list_test.cpp history_navigation_window_test.cpp places_model_test.cpp places_window_test.cpp
@@ -17,13 +17,11 @@ target_link_libraries(files-smoke PRIVATE Qt6::Test Qt6::OpenGL GTest::gtest Pkg
 qt_add_executable(files-finder-benchmark path_finder_benchmark.cpp
   ../apps/files/browsing/path_finder_model.cpp ../apps/files/browsing/path_finder_model.h
   ../apps/files/browsing/path_index_store.cpp
-  ../apps/files/browsing/path_scanner.cpp ../apps/files/browsing/path_scanner.h
-  ../apps/files/browsing/search_exclusion_policy.cpp
   ../apps/files/settings/general_settings.cpp ../apps/files/settings/settings_registry.cpp
   ../apps/files/settings/toml_document.cpp ../apps/files/settings/warning_sink.cpp
   ../apps/files/settings/xdg_paths.cpp)
 target_include_directories(files-finder-benchmark PRIVATE ../apps/files ../apps/files/browsing)
-target_link_libraries(files-finder-benchmark PRIVATE HolonightSearch::Search Qt6::Test tomlplusplus::tomlplusplus)
+target_link_libraries(files-finder-benchmark PRIVATE HolonightFileBrowser::Search Qt6::Test tomlplusplus::tomlplusplus)
 set_target_properties(files-finder-benchmark PROPERTIES QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
 target_compile_definitions(files-smoke PRIVATE FILES_FIXTURE_DIR="${CMAKE_CURRENT_BINARY_DIR}/fixtures/files"
   FILES_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

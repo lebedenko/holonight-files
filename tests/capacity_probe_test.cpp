@@ -1,10 +1,9 @@
-#include "capacity_probe.h"
-
 #include "directory_fixtures.h"
 
 #include <QStorageInfo>
 #include <QTemporaryDir>
 
+#include <HolonightFileBrowser/storage/capacity_probe.h>
 #include <gtest/gtest.h>
 
 // The only tests that touch a real filesystem's capacity: a private temp directory and a path that

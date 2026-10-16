@@ -1,5 +1,4 @@
 #include "directory_fixtures.h"
-#include "thumbnail_service.h"
 
 #include <QDataStream>
 #include <QElapsedTimer>
@@ -7,6 +6,7 @@
 #include <QImage>
 #include <QTemporaryDir>
 
+#include <HolonightFileBrowser/preview/thumbnail_service.h>
 #include <gtest/gtest.h>
 
 using files_test::fixturePattern;

@@ -63,7 +63,9 @@ def providers(destination, siblings):
     for provider in json.loads((ROOT / 'scripts/ci/providers.json').read_text()):
         name, revision = provider['name'], provider['revision']
         print(f'Provider: {name} {revision}' if not siblings else f'Provider: {name} (current sibling)', flush=True)
-        if not re.fullmatch(r'[a-z0-9-]+', name) or not re.fullmatch(r'[0-9a-f]{40}', revision):
+        if revision == 'unpublished' and not siblings:
+            raise ValueError(f'{name} is not published; pass --siblings to test current installed providers')
+        if not re.fullmatch(r'[a-z0-9-]+', name) or (revision != 'unpublished' and not re.fullmatch(r'[0-9a-f]{40}', revision)):
             raise ValueError('Provider names and full source revisions are required')
         if siblings:
             print(f'Using current sibling checkout: {siblings / name}', flush=True)

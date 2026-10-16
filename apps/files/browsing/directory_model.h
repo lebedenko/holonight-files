@@ -87,6 +87,7 @@ class DirectoryModel : public QAbstractListModel, public DirectoryRoles {
   };
   void resolveLocation(const QString& path, quint64 generation);
   void startWalk(const QString& path, bool diff);
+  void walkFinished(quint64 generation);
   void applyBatch(const Batch& batch);
   // Applies a load batch's leading ".." entry to row 0 in place and returns the remaining entries.
   QList<DirectoryEntry> replaceParentRow(QList<DirectoryEntry> entries);
@@ -96,8 +97,8 @@ class DirectoryModel : public QAbstractListModel, public DirectoryRoles {
   QThread thread_;
   QObject* worker_;
   QList<DirectoryEntry> entries_;
-  QHash<QString, int> name_to_row_;
-  QSet<QString> seen_this_refresh_;
+  QHash<QByteArray, int> identity_to_row_;
+  QSet<QByteArray> seen_this_refresh_;
   QString directory_path_;
   QString directory_error_;
   std::shared_ptr<std::atomic_bool> cancellation_;

@@ -1,7 +1,5 @@
 #pragma once
 
-#include "capacity_probe.h"
-
 #include <QCoreApplication>
 #include <QHash>
 #include <QList>
@@ -9,6 +7,7 @@
 #include <QTest>
 #include <QThread>
 
+#include <HolonightFileBrowser/storage/capacity_probe.h>
 #include <StorageBackend.h>
 #include <algorithm>
 #include <memory>

@@ -1,8 +1,7 @@
-#include "storage_policy.h"
-
 #include <QFile>
 #include <QRegularExpression>
 
+#include <HolonightFileBrowser/storage/storage_policy.h>
 #include <gtest/gtest.h>
 
 using HoloNight::System::StorageDrive;
@@ -88,12 +87,3 @@ TEST(StoragePolicy, IconNamePerClassification) {
 }
 
 // REQ-C-001: no hardware-specific identifier and no bus literal may steer classification.
-TEST(StoragePolicy, SourceReadsNoHardwareSpecificIdentifiers) {
-  QFile file(QStringLiteral(FILES_SOURCE_DIR "/apps/files/storage/storage_policy.h"));
-  ASSERT_TRUE(file.open(QIODevice::ReadOnly));
-  const auto source = QString::fromUtf8(file.readAll());
-  const QRegularExpression forbidden(
-      R"re(\b(vendor|model|serial|siblingId|device|mountPoints)\b|"(usb|ieee1394|sdio)")re");
-  const auto match = forbidden.match(source);
-  EXPECT_FALSE(match.hasMatch()) << match.captured().toStdString();
-}

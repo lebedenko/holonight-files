@@ -1,6 +1,5 @@
 #include "sidebar_navigator.h"
 
-#include "devices_model.h"
 #include "directory_fixtures.h"
 #include "places_model.h"
 #include "settings_fixtures.h"
@@ -8,6 +7,7 @@
 
 #include <QSignalSpy>
 
+#include <HolonightFileBrowser/storage/devices_model.h>
 #include <gtest/gtest.h>
 #include <memory>
 

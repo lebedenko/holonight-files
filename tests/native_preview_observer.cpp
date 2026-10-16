@@ -1,6 +1,5 @@
 #include "native_preview_observer.h"
 
-#include "preview_image_item.h"
 #include "preview_service_test_access.h"
 
 #include <QGuiApplication>
@@ -10,6 +9,7 @@
 #include <QSGRendererInterface>
 #include <QScreen>
 
+#include <HolonightFileBrowser/preview_quick/preview_image_item.h>
 #include <utility>
 
 namespace {

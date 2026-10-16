@@ -1,6 +1,5 @@
 #include "directory_model.h"
 
-#include "directory_scan.h"
 #include "icon_name_resolver.h"
 
 #include <QDir>
@@ -9,6 +8,8 @@
 #include <QFileInfo>
 #include <QSemaphore>
 
+#include <HolonightFileBrowser/directory_scan.h>
+#include <HolonightFileBrowser/native_path.h>
 #include <cerrno>
 #include <cstring>
 #include <dirent.h>
@@ -102,7 +103,7 @@ QHash<int, QByteArray> DirectoryModel::roleNames() const {
   };
 }
 DirectoryEntry DirectoryModel::syntheticParentEntry(const QString& path, const PlaceList::IconMap* places) {
-  return HolonightFileBrowser::detail::syntheticParentEntry(path, places);
+  return HolonightFileBrowser::syntheticParentEntry(path, places);
 }
 void DirectoryModel::setPlaceIcons(std::shared_ptr<const PlaceList::IconMap> icons) { place_icons_ = std::move(icons); }
 void DirectoryModel::load(const QString& path) {
@@ -116,11 +117,12 @@ void DirectoryModel::load(const QString& path) {
   }
   beginResetModel();
   entries_.clear();
-  name_to_row_.clear();
+  identity_to_row_.clear();
   seen_this_refresh_.clear();
   if (!path.isEmpty() && !QDir(path).isRoot()) {
     entries_.append(syntheticParentEntry(path, place_icons_.get()));
-    name_to_row_.insert(entries_.first().name, 0);
+    identity_to_row_.insert(
+        HolonightFileBrowser::entryIdentity(entries_.first().native_path, entries_.first().is_parent), 0);
   }
   endResetModel();
   directory_path_ = path;
@@ -139,7 +141,7 @@ void DirectoryModel::refresh() {
   }
   seen_this_refresh_.clear();
   if (!entries_.isEmpty() && entries_[0].is_parent) {
-    seen_this_refresh_.insert(QStringLiteral(".."));
+    seen_this_refresh_.insert(HolonightFileBrowser::entryIdentity(entries_.first().native_path, true));
   }
   directory_error_.clear();
   scanning_ = true;
@@ -258,7 +260,7 @@ void DirectoryModel::startWalk(const QString& path, bool diff) {
         if (!cancel->load()) {
           resolveLocation(path, generation);
         }
-        HolonightFileBrowser::detail::walkDirectory(
+        HolonightFileBrowser::walkDirectory(
             path, cancel, beforeOpen, readErrorAfter, placeIcons,
             [this, path, generation, diff, cancel, deliverySlots, classifier, acceptedLoad](
                 QList<DirectoryEntry> entries, bool finished, QString error) {
@@ -297,8 +299,18 @@ void DirectoryModel::startWalk(const QString& path, bool diff) {
                     Qt::QueuedConnection);
               }
             });
+        // Completion is separate from result delivery: cancellation deliberately suppresses batches.
+        QMetaObject::invokeMethod(this, [this, generation] { walkFinished(generation); }, Qt::QueuedConnection);
       },
       Qt::QueuedConnection);
+}
+void DirectoryModel::walkFinished(quint64 generation) {
+  if (generation == generation_) {
+    walk_in_flight_ = false;
+  }
+  if (stopping_) {
+    thread_.quit();
+  }
 }
 void DirectoryModel::applyBatch(const Batch& batch) {
   if (batch.generation != generation_) {
@@ -322,7 +334,7 @@ void DirectoryModel::applyBatch(const Batch& batch) {
     if (entries_.size() == 1 && entries_[0].is_parent) {
       beginResetModel();
       entries_.clear();
-      name_to_row_.clear();
+      identity_to_row_.clear();
       endResetModel();
     }
     directory_error_ = batch.directory_error;
@@ -353,7 +365,8 @@ void DirectoryModel::appendEntries(const QList<DirectoryEntry>& entries) {
   const int first = static_cast<int>(entries_.size());
   beginInsertRows({}, first, first + static_cast<int>(entries.size()) - 1);
   for (const auto& entry : entries) {
-    name_to_row_.insert(entry.name, static_cast<int>(entries_.size()));
+    identity_to_row_.insert(HolonightFileBrowser::entryIdentity(entry.native_path, entry.is_parent),
+                            static_cast<int>(entries_.size()));
     entries_.append(entry);
   }
   endInsertRows();
@@ -372,9 +385,10 @@ QList<DirectoryEntry> DirectoryModel::replaceParentRow(QList<DirectoryEntry> ent
 void DirectoryModel::applyDiffEntries(const QList<DirectoryEntry>& entries) {
   QList<DirectoryEntry> additions;
   for (const auto& entry : entries) {
-    seen_this_refresh_.insert(entry.name);
-    const auto existing = name_to_row_.constFind(entry.name);
-    if (existing != name_to_row_.constEnd()) {
+    seen_this_refresh_.insert(HolonightFileBrowser::entryIdentity(entry.native_path, entry.is_parent));
+    const auto existing =
+        identity_to_row_.constFind(HolonightFileBrowser::entryIdentity(entry.native_path, entry.is_parent));
+    if (existing != identity_to_row_.constEnd()) {
       const int row = existing.value();
       if (entries_[row] != entry) {
         entries_[row] = entry;
@@ -389,12 +403,14 @@ void DirectoryModel::applyDiffEntries(const QList<DirectoryEntry>& entries) {
 }
 void DirectoryModel::finishDiff() {
   for (int last = static_cast<int>(entries_.size()) - 1; last >= 0;) {
-    if (seen_this_refresh_.contains(entries_[last].name)) {
+    if (seen_this_refresh_.contains(
+            HolonightFileBrowser::entryIdentity(entries_[last].native_path, entries_[last].is_parent))) {
       --last;
       continue;
     }
     int first = last;
-    while (first > 0 && !seen_this_refresh_.contains(entries_[first - 1].name)) {
+    while (first > 0 && !seen_this_refresh_.contains(HolonightFileBrowser::entryIdentity(
+                            entries_[first - 1].native_path, entries_[first - 1].is_parent))) {
       --first;
     }
     beginRemoveRows({}, first, last);
@@ -402,9 +418,10 @@ void DirectoryModel::finishDiff() {
     endRemoveRows();
     last = first - 1;
   }
-  name_to_row_.clear();
+  identity_to_row_.clear();
   for (int row = 0; row < entries_.size(); ++row) {
-    name_to_row_.insert(entries_[row].name, row);
+    identity_to_row_.insert(HolonightFileBrowser::entryIdentity(entries_[row].native_path, entries_[row].is_parent),
+                            row);
   }
   seen_this_refresh_.clear();
 }

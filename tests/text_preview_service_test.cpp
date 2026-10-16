@@ -1,5 +1,3 @@
-#include "text_preview_service.h"
-
 #include "directory_fixtures.h"
 #include "preview_fixtures.h"
 
@@ -8,6 +6,7 @@
 #include <QFileInfo>
 #include <QTemporaryDir>
 
+#include <HolonightFileBrowser/preview/text_preview_service.h>
 #include <gtest/gtest.h>
 
 using files_test::fixturePattern;

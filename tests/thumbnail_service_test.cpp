@@ -1,5 +1,3 @@
-#include "thumbnail_service.h"
-
 #include "directory_fixtures.h"
 #include "preview_fixtures.h"
 
@@ -10,6 +8,7 @@
 #include <QTest>
 #include <QUrl>
 
+#include <HolonightFileBrowser/preview/thumbnail_service.h>
 #include <array>
 #include <gtest/gtest.h>
 

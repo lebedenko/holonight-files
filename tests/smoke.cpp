@@ -2,7 +2,6 @@
 #include "directory_fixtures.h"
 #include "engine_setup.h"
 #include "icon_fallbacks.h"
-#include "image_policy.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
 #include "quick_look_presentation_model_test_access.h"
@@ -31,6 +30,7 @@
 #include <QWheelEvent>
 #include <QtMath>
 
+#include <HolonightFileBrowser/preview/image_policy.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>

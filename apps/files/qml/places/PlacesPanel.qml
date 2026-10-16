@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Holonight.FileBrowser as Browser
 import Holonight.Core
 import Holonight.Controls
 
@@ -35,7 +36,7 @@ Item {
         color: HoloniightPalette.textMuted
     }
 
-    ListView {
+    Browser.PlacesListing {
         id: placeList
         objectName: "placesListView"
         x: root.inset

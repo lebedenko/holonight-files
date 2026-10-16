@@ -3,7 +3,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls as Controls
 import QtQuick.Window
-import QMarkdown 1.1
+import Holonight.FileBrowser.Markdown as BrowserMarkdown
+import Holonight.FileBrowser.Preview as BrowserPreview
 import Holonight.Core
 import Holonight.Controls
 
@@ -147,24 +148,10 @@ Controls.Popup {
                 border.color: HoloniightPalette.borderSubtle
                 radius: HnAppearance.roundedRadius(HnSurfaceRole.Card, width, height, HnAppearance.revision)
 
-                TextMetrics {
-                    id: rowMetrics
-                    font.family: HolonightTheme.monospaceFont
-                    font.pointSize: HolonightTheme.monospaceFontSize
-                    text: "Ag"
-                }
-
-                TextMetrics {
-                    id: gutterMetrics
-                    font: rowMetrics.font
-                    // Widest line number: only changes when the line count crosses a digit boundary.
-                    text: "0".repeat(String(root.preview.textLineCount).length)
-                }
-
                 // Vertical-only viewer. Rows have a constant height and a width taken from the view (never from
                 // content), the current row is a per-delegate bool rather than a ListView highlight item, and
                 // scrolling is imperative — none of these read contentY/contentHeight, so there is no binding loop.
-                ListView {
+                BrowserPreview.TextPreview {
                     id: textViewer
                     objectName: "quickLookText"
                     anchors.fill: parent
@@ -176,50 +163,9 @@ Controls.Popup {
                     activeFocusOnTab: false
                     Keys.priority: Keys.BeforeItem
                     Keys.forwardTo: [keyContent]
+                    currentLineIndex: root.preview.currentLineIndex
+                    columnSpacing: root.cardPadding
                     model: root.preview.textLines
-
-                    delegate: Item {
-                        id: line
-                        objectName: "quickLookLine"
-                        required property int index
-                        required property string lineText
-                        required property int lineNumber
-                        readonly property bool isCurrent: line.index === root.preview.currentLineIndex
-                        width: ListView.view.width
-                        height: rowMetrics.height
-
-                        Rectangle {
-                            objectName: "quickLookCurrentLine"
-                            anchors.fill: parent
-                            visible: line.isCurrent
-                            color: HoloniightPalette.surfaceRaised
-                            radius: HnMetrics.borderWidth * 2
-                        }
-
-                        Text {
-                            id: numberText
-                            objectName: "quickLookLineNumbers"
-                            width: gutterMetrics.width
-                            horizontalAlignment: Text.AlignRight
-                            text: line.lineNumber
-                            textFormat: Text.PlainText
-                            font: rowMetrics.font
-                            color: line.isCurrent ? HoloniightPalette.textPrimary : HoloniightPalette.textMuted
-                        }
-
-                        Text {
-                            objectName: "quickLookLineText"
-                            x: numberText.width + root.cardPadding
-                            width: line.width - x
-                            text: line.lineText
-                            textFormat: Text.PlainText
-                            wrapMode: Text.NoWrap
-                            elide: Text.ElideNone
-                            clip: true
-                            font: rowMetrics.font
-                            color: HoloniightPalette.textPrimary
-                        }
-                    }
 
                     // Scrolls only when PreviewService moves the line (Contain = minimal scroll), so the mouse
                     // wheel never changes the current line and a j at the last line does not snap the view back.
@@ -387,70 +333,15 @@ Controls.Popup {
             font.pointSize: HolonightTheme.bodySize
             text: "Ag"
         }
-        MarkdownView {
+        BrowserMarkdown.MarkdownDocument {
             id: markdownView
-            objectName: "quickLookMarkdownView"
             x: root.cardPadding
             y: root.cardPadding
             width: Math.max(1, markdownScroller.width - 2 * root.cardPadding)
             markdown: markdownScroller.loadedSource
             baseUrl: root.preview.markdownBaseUrl
-            resourcePolicy: MarkdownResourcePolicy {
-                allowedFileRoots: markdownScroller.authorizedRoots
-                allowedHttpsOrigins: []
-                allowQrc: false
-            }
-            style: MarkdownStyle {
-                preset: HoloniightPalette.surface.hslLightness < 0.5 ? MarkdownStyle.PolishedDark : MarkdownStyle.PolishedLight
-                bodyFont: bodyMetrics.font
-                bodyColor: HoloniightPalette.textPrimary
-                headings.h1.font: Qt.font({
-                    family: HolonightTheme.uiFont,
-                    pointSize: HolonightTheme.headingSize,
-                    bold: true
-                })
-                headings.h2.font: Qt.font({
-                    family: HolonightTheme.uiFont,
-                    pointSize: HolonightTheme.subheadingSize,
-                    bold: true
-                })
-                headings.h3.font: Qt.font({
-                    family: HolonightTheme.uiFont,
-                    pointSize: HolonightTheme.bodySize * 1.1,
-                    bold: true
-                })
-                headings.h4.font: Qt.font({
-                    family: HolonightTheme.uiFont,
-                    pointSize: HolonightTheme.bodySize,
-                    bold: true
-                })
-                headings.h5.font: headings.h4.font
-                headings.h6.font: headings.h4.font
-                headings.h1.color: HoloniightPalette.textPrimary
-                headings.h2.color: HoloniightPalette.textPrimary
-                headings.h3.color: HoloniightPalette.textPrimary
-                headings.h4.color: HoloniightPalette.textPrimary
-                headings.h5.color: HoloniightPalette.textPrimary
-                headings.h6.color: HoloniightPalette.textPrimary
-                codeBlock.font: Qt.font({
-                    family: HolonightTheme.monospaceFont,
-                    pointSize: HolonightTheme.monospaceFontSize
-                })
-                inlineCode.font.family: HolonightTheme.monospaceFont
-                codeBlock.color: HoloniightPalette.textPrimary
-                inlineCode.backgroundColor: HoloniightPalette.surfaceRaised
-                codeBlock.backgroundColor: HoloniightPalette.surfaceElevated
-                codeBlock.borderColor: HoloniightPalette.borderSubtle
-                headings.h1.separatorColor: HoloniightPalette.borderSubtle
-                headings.h2.separatorColor: HoloniightPalette.borderSubtle
-                headings.h3.separatorColor: HoloniightPalette.borderSubtle
-                headings.h4.separatorColor: HoloniightPalette.borderSubtle
-                headings.h5.separatorColor: HoloniightPalette.borderSubtle
-                headings.h6.separatorColor: HoloniightPalette.borderSubtle
-                linkColor: HoloniightPalette.accentBlue
-                quoteRuleColor: HoloniightPalette.borderSubtle
-                thematicBreakColor: HoloniightPalette.borderSubtle
-            }
+            authorizedRoots: markdownScroller.authorizedRoots
+            bodyFont: bodyMetrics.font
         }
     }
 }

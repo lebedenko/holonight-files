@@ -1,16 +1,17 @@
 #pragma once
 
-#include "devices_model.h"
 #include "directory_controller.h"
 #include "directory_proxy_model.h"
 #include "path_finder_model.h"
 #include "places_model.h"
-#include "preview_service.h"
 #include "sidebar_navigator.h"
 #include "task_manager.h"
 #include "vim_mode_controller.h"
 
 #include <QtQml/qqmlregistration.h>
+
+#include <HolonightFileBrowser/preview/preview_service.h>
+#include <HolonightFileBrowser/storage/devices_model.h>
 
 struct DirectoryControllerRegistration {
   Q_GADGET
@@ -28,7 +29,7 @@ struct VimModeControllerRegistration {
 
 struct DirectoryProxyModelRegistration {
   Q_GADGET
-  QML_FOREIGN(DirectoryProxyModel)
+  QML_FOREIGN(FilesDirectoryProxyModel)
   QML_NAMED_ELEMENT(DirectoryProxyModel)
   QML_UNCREATABLE("Created by the application")
 };
@@ -73,4 +74,11 @@ struct SidebarNavigatorRegistration {
   QML_FOREIGN(SidebarNavigator)
   QML_NAMED_ELEMENT(SidebarNavigator)
   QML_UNCREATABLE("Created by the application")
+};
+
+#include <HolonightFileBrowser/preview_quick/preview_image_item.h>
+struct PreviewImageItemRegistration {
+  Q_GADGET
+  QML_FOREIGN(PreviewImageItem)
+  QML_NAMED_ELEMENT(PreviewImageItem)
 };

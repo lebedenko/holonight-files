@@ -56,7 +56,7 @@ void PreviewSelection::syncPreviewTarget() {
       controller_.navigation_.model_.data(sourceIndex, DirectoryModel::StatFailedRole).toBool(),
       controller_.navigation_.model_.data(sourceIndex, DirectoryModel::StatErrorRole).toString(),
       controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IconNameRole).toString(), preview_revision_,
-      entryName);
+      entryName, controller_.navigation_.model_.data(sourceIndex, DirectoryModel::NativePathRole).toByteArray());
 }
 bool PreviewSelection::canPreviewSelection() const {
   if (controller_.navigation_.cursor_row_ < 0 ||

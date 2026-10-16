@@ -16,7 +16,9 @@
 #include <QTest>
 #include <QTimer>
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 using files_test::buildPermissionFixture;
 using files_test::fixturePattern;
@@ -775,4 +777,27 @@ TEST(DirectoryModel, AcceptedLoadClassificationSurvivesRefreshAndNavigation) {
     }
     EXPECT_EQ(classifier->calls.load(), navigate ? 2 : 1);
   }
+}
+
+TEST(DirectoryModel, RefreshKeepsNativeNamesThatHaveIdenticalDisplayTextDistinct) {
+  QTemporaryDir dir;
+  const auto root = QFile::encodeName(dir.path());
+  const auto first = root + "/name" + static_cast<char>(0xfe);
+  const auto second = root + "/name" + static_cast<char>(0xff);
+  for (const auto& path : {first, second}) {
+    // POSIX open requires a mode argument when creating files.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+    const int descriptor = ::open(path.constData(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+    ASSERT_GE(descriptor, 0);
+    ::close(descriptor);
+  }
+  DirectoryModel model;
+  model.load(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !model.scanning(); }));
+  ASSERT_EQ(model.rowCount(), 3);
+  ASSERT_EQ(::unlink(first.constData()), 0);
+  model.refresh();
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !model.scanning(); }));
+  ASSERT_EQ(model.rowCount(), 2);
+  EXPECT_EQ(model.index(1).data(DirectoryRoles::NativePathRole).toByteArray(), second);
 }

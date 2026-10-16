@@ -1,6 +1,5 @@
 #include "directory_controller.h"
 #include "engine_setup.h"
-#include "image_policy.h"
 #include "initial_directory.h"
 #include "settings/app_settings.h"
 #include "settings/xdg_paths.h"
@@ -15,6 +14,7 @@
 #include <QTextStream>
 #include <QTimer>
 
+#include <HolonightFileBrowser/preview/image_policy.h>
 #include <cstdlib>
 
 #ifdef FILES_NATIVE_PREVIEW_LAB

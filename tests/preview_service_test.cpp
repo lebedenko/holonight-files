@@ -1,5 +1,3 @@
-#include "preview_service.h"
-
 #include "directory_fixtures.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
@@ -18,6 +16,7 @@
 #include <QTest>
 #include <QThread>
 
+#include <HolonightFileBrowser/preview/preview_service.h>
 #include <gtest/gtest.h>
 #include <iostream>
 #include <sys/stat.h>

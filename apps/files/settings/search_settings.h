@@ -1,6 +1,7 @@
 #pragma once
-
 #include "settings/settings_registry.h"
+
+#include <HolonightFileBrowser/search/search_exclusion_policy.h>
 
 struct SearchSettings {
   static inline const Setting<QStringList> kPaths{
@@ -13,6 +14,7 @@ struct SearchSettings {
       .default_value = {},
       .description = "Excluded directory basenames",
   };
+  operator SearchExclusions() const { return {.paths = paths, .patterns = patterns}; }
   QStringList paths;
   QStringList patterns;
   static void declare(SettingsRegistry& registry) {

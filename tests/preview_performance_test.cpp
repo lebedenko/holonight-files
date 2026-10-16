@@ -1,5 +1,4 @@
 #include "preview_fixtures.h"
-#include "preview_service.h"
 #include "preview_service_test_access.h"
 
 #include <QDir>
@@ -10,6 +9,7 @@
 #include <QTest>
 #include <QTimer>
 
+#include <HolonightFileBrowser/preview/preview_service.h>
 #include <array>
 #include <atomic>
 #include <functional>
