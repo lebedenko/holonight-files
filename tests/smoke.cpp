@@ -47,6 +47,20 @@ class FileUrlReceiver : public QObject {
   void receive(const QUrl& url) { received = url; }
 };
 
+namespace {
+QQuickItem* findVisual(QQuickItem* root, const QString& name) {
+  if (root->objectName() == name) {
+    return root;
+  }
+  for (auto* child : root->childItems()) {
+    if (auto* result = findVisual(child, name)) {
+      return result;
+    }
+  }
+  return nullptr;
+}
+}  // namespace
+
 TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   QTemporaryDir dir(files_test::fixturePattern("window"));
   ASSERT_TRUE(dir.isValid());
@@ -148,8 +162,10 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
     ASSERT_NE(placeholder, nullptr);
     EXPECT_TRUE(placeholder->property("statFailed").toBool());
     EXPECT_EQ(placeholder->property("statError").toString(), "Broken symbolic link");
-    EXPECT_TRUE(
-        QTest::qWaitFor([&] { return qvariant_cast<QQuickItem*>(placeholder->property("trailingItem")) != nullptr; }));
+    EXPECT_TRUE(QTest::qWaitFor([&] {
+      return findVisual(placeholder, "statErrorIndicator") != nullptr &&
+             findVisual(placeholder, "statErrorIndicator")->property("item").value<QObject*>() != nullptr;
+    }));
     QTest::keyClick(window, Qt::Key_H);
     ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
     EXPECT_EQ(controller.currentPath(), dir.path());
@@ -239,7 +255,8 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
   for (const int width : {1000, 800, 700, 1000}) {
     window->resize(width, 400);
     ASSERT_TRUE(QTest::qWaitFor([&] {
-      return name->width() >= 120 && size->isVisible() == (width != 700) && modified->isVisible() == (width == 1000);
+      return name->width() >= 120 && size->isVisible() == (list->width() >= 420) &&
+             modified->isVisible() == (list->width() >= 640);
     })) << "window width="
         << width << ", name width=" << name->width() << ", size visible=" << size->isVisible()
         << ", modified visible=" << modified->isVisible();
@@ -296,6 +313,7 @@ TEST(Files, WindowAnchorOnlySeparatorsOccupyAndPaint) {
   ASSERT_EQ(engine.rootObjects().size(), 1);
   auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
   ASSERT_NE(window, nullptr);
+  window->resize(1600, 600);
   controller.open(dir.path());
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
   QCoreApplication::processEvents();
@@ -1696,7 +1714,7 @@ TEST(Files, PreviewSidebarSizeMatchesListingAndDirectoriesShowDir) {
   window->resize(1200, 600);
   controller.open(dir.path());
   auto* list = window->findChild<QQuickItem*>("directoryListView");
-  auto* sidebarSize = window->findChild<QQuickItem*>("previewSizeValue");
+  auto* sidebarSize = findVisual(window->contentItem(), "previewSizeValue");
   ASSERT_NE(list, nullptr);
   ASSERT_NE(sidebarSize, nullptr);
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && controller.preview()->hasEntry(); }));
@@ -1754,11 +1772,11 @@ TEST(Files, PreviewSidebarRowsHideWrapAndStayFreeOfBindingLoops) {
   auto* metadataTable = window->findChild<QQuickItem*>("previewMetadataTable");
   auto* exifTable = window->findChild<QQuickItem*>("previewExifTable");
   auto* exifHeader = window->findChild<QQuickItem*>("previewExifHeader");
-  auto* lensValue = window->findChild<QQuickItem*>("previewLensValue");
-  auto* apertureValue = window->findChild<QQuickItem*>("previewApertureValue");
-  auto* cameraValue = window->findChild<QQuickItem*>("previewCameraValue");
-  auto* sizeValue = window->findChild<QQuickItem*>("previewSizeValue");
-  auto* dimensionsValue = window->findChild<QQuickItem*>("previewDimensionsValue");
+  auto* lensValue = findVisual(window->contentItem(), "previewLensValue");
+  auto* apertureValue = findVisual(window->contentItem(), "previewApertureValue");
+  auto* cameraValue = findVisual(window->contentItem(), "previewCameraValue");
+  auto* sizeValue = findVisual(window->contentItem(), "previewSizeValue");
+  auto* dimensionsValue = findVisual(window->contentItem(), "previewDimensionsValue");
   auto* errorNotice = window->findChild<QQuickItem*>("previewErrorNotice");
   auto* fileName = window->findChild<QQuickItem*>("previewFileName");
   for (auto* item : {
@@ -1886,11 +1904,12 @@ TEST(Files, PreviewSidebarTablesShareLeftAlignedColumns) {
       EXPECT_DOUBLE_EQ(pane->property("labelColumnWidth").toReal(), columnWidth);
       int visibleRows = 0;
       for (auto* table : {metadata, exif}) {
-        const auto cells = table->childItems();
-        ASSERT_EQ(cells.size() % 2, 0);
-        for (qsizetype row = 0; row < cells.size(); row += 2) {
-          auto* label = cells[row];
-          auto* value = cells[row + 1];
+        for (auto* row : table->childItems()) {
+          if (!row->isVisible() || row->childItems().size() != 2) {
+            continue;
+          }
+          auto* label = row->childItems()[0];
+          auto* value = row->childItems()[1];
           ASSERT_EQ(label->isVisible(), value->isVisible());
           if (!label->isVisible()) {
             continue;
@@ -1938,7 +1957,7 @@ TEST(Files, PreviewSidebarScrollsToWrappedExifInShortWindows) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->exifPresent(); }));
   auto* container = window->findChild<QQuickItem*>("previewContainer");
   auto* scroll = window->findChild<QQuickItem*>("previewScrollArea");
-  auto* lastRow = window->findChild<QQuickItem*>("previewFocalLengthValue");
+  auto* lastRow = findVisual(window->contentItem(), "previewFocalLengthValue");
   auto* fileName = window->findChild<QQuickItem*>("previewFileName");
   for (auto* item : {container, scroll, lastRow, fileName}) {
     ASSERT_NE(item, nullptr);
@@ -2054,7 +2073,7 @@ QSizeF quickLookPreviewBounds(const QuickLookHarness& harness) {
 }
 
 QString quickLookText(const QuickLookHarness& harness, const char* objectName) {
-  auto* item = harness.window->findChild<QQuickItem*>(objectName);
+  auto* item = findVisual(harness.window->contentItem(), objectName);
   return item != nullptr ? item->property("text").toString() : QString();
 }
 

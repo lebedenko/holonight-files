@@ -65,21 +65,20 @@ HnHeaderBar {
             objectName: "breadcrumbContainer"
             x: root.breadcrumbLeftInset - root.breadcrumbPadding
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(0, Math.min(breadcrumbLabel.implicitWidth + 2 * root.breadcrumbPadding, parent.width - x - HnMetrics.internalSpacing(HnControlSize.Normal)))
+            width: Math.max(0, parent.width - x - HnMetrics.internalSpacing(HnControlSize.Normal))
             height: HnMetrics.controlHeight(HnControlSize.Xs)
             radius: HnAppearance.roundedRadius(HnSurfaceRole.Control, width, height, HnAppearance.revision)
             color: HoloniightPalette.surfaceRaised
 
-            HnLabel {
+            HnBreadcrumbBar {
                 id: breadcrumbLabel
                 objectName: "breadcrumbLabel"
+                editable: false
                 anchors.fill: parent
-                anchors.margins: root.breadcrumbPadding
-                verticalAlignment: Text.AlignVCenter
-                role: HnTypographyRole.Body
-                elide: Text.ElideMiddle
-                textFormat: Text.PlainText
-                rawText: root.controller.currentPath
+                anchors.leftMargin: root.breadcrumbPadding
+                enabled: root.historyEnabled && !root.controller.quickLookOpen
+                segments: root.controller.breadcrumbLabels
+                onSegmentActivated: index => root.controller.activateBreadcrumb(index)
             }
         }
     }

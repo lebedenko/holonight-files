@@ -11,6 +11,8 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
                                          std::shared_ptr<const CapacityProbe> capacity)
     : QObject(parent),
       devices_(storage != nullptr ? new DevicesModel(storage, this, std::move(capacity)) : new DevicesModel(this)) {
+  connect(this, &DirectoryController::navigated, this,
+          [this] { breadcrumbs_.setPath(QFile::encodeName(currentPath())); });
   connect(devices_, &DevicesModel::openRequested, this, [this](const QString& path) { open(path); });
   connect(devices_, &DevicesModel::operationFailed, this, [this](const QString& message) {
     status_message_ = message;
@@ -85,6 +87,15 @@ bool DirectoryController::sidebarActivationEnabled() const {
 }
 void DirectoryController::open(const QString& path, const QString& fallbackReason) {
   openInternal(path, fallbackReason, /*restoreName=*/{}, /*recordHistory=*/true);
+}
+void DirectoryController::activateBreadcrumb(int index) {
+  if (!sidebarActivationEnabled()) {
+    return;
+  }
+  const auto path = breadcrumbs_.nativePathAt(index);
+  if (!path.isEmpty()) {
+    open(QFile::decodeName(path));
+  }
 }
 bool DirectoryController::acceptFinderResult(int row) {
   const auto path = finder_.pathAt(row);

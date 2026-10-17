@@ -29,8 +29,8 @@ Item {
     // bottom gaps are list header/footer items, so they only show at the ends of the scroll range.
     readonly property real listInset: 4
     readonly property real columnPadding: HnMetrics.horizontalPadding(HnControlSize.Normal)
-    readonly property bool showSize: width >= lineNumberGutterWidth + 120 + 2 * cellPadding + iconColumnWidth + columnSpacing + sizeColumnWidth + 2 * cellPadding
-    readonly property bool showModified: showSize && width >= lineNumberGutterWidth + 120 + 2 * cellPadding + iconColumnWidth + columnSpacing + sizeColumnWidth + modifiedColumnWidth + 4 * cellPadding
+    readonly property bool showSize: detailColumns.showSize
+    readonly property bool showModified: detailColumns.showModified
     // Vim-hybrid line-number gutter (line-number-gutter SPEC.md REQ-F-004/REQ-C-004): wide enough
     // for at least "999", growing with the row count (listView.count includes an o/O placeholder).
     readonly property int lineNumberGutterDigits: lineNumberGutterDigitsFor(listView.count)
@@ -56,6 +56,12 @@ Item {
         rawText: "9".repeat(root.lineNumberGutterDigits)
     }
 
+    Browser.DetailedColumnLayout {
+        id: detailColumns
+        availableWidth: listView.width
+        spacing: root.columnSpacing
+    }
+
     Rectangle {
         id: columnHeader
         objectName: "directoryColumnHeader"
@@ -69,80 +75,32 @@ Item {
         color: "transparent"
         // Labels elide within their cells. A fractional header clip can truncate the snapped bottom rule.
 
-        RowLayout {
-            id: headerCells
-            anchors.fill: parent
-            // The gutter spacer replaces the leading padding, matching the delegates' leftPadding: 0.
-            anchors.leftMargin: 0
-            // Header columns track the inset rows below (the delegates start listInset right of the gutter and end listInset before the sidebar).
-            anchors.rightMargin: root.listInset
-            spacing: 0
-
-            // Blank: no label and no separator above the line-number gutter (REQ-F-009).
-            Item {
-                objectName: "lineNumberGutterHeader"
-                Layout.minimumWidth: root.lineNumberGutterWidth
-                Layout.preferredWidth: root.lineNumberGutterWidth
-                Layout.maximumWidth: root.lineNumberGutterWidth
-                Layout.fillHeight: true
-            }
-            HnLabel {
-                objectName: "nameColumnHeader"
-                role: HnTypographyRole.Body
-                rawText: qsTr("Name")
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-                // Aligned with the delegates' icon, not their filename.
-                Layout.leftMargin: root.listInset + root.cellPadding
-                Layout.rightMargin: root.cellPadding
-            }
-            HnLabel {
-                id: sizeHeader
-                objectName: "sizeColumnHeader"
-                role: HnTypographyRole.Body
-                rawText: qsTr("Size")
-                visible: root.showSize
-                leftPadding: root.cellPadding
-                rightPadding: root.cellPadding
-                Layout.minimumWidth: root.sizeColumnWidth + 2 * root.cellPadding
-                Layout.preferredWidth: root.sizeColumnWidth + 2 * root.cellPadding
-                Layout.maximumWidth: root.sizeColumnWidth + 2 * root.cellPadding
-                Layout.fillHeight: true
-                verticalAlignment: Text.AlignVCenter
-            }
-            HnLabel {
-                id: modifiedHeader
-                objectName: "modifiedColumnHeader"
-                role: HnTypographyRole.Body
-                rawText: qsTr("Modified")
-                visible: root.showModified
-                leftPadding: root.cellPadding
-                rightPadding: root.cellPadding
-                Layout.minimumWidth: root.modifiedColumnWidth + 2 * root.cellPadding
-                Layout.preferredWidth: root.modifiedColumnWidth + 2 * root.cellPadding
-                Layout.maximumWidth: root.modifiedColumnWidth + 2 * root.cellPadding
-                Layout.fillHeight: true
-                verticalAlignment: Text.AlignVCenter
-            }
+        Item {
+            objectName: "lineNumberGutterHeader"
+            width: root.lineNumberGutterWidth
+            height: parent.height
         }
-
-        // The bottom rule owns each junction. Both branches reference its leading boundary.
         HnSeparator {
             objectName: "sizeColumnDivider"
             orientation: Qt.Vertical
-            visible: root.showSize
-            x: headerCells.x + sizeHeader.x
+            visible: detailColumns.showSize
+            x: root.lineNumberGutterWidth + root.listInset + detailColumns.nameWidth + detailColumns.spacing
             anchors.top: parent.top
             anchors.bottom: columnHeaderDivider.top
         }
-
         HnSeparator {
             objectName: "modifiedColumnDivider"
             orientation: Qt.Vertical
-            visible: root.showModified
-            x: headerCells.x + modifiedHeader.x
+            visible: detailColumns.showModified
+            x: root.lineNumberGutterWidth + root.listInset + detailColumns.nameWidth + detailColumns.sizeWidth + 2 * detailColumns.spacing
             anchors.top: parent.top
             anchors.bottom: columnHeaderDivider.top
+        }
+        Browser.DetailedListHeader {
+            anchors.fill: parent
+            anchors.leftMargin: root.lineNumberGutterWidth + root.listInset
+            anchors.rightMargin: root.listInset
+            columns: detailColumns
         }
 
         HnSeparator {
@@ -255,7 +213,7 @@ Item {
                 root.controller.setViewportRows(visibleRows);
             }
 
-            delegate: HnListDelegate {
+            delegate: Browser.DetailedListRow {
                 id: delegate
 
                 required property int index
@@ -284,10 +242,11 @@ Item {
                 leftPadding: 0
                 rightPadding: 0
                 highlighted: ListView.isCurrentItem || (root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(delegate.index))
+                columns: detailColumns
                 title: name
-                subtitle: statFailed ? statError : (isParent ? qsTr("Parent folder") : (isDir ? qsTr("Folder") : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm")))
-                metadata: isDir ? "" : SizeFormat.formatSize(size)
-                trailingContent: statFailed ? errorIndicator : null
+                filename: name
+                sizeText: isDir ? "" : SizeFormat.formatSize(size)
+                modifiedText: statFailed ? statError : (isParent ? "" : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm"))
 
                 // Numbers live in the strip left of the list view; the delegate's own selection fill
                 // therefore never covers the gutter.
@@ -311,7 +270,7 @@ Item {
                     Accessible.ignored: true
                 }
 
-                contentItem: RowLayout {
+                filenameContent: RowLayout {
                     spacing: 0
                     Item {
                         id: iconCell
@@ -419,37 +378,13 @@ Item {
                         }
                         Loader {
                             id: statErrorIndicator
+                            objectName: "statErrorIndicator"
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             active: delegate.statFailed
                             visible: active
                             sourceComponent: errorIndicator
                         }
-                    }
-                    HnLabel {
-                        objectName: "sizeColumnField"
-                        role: HnTypographyRole.Caption
-                        rawText: delegate.isDir ? "" : SizeFormat.formatSize(delegate.size)
-                        color: HoloniightPalette.textSecondary
-                        visible: root.showSize
-                        rightPadding: root.cellPadding
-                        leftPadding: root.cellPadding
-                        Layout.minimumWidth: root.sizeColumnWidth + 2 * root.cellPadding
-                        Layout.preferredWidth: root.sizeColumnWidth + 2 * root.cellPadding
-                        Layout.maximumWidth: root.sizeColumnWidth + 2 * root.cellPadding
-                    }
-                    HnLabel {
-                        objectName: "modifiedColumnField"
-                        role: HnTypographyRole.Caption
-                        rawText: delegate.statFailed ? delegate.statError : (delegate.isParent ? "" : Qt.formatDateTime(delegate.modified, "yyyy-MM-dd HH:mm"))
-                        color: delegate.statFailed ? HoloniightPalette.error : HoloniightPalette.textMuted
-                        elide: Text.ElideRight
-                        visible: root.showModified
-                        leftPadding: root.cellPadding
-                        rightPadding: root.cellPadding
-                        Layout.minimumWidth: root.modifiedColumnWidth + 2 * root.cellPadding
-                        Layout.preferredWidth: root.modifiedColumnWidth + 2 * root.cellPadding
-                        Layout.maximumWidth: root.modifiedColumnWidth + 2 * root.cellPadding
                     }
                 }
 

@@ -120,8 +120,10 @@ Controls.Popup {
                 event.accepted = true;
         }
 
-        Item {
+        HnPreviewFrame {
             id: previewFrame
+            padding: 0
+            previewState: HnPreviewFrame.Content
             anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter
             width: presentation.frameSize.width
@@ -253,32 +255,17 @@ Controls.Popup {
             anchors.right: parent.right
         }
 
-        Row {
+        HnLabeledKeyHint {
             id: hintRow
             objectName: "quickLookHint"
-            spacing: root.captionSpacing
             anchors.top: metadataLabel.bottom
             anchors.topMargin: root.captionSpacing
             anchors.horizontalCenter: parent.horizontalCenter
-            Accessible.role: Accessible.StaticText
-            Accessible.name: closeKeys.accessibleText + " " + closeLabel.rawText
-
-            HnKeyHint {
-                id: closeKeys
-                objectName: "quickLookCloseKeys"
-                anchors.verticalCenter: parent.verticalCenter
-                keyGroups: [[Qt.Key_Space], [Qt.Key_Escape]]
-                Accessible.ignored: true
-            }
-            HnLabel {
-                id: closeLabel
-                objectName: "quickLookCloseLabel"
-                anchors.verticalCenter: parent.verticalCenter
-                role: HnTypographyRole.Caption
-                color: HoloniightPalette.textDisabled
-                rawText: qsTr("Close")
-                Accessible.ignored: true
-            }
+            keyGroups: [[Qt.Key_Space], [Qt.Key_Escape]]
+            description: qsTr("Close")
+            hintItem.objectName: "quickLookCloseKeys"
+            descriptionItem.objectName: "quickLookCloseLabel"
+            descriptionItem.color: HoloniightPalette.textDisabled
         }
     }
 

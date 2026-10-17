@@ -178,27 +178,6 @@ Item {
         }
     }
 
-    component RowLabel: HnLabel {
-        role: HnTypographyRole.Caption
-        color: HoloniightPalette.textMuted
-        horizontalAlignment: Text.AlignLeft
-        Layout.preferredWidth: root.labelColumnWidth
-        Layout.minimumWidth: root.labelColumnWidth
-        Layout.alignment: Qt.AlignTop | Qt.AlignLeft
-    }
-
-    // Values wrap and never elide; Text.Wrap also breaks a single over-long word so nothing
-    // overflows at the 220 px minimum pane width (REQ-F-019, REQ-NF-002).
-    component RowValue: HnLabel {
-        role: HnTypographyRole.Caption
-        color: HoloniightPalette.textPrimary
-        horizontalAlignment: Text.AlignLeft
-        wrapMode: Text.Wrap
-        Layout.fillWidth: true
-        Layout.preferredWidth: 0
-        Layout.alignment: Qt.AlignTop | Qt.AlignLeft
-    }
-
     Flickable {
         id: scrollArea
         objectName: "previewScrollArea"
@@ -226,8 +205,10 @@ Item {
             width: scrollArea.width
             spacing: HnMetrics.internalSpacing(HnControlSize.Normal)
 
-            Item {
+            HnPreviewFrame {
                 id: imageArea
+                padding: 0
+                previewState: HnPreviewFrame.Content
                 objectName: "previewImageArea"
                 // Always square, whatever the entry: PreviewImageItem aspect-fits and centers the
                 // thumbnail inside it, so it spans the full width or the full height.
@@ -336,41 +317,30 @@ Item {
                 Layout.topMargin: -HnMetrics.internalSpacing(HnControlSize.Normal) / 2
             }
 
-            GridLayout {
-                id: metadataTable
+            HnMetadataList {
                 objectName: "previewMetadataTable"
+                labelWidth: root.labelColumnWidth
+                spacing: 2
                 Layout.fillWidth: true
-                columns: 2
-                columnSpacing: HnMetrics.internalSpacing(HnControlSize.Compact)
-                rowSpacing: 2
-
-                RowLabel {
-                    rawText: qsTr("Size")
-                    visible: root.sizeText.length > 0
-                }
-                RowValue {
-                    objectName: "previewSizeValue"
-                    rawText: root.sizeText
-                    visible: root.sizeText.length > 0
-                }
-                RowLabel {
-                    rawText: qsTr("Dimensions")
-                    visible: root.dimensionsText.length > 0
-                }
-                RowValue {
-                    objectName: "previewDimensionsValue"
-                    rawText: root.dimensionsText
-                    visible: root.dimensionsText.length > 0
-                }
-                RowLabel {
-                    rawText: qsTr("Modified")
-                    visible: root.modifiedText.length > 0
-                }
-                RowValue {
-                    objectName: "previewModifiedValue"
-                    rawText: root.modifiedText
-                    visible: root.modifiedText.length > 0
-                }
+                rows: [
+                    {
+                        label: qsTr("Size"),
+                        value: root.sizeText,
+                        objectName: "previewSizeValue"
+                    },
+                    {
+                        label: qsTr("Dimensions"),
+                        value: root.dimensionsText,
+                        objectName: "previewDimensionsValue"
+                    },
+                    {
+                        label: qsTr("Modified"),
+                        value: root.modifiedText,
+                        objectName: "previewModifiedValue"
+                    }
+                ].map(row => Object.assign({}, row, {
+                        visible: row.value.length > 0
+                    }))
             }
 
             // The separator belongs to the EXIF section and hides with it, so non-EXIF entries do not
@@ -391,69 +361,46 @@ Item {
                 Layout.fillWidth: true
             }
 
-            GridLayout {
-                id: exifTable
+            HnMetadataList {
                 objectName: "previewExifTable"
+                labelWidth: root.labelColumnWidth
+                spacing: 2
                 Layout.fillWidth: true
-                columns: 2
-                columnSpacing: metadataTable.columnSpacing
-                rowSpacing: metadataTable.rowSpacing
                 visible: root.preview.exifPresent
-
-                RowLabel {
-                    rawText: qsTr("Camera")
-                    visible: root.cameraText.length > 0
-                }
-                RowValue {
-                    objectName: "previewCameraValue"
-                    rawText: root.cameraText
-                    visible: root.cameraText.length > 0
-                }
-                RowLabel {
-                    rawText: qsTr("Lens")
-                    visible: root.preview.exifLensModel.length > 0
-                }
-                RowValue {
-                    objectName: "previewLensValue"
-                    rawText: root.preview.exifLensModel
-                    visible: root.preview.exifLensModel.length > 0
-                }
-                RowLabel {
-                    rawText: qsTr("Aperture")
-                    visible: root.preview.exifAperture.length > 0
-                }
-                RowValue {
-                    objectName: "previewApertureValue"
-                    rawText: root.preview.exifAperture
-                    visible: root.preview.exifAperture.length > 0
-                }
-                RowLabel {
-                    rawText: qsTr("Exposure")
-                    visible: root.preview.exifExposureTime.length > 0
-                }
-                RowValue {
-                    objectName: "previewExposureValue"
-                    rawText: root.preview.exifExposureTime
-                    visible: root.preview.exifExposureTime.length > 0
-                }
-                RowLabel {
-                    rawText: qsTr("ISO")
-                    visible: root.preview.exifIso.length > 0
-                }
-                RowValue {
-                    objectName: "previewIsoValue"
-                    rawText: root.preview.exifIso
-                    visible: root.preview.exifIso.length > 0
-                }
-                RowLabel {
-                    rawText: qsTr("Focal length")
-                    visible: root.preview.exifFocalLength.length > 0
-                }
-                RowValue {
-                    objectName: "previewFocalLengthValue"
-                    rawText: root.preview.exifFocalLength
-                    visible: root.preview.exifFocalLength.length > 0
-                }
+                rows: [
+                    {
+                        label: qsTr("Camera"),
+                        value: root.cameraText,
+                        objectName: "previewCameraValue"
+                    },
+                    {
+                        label: qsTr("Lens"),
+                        value: root.preview.exifLensModel,
+                        objectName: "previewLensValue"
+                    },
+                    {
+                        label: qsTr("Aperture"),
+                        value: root.preview.exifAperture,
+                        objectName: "previewApertureValue"
+                    },
+                    {
+                        label: qsTr("Exposure"),
+                        value: root.preview.exifExposureTime,
+                        objectName: "previewExposureValue"
+                    },
+                    {
+                        label: qsTr("ISO"),
+                        value: root.preview.exifIso,
+                        objectName: "previewIsoValue"
+                    },
+                    {
+                        label: qsTr("Focal length"),
+                        value: root.preview.exifFocalLength,
+                        objectName: "previewFocalLengthValue"
+                    }
+                ].map(row => Object.assign({}, row, {
+                        visible: row.value.length > 0
+                    }))
             }
 
             HnLabel {

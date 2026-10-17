@@ -25,6 +25,7 @@
 #include <QString>
 #include <QtQml/qqmlregistration.h>
 
+#include <HolonightFileBrowser/breadcrumb_adapter.h>
 #include <HolonightFileBrowser/preview/preview_service.h>
 #include <HolonightFileBrowser/storage/devices_model.h>
 #include <memory>
@@ -33,6 +34,7 @@
 // selection, command parsing and lifecycle state; invokables retain the application contract.
 class DirectoryController : public QObject {
   Q_OBJECT
+  Q_PROPERTY(QStringList breadcrumbLabels READ breadcrumbLabels NOTIFY changed)
   Q_PROPERTY(QString currentPath READ currentPath NOTIFY changed)
   // Footer text: path of the row under the cursor (falls back to currentPath), with $HOME shown as ~.
   Q_PROPERTY(QString cursorPath READ cursorPath NOTIFY changed)
@@ -77,6 +79,8 @@ class DirectoryController : public QObject {
   [[nodiscard]] bool quickLookOpen() const { return preview_selection_.quick_look_open_; }
   [[nodiscard]] bool canGoBack() const { return navigation_.jump_list_.canGoBack(); }
   [[nodiscard]] bool canGoForward() const { return navigation_.jump_list_.canGoForward(); }
+  [[nodiscard]] QStringList breadcrumbLabels() const { return breadcrumbs_.labels(); }
+  Q_INVOKABLE void activateBreadcrumb(int index);
   Q_INVOKABLE void open(const QString& path, const QString& fallbackReason = {});
   Q_INVOKABLE bool acceptFinderResult(int row);
   // Number of listing rows that fit in the viewport; Ctrl+U / Ctrl+D move half of it.
@@ -167,6 +171,7 @@ class DirectoryController : public QObject {
   PathFinderModel finder_;
   DevicesModel* devices_;
   SidebarNavigator navigator_{&places_, devices_};  // After both models it walks.
+  HolonightFileBrowser::BreadcrumbAdapter breadcrumbs_;
   PreviewService preview_;
   VimModeController vim_;
   TaskManager tasks_;
