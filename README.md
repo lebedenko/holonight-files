@@ -473,3 +473,10 @@ The provider alone installs browsing headers, libraries, CMake exports and QML m
 See its README and `docs/sdd/shared-file-selection/DESIGN.md` for component selection and
 external C++/QML consumer examples. CI pins published providers in `scripts/ci/providers.json`;
 use `task check -- --siblings /path/to/umbrella` to test current sibling sources explicitly.
+
+Drag files or folders from a listing row into another folder, another Files window, or another
+application. Dragging a selected row in Visual mode transfers the whole selection. The `..`
+row cannot be dragged, but accepts drops into the parent folder. Dropping on a file or blank
+listing space targets the current directory. Drops copy by default; hold Shift to move or
+Ctrl to copy. Link requests (Ctrl+Shift) are unsupported. Hover near the listing's top or bottom
+edge to scroll; folders do not open automatically. Existing task conflict prompts apply.

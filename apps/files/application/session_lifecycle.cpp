@@ -19,6 +19,7 @@ void SessionLifecycle::shutdown() {
     return;
   }
   started_ = true;
+  emit controller_.changed();
   controller_.navigation_.restore_candidate_.clear();
   pending_workers_ = {
       &controller_.navigation_.model_,

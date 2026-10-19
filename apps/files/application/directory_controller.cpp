@@ -1,5 +1,7 @@
 #include "directory_controller.h"
 
+#include "file_transfer.h"
+
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDir>
@@ -429,4 +431,51 @@ void DirectoryController::execute(const FileCommand& command) {
       tasks_.respondToTrashConfirm(command.count != 0, tasks_.promptId());
       break;
   }
+}
+
+bool DirectoryController::transfersEnabled() const {
+  const auto mode = vim_.currentMode();
+  return (mode == VimModeController::Mode::Normal || mode == VimModeController::Mode::Visual) && !tasks_.hasPrompt() &&
+         !quickLookOpen() && !finder_open_ && !lifecycle_.started_ && directoryError().isEmpty();
+}
+QString DirectoryController::dragUriList(int row) const {
+  if (!transfersEnabled()) {
+    return {};
+  }
+  const auto source = navigation_.proxy_.index(row, 0);
+  if (!source.isValid() || source.data(DirectoryModel::IsParentRole).toBool() ||
+      source.data(DirectoryModel::PathRole).toString().isEmpty()) {
+    return {};
+  }
+  QStringList paths;
+  if (vim_.currentMode() == VimModeController::Mode::Visual && vim_.isRowSelected(row)) {
+    paths = collectVisualSelectionPaths();
+  } else {
+    paths.append(source.data(DirectoryModel::PathRole).toString());
+  }
+  QString result;
+  for (const auto& path : paths) {
+    result += QString::fromLatin1(QUrl::fromLocalFile(path).toEncoded()) + QStringLiteral("\r\n");
+  }
+  return result;
+}
+QString DirectoryController::dropDestination(int row) const {
+  const auto index = navigation_.proxy_.index(row, 0);
+  if (index.isValid() && index.data(DirectoryModel::IsDirRole).toBool()) {
+    const auto path = index.data(DirectoryModel::PathRole).toString();
+    if (!path.isEmpty()) {
+      return path;
+    }
+  }
+  return currentPath();
+}
+bool DirectoryController::submitDrop(const QList<QUrl>& urls, int row, int action) {
+  if (!transfersEnabled()) {
+    return false;
+  }
+  const auto paths = FileTransfer::localPaths(urls);
+  if (paths.isEmpty()) {
+    return false;
+  }
+  return FileTransfer::submit(tasks_, paths, dropDestination(row), action);
 }

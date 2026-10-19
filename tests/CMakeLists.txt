@@ -1,4 +1,4 @@
-add_files_application(files-smoke smoke.cpp separator_window_test.cpp size_format_test.cpp inspection_helpers_test.cpp directory_model_test.cpp directory_proxy_model_test.cpp
+add_files_application(files-smoke file_drop_test.cpp smoke.cpp separator_window_test.cpp size_format_test.cpp inspection_helpers_test.cpp directory_model_test.cpp directory_proxy_model_test.cpp
   devices_model_test.cpp storage_policy_test.cpp capacity_probe_test.cpp sidebar_navigator_test.cpp
   directory_controller_test.cpp directory_performance_test.cpp initial_directory_test.cpp
   thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp preview_service_test.cpp

@@ -128,6 +128,8 @@ function(add_files_application target)
       "${app_dir}/presentation/window_event_filter.h"
       "${app_dir}/presentation/window_state.h"
       "${app_dir}/presentation/qml_types.h"
+      "${app_dir}/presentation/file_drop_area.h"
+      "${app_dir}/presentation/file_drop_area.cpp"
     NO_IMPORT_SCAN)
   qt_add_resources(${target} files-config PREFIX "/" BASE "${app_dir}" FILES "${app_dir}/qtquickcontrols2.conf")
   target_link_libraries(${target} PRIVATE files-private HolonightFileBrowser::Markdown HolonightFileBrowser::PreviewQuick Qt6::QuickControls2 HolonightQt::Core HolonightQt::Controls QMarkdown::QMarkdown)

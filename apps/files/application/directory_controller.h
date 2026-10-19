@@ -23,6 +23,7 @@
 #include <QHash>
 #include <QObject>
 #include <QString>
+#include <QUrl>
 #include <QtQml/qqmlregistration.h>
 
 #include <HolonightFileBrowser/breadcrumb_adapter.h>
@@ -56,6 +57,8 @@ class DirectoryController : public QObject {
   Q_PROPERTY(bool quickLookOpen READ quickLookOpen NOTIFY changed)
   Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY changed)
   Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
+  Q_PROPERTY(bool transfersEnabled READ transfersEnabled NOTIFY changed)
+  Q_PROPERTY(bool finderOpen MEMBER finder_open_ NOTIFY changed)
  public:
   explicit DirectoryController(QObject* parent = nullptr);
   // A null capacity probe measures the real filesystem; tests pass a fake (device-actions REQ-C-006).
@@ -116,6 +119,10 @@ class DirectoryController : public QObject {
   Q_INVOKABLE void updateSearchQuery(const QString& query);
   Q_INVOKABLE void commitSearchEditing();
   Q_INVOKABLE void cancelSearchEditing();
+  [[nodiscard]] bool transfersEnabled() const;
+  Q_INVOKABLE [[nodiscard]] QString dragUriList(int row) const;
+  Q_INVOKABLE [[nodiscard]] QString dropDestination(int row) const;
+  Q_INVOKABLE bool submitDrop(const QList<QUrl>& urls, int row, int action);
   Q_INVOKABLE void shutdown();
   // C++-only startup wiring from main() (SPEC.md REQ-C-006). While enabled, shutdown() saves the
   // session's last Local folder to state.toml (REQ-F-017/018).
@@ -177,6 +184,7 @@ class DirectoryController : public QObject {
   TaskManager tasks_;
   ClipboardRegister register_;
 
+  bool finder_open_ = false;
   QString status_message_;
   int viewport_rows_ = 20;
 

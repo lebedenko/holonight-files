@@ -50,8 +50,14 @@ Controls.Popup {
     modal: true
     focus: true
     closePolicy: Controls.Popup.NoAutoClose
-    onOpened: searchField.forceActiveFocus()
-    onClosed: controller.finder.stop()
+    onOpened: {
+        controller.finderOpen = true;
+        searchField.forceActiveFocus();
+    }
+    onClosed: {
+        controller.finderOpen = false;
+        controller.finder.stop();
+    }
 
     Controls.Overlay.modal: Rectangle {
         color: HoloniightPalette.scrim

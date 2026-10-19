@@ -12,6 +12,12 @@ Item {
 
     required property DirectoryController controller
     property bool previousQuickLookOpen: false
+    Item {
+        id: dragProxy
+        Drag.dragType: Drag.Automatic
+        Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
+        Drag.proposedAction: Qt.CopyAction
+    }
     property int previousMode: VimModeController.Normal
 
     // Leading file-type icon cell (SPEC.md REQ-F-008/010); the header's Name label is inset by the
@@ -410,7 +416,25 @@ Item {
                         event.accepted = true;
                 }
 
-                onClicked: root.controller.openEntry(delegate.index)
+                DragHandler {
+                    id: rowDrag
+                    target: null
+                    acceptedButtons: Qt.LeftButton
+                    enabled: root.controller.transfersEnabled
+                    onActiveChanged: if (active) {
+                        const payload = root.controller.dragUriList(delegate.index);
+                        if (payload.length > 0) {
+                            dragProxy.Drag.mimeData = {
+                                "text/uri-list": payload
+                            };
+                            dragProxy.Drag.active = true;
+                        }
+                    } else {
+                        dragProxy.Drag.active = false;
+                    }
+                }
+                onClicked: if (!rowDrag.active)
+                    root.controller.openEntry(delegate.index)
 
                 // INSERT-mode inline rename/create editor (SPEC.md REQ-F-006 through REQ-F-017): an
                 // opaque-background TextField overlaid on this delegate, covering its label, rather
@@ -458,6 +482,56 @@ Item {
                         focus = false;
                     }
                 }
+            }
+        }
+    }
+
+    FileDropArea {
+        id: dropArea
+        objectName: "fileDropArea"
+        anchors.fill: listArea
+        clip: true
+        controller: root.controller
+        enabled: root.controller.transfersEnabled
+        function updateTarget(): void {
+            const point = listView.mapFromItem(dropArea, position.x, position.y);
+            targetRow = listView.indexAt(point.x + listView.contentX, point.y + listView.contentY);
+        }
+        onFeedbackChanged: if (hovering)
+            updateTarget()
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            border.width: dropArea.hovering ? 2 : 0
+            border.color: dropArea.action === Qt.IgnoreAction ? HoloniightPalette.textMuted : HoloniightPalette.accentCyan
+        }
+        HnLabel {
+            visible: dropArea.hovering
+            x: Math.max(0, Math.min(dropArea.width - width, dropArea.position.x + 12))
+            y: Math.max(0, Math.min(dropArea.height - height, dropArea.position.y + 12))
+            rawText: dropArea.action === Qt.CopyAction ? qsTr("Copy here") : dropArea.action === Qt.MoveAction ? qsTr("Move here") : qsTr("Can't drop here")
+        }
+        Rectangle {
+            readonly property var target: dropArea.targetRow >= 0 ? listView.itemAtIndex(dropArea.targetRow) : null
+            visible: dropArea.hovering && target !== null && root.controller.dropDestination(dropArea.targetRow) !== root.controller.currentPath
+            x: listView.x
+            y: target ? target.y - listView.contentY : 0
+            width: listView.width
+            height: target ? target.height : 0
+            color: "transparent"
+            border.width: 2
+            border.color: dropArea.action === Qt.IgnoreAction ? HoloniightPalette.textMuted : HoloniightPalette.accentCyan
+        }
+        Timer {
+            interval: 75
+            repeat: true
+            running: dropArea.hovering && dropArea.enabled
+            onTriggered: {
+                const direction = dropArea.position.y < 32 ? -1 : dropArea.position.y > dropArea.height - 32 ? 1 : 0;
+                const minimum = listView.originY;
+                const maximum = Math.max(minimum, minimum + listView.contentHeight - listView.height);
+                listView.contentY = Math.max(minimum, Math.min(maximum, listView.contentY + direction * HnMetrics.controlHeight(HnControlSize.Compact)));
+                dropArea.updateTarget();
             }
         }
     }
