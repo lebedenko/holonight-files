@@ -105,7 +105,7 @@ TEST(WindowHistoryNavigation, BackButtonSitsLeftOfForwardButtonWithinSidebarWidt
   }
 }
 
-TEST(WindowHistoryNavigation, HeaderAndNavigationUseExtraSmallMetrics) {
+TEST(WindowHistoryNavigation, NormalBreadcrumbFitsExtraSmallHeader) {
   HistoryWindow rendered;
   ASSERT_TRUE(rendered.start());
   auto* header = rendered.window->findChild<QQuickItem*>("appHeaderBar");
@@ -115,7 +115,30 @@ TEST(WindowHistoryNavigation, HeaderAndNavigationUseExtraSmallMetrics) {
   EXPECT_EQ(header->height(), 42);
   EXPECT_EQ(header->property("sizeRole").toInt(), 4);
   EXPECT_EQ(header->property("breadcrumbPadding").toInt(), 6);
-  EXPECT_EQ(breadcrumb->height(), 24);
+  EXPECT_EQ(header->property("verticalPadding").toReal(), 5);
+  EXPECT_EQ(breadcrumb->height(), 32);
+  EXPECT_NEAR(breadcrumb->mapToItem(header, QPointF()).y(), 5, 0.5);
+  EXPECT_NEAR(breadcrumb->mapToItem(header, QPointF(0, breadcrumb->height())).y(), 37, 0.5);
+  auto* bar = rendered.window->findChild<QQuickItem*>("breadcrumbLabel");
+  ASSERT_NE(bar, nullptr);
+  EXPECT_EQ(bar->property("sizeRole").toInt(), 1);
+  int segments = 0;
+  const auto checkGeometry = [&](auto&& self, QQuickItem* item) -> void {
+    if (item->isVisible() && item->objectName().startsWith("hnBreadcrumbSegment")) {
+      ++segments;
+      EXPECT_EQ(item->height(), 28);
+      EXPECT_GE(item->mapToItem(bar, QPointF()).y(), -0.5);
+      EXPECT_LE(item->mapToItem(bar, QPointF(0, item->height())).y(), bar->height() + 0.5);
+      auto* content = item->property("contentItem").value<QQuickItem*>();
+      ASSERT_NE(content, nullptr);
+      EXPECT_NEAR(content->mapToItem(bar, QPointF(0, content->height() / 2)).y(), bar->height() / 2, 0.5);
+    }
+    for (auto* child : item->childItems()) {
+      self(self, child);
+    }
+  };
+  checkGeometry(checkGeometry, bar);
+  EXPECT_GT(segments, 0);
   for (auto* button : {rendered.back, rendered.forward}) {
     EXPECT_EQ(button->width(), 24);
     EXPECT_EQ(button->height(), 24);

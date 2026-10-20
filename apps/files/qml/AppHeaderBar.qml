@@ -20,6 +20,7 @@ HnHeaderBar {
     readonly property bool historyEnabled: root.controller.vim.currentMode === VimModeController.Normal && !root.controller.tasks.hasPrompt
 
     horizontalPadding: 0
+    verticalPadding: 5
     dividerColor: HoloniightPalette.borderPassive
 
     Rectangle {
@@ -60,20 +61,19 @@ HnHeaderBar {
             onClicked: root.controller.goForward()
         }
 
-        Rectangle {
+        Item {
             id: breadcrumbContainer
             objectName: "breadcrumbContainer"
             x: root.breadcrumbLeftInset - root.breadcrumbPadding
             anchors.verticalCenter: parent.verticalCenter
             width: Math.max(0, parent.width - x - HnMetrics.internalSpacing(HnControlSize.Normal))
-            height: HnMetrics.controlHeight(HnControlSize.Xs)
-            radius: HnAppearance.roundedRadius(HnSurfaceRole.Control, width, height, HnAppearance.revision)
-            color: HoloniightPalette.surfaceRaised
+            height: HnMetrics.controlHeight(HnControlSize.Normal)
 
             HnBreadcrumbBar {
                 id: breadcrumbLabel
                 objectName: "breadcrumbLabel"
                 editable: false
+                sizeRole: HnControlSize.Normal
                 anchors.fill: parent
                 anchors.leftMargin: root.breadcrumbPadding
                 enabled: root.historyEnabled && !root.controller.quickLookOpen
