@@ -196,10 +196,11 @@ folder), and regular files are unchanged. This also applies to the `..` row. See
 
 Navigation history works like Vim's jump list: `Ctrl+O` goes back and `Ctrl+I` goes forward
 through previously visited folders (count prefixes such as `3 Ctrl+O` work), as do the back/forward
-arrow buttons at the left of the header. Returning to a folder puts the cursor back on the entry it
+theme arrow buttons at the left of the header and the mouse Back/Forward buttons.
+Mouse navigation takes one step and keeps focus on the listing. Returning to a folder puts the cursor back on the entry it
 was on, and `h` places the cursor on the folder you just left. Revisiting a folder moves it to the
 end of the history instead of discarding forward entries. History holds up to 100 folders, lives in
-memory only (not kept across restarts), works in NORMAL mode only, and pauses while a prompt or Quick Look is open.
+memory only (not kept across restarts), works in NORMAL mode only, and pauses while a prompt, Quick Look, or the finder is open.
 Folders that no longer exist are skipped and dropped, with a "Skipped missing" status message.
 See the [navigation history specification](docs/sdd/navigation-history/SPEC.md) and
 [verification record](docs/sdd/navigation-history/VERIFICATION.md).
@@ -480,3 +481,6 @@ row cannot be dragged, but accepts drops into the parent folder. Dropping on a f
 listing space targets the current directory. Drops copy by default; hold Shift to move or
 Ctrl to copy. Link requests (Ctrl+Shift) are unsupported. Hover near the listing's top or bottom
 edge to scroll; folders do not open automatically. Existing task conflict prompts apply.
+
+The header breadcrumb frame follows the full listing width during resizing. Its right-hand
+close button uses the shared [header control](docs/header-navigation.md).

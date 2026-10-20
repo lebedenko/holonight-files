@@ -5,8 +5,10 @@
 
 #include "directory_controller.h"
 #include "directory_fixtures.h"
+#include "icon_theme_fixtures.h"
 
 #include <QDir>
+#include <QFile>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -114,7 +116,6 @@ TEST(WindowHistoryNavigation, NormalBreadcrumbFitsExtraSmallHeader) {
   ASSERT_NE(breadcrumb, nullptr);
   EXPECT_EQ(header->height(), 42);
   EXPECT_EQ(header->property("sizeRole").toInt(), 4);
-  EXPECT_EQ(header->property("breadcrumbPadding").toInt(), 6);
   EXPECT_EQ(header->property("verticalPadding").toReal(), 5);
   EXPECT_EQ(breadcrumb->height(), 32);
   EXPECT_NEAR(breadcrumb->mapToItem(header, QPointF()).y(), 5, 0.5);
@@ -258,9 +259,7 @@ TEST(WindowHistoryNavigation, BreadcrumbContainerXUnchangedAtDefaultAndMinimumWi
   auto* breadcrumb = rendered.window->findChild<QQuickItem*>("breadcrumbContainer");
   ASSERT_NE(header, nullptr);
   ASSERT_NE(breadcrumb, nullptr);
-  const auto expectedX = [&] {
-    return header->property("breadcrumbLeftInset").toReal() - header->property("breadcrumbPadding").toReal();
-  };
+  const auto expectedX = [&] { return header->property("breadcrumbLeftInset").toReal(); };
   for (const int width : {1000, 420}) {
     rendered.window->resize(width, 400);
     ASSERT_TRUE(QTest::qWaitFor([&] { return rendered.window->width() == width; }));
@@ -284,15 +283,21 @@ TEST(WindowHistoryNavigation, ButtonsHaveBackAndForwardAccessibleNames) {
   EXPECT_EQ(accessibleName(rendered.forward), "Forward");
 }
 
-TEST(WindowHistoryNavigation, HistoryButtonIconsLoadFromBundledResources) {
-  const auto previousTheme = QIcon::themeName();
-  const auto restoreTheme = qScopeGuard([&] { QIcon::setThemeName(previousTheme); });
-  QIcon::setThemeName(QStringLiteral("does-not-exist"));
+TEST(WindowHistoryNavigation, HistoryButtonIconsLoadFromTheme) {
+  QTemporaryDir theme(files_test::fixturePattern("history-icons"));
+  ASSERT_TRUE(files_test::writeTinyTheme(theme));
+  const auto directory = theme.filePath("tiny-test-theme/16x16/places/");
+  for (const auto* name : {"go-previous", "go-next"}) {
+    ASSERT_TRUE(QFile::copy(directory + "folder.png", directory + name + ".png"));
+  }
+  const auto restoreTheme = files_test::scopedIconTheme({theme.path()}, "tiny-test-theme");
   HistoryWindow rendered;
   ASSERT_TRUE(rendered.start());
   for (auto* button : {rendered.back, rendered.forward}) {
     const auto source = QQmlProperty(button, QStringLiteral("icon.source")).read().toUrl();
-    EXPECT_EQ(source.scheme(), "qrc") << source.toString().toStdString();
+    EXPECT_TRUE(source.isEmpty());
+    EXPECT_EQ(QQmlProperty(button, QStringLiteral("icon.name")).read().toString(),
+              button == rendered.back ? "go-previous" : "go-next");
     auto* icon = button->findChild<QQuickItem*>("hnIconButtonIcon");
     ASSERT_NE(icon, nullptr);
     QQuickItem* image = nullptr;
@@ -408,4 +413,82 @@ TEST(WindowHistoryNavigation, QuickLookConsumesHistoryShortcutsUntilClosed) {
   ASSERT_TRUE(settled(rendered.controller));
   EXPECT_EQ(rendered.controller.currentPath(), rendered.b);
   EXPECT_TRUE(QTest::qWaitFor([&] { return rendered.list->hasActiveFocus(); }));
+}
+
+TEST(WindowHistoryNavigation, MouseHistoryNavigatesOnceAcrossWindowRegionsAndPreservesFocus) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  for (const auto* region : {"appHeaderBar", "directoryListing", "sidebarContainer", "previewContainer"}) {
+    auto* item = rendered.window->findChild<QQuickItem*>(region);
+    ASSERT_NE(item, nullptr);
+    const auto point = item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint();
+    ASSERT_TRUE(rendered.list->hasActiveFocus());
+    rendered.controller.handleKey("2");
+    QTest::mouseClick(rendered.window, Qt::BackButton, Qt::NoModifier, point);
+    ASSERT_TRUE(settled(rendered.controller));
+    EXPECT_EQ(rendered.controller.currentPath(), rendered.b);
+    EXPECT_TRUE(rendered.list->hasActiveFocus());
+    QTest::mouseClick(rendered.window, Qt::ForwardButton, Qt::NoModifier, point);
+    ASSERT_TRUE(settled(rendered.controller));
+    EXPECT_EQ(rendered.controller.currentPath(), rendered.c);
+    QTest::mouseClick(rendered.window, Qt::ForwardButton, Qt::NoModifier, point);
+    EXPECT_EQ(rendered.controller.currentPath(), rendered.c);
+  }
+}
+
+TEST(WindowHistoryNavigation, MouseHistoryIsBlockedByEditingQuickLookAndFinder) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  for (const auto* key : {"v", "/", "i", " "}) {
+    rendered.controller.handleKey(key);
+    ASSERT_FALSE(rendered.controller.historyNavigationEnabled());
+    QTest::mouseClick(rendered.window, Qt::BackButton);
+    EXPECT_EQ(rendered.controller.currentPath(), rendered.c);
+    rendered.controller.handleKey("Escape");
+  }
+  ASSERT_TRUE(rendered.controller.setProperty("finderOpen", true));
+  EXPECT_FALSE(rendered.controller.historyNavigationEnabled());
+  QTest::mouseClick(rendered.window, Qt::BackButton);
+  EXPECT_EQ(rendered.controller.currentPath(), rendered.c);
+  rendered.controller.goBack();
+  EXPECT_EQ(rendered.controller.currentPath(), rendered.c);
+}
+
+TEST(WindowHistoryNavigation, BreadcrumbFrameTracksListingEdges) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  auto* bar = rendered.window->findChild<QQuickItem*>("breadcrumbLabel");
+  auto* listing = rendered.window->findChild<QQuickItem*>("directoryListing");
+  auto* close = rendered.window->findChild<QQuickItem*>("closeButton");
+  ASSERT_NE(bar, nullptr);
+  ASSERT_NE(listing, nullptr);
+  ASSERT_NE(close, nullptr);
+  auto* preview = rendered.window->findChild<QQuickItem*>("previewContainer");
+  ASSERT_NE(preview, nullptr);
+  for (int width : {1000, 420, 800}) {
+    rendered.window->setWidth(width);
+    for (int sidebar : {160, 220, 260}) {
+      rendered.window->setProperty("sidebarWidth", sidebar);
+      ASSERT_TRUE(QTest::qWaitFor([&] {
+        return qAbs(bar->mapToScene(QPointF()).x() - listing->mapToScene(QPointF()).x()) < 0.5 &&
+               qAbs(HistoryWindow::sceneRight(bar) - HistoryWindow::sceneRight(listing)) < 0.5;
+      }));
+      EXPECT_LE(HistoryWindow::sceneRight(bar), close->mapToScene(QPointF()).x());
+    }
+  }
+  rendered.window->setWidth(1000);
+  for (int previewWidth : {220, 300, 260}) {
+    ASSERT_TRUE(QQmlProperty::write(preview, "Controls.SplitView.preferredWidth", previewWidth, qmlContext(preview)));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return qAbs(preview->width() - previewWidth) < 0.5; }));
+    EXPECT_NEAR(HistoryWindow::sceneRight(bar), HistoryWindow::sceneRight(listing), 0.5);
+  }
+}
+
+TEST(WindowHistoryNavigation, CloseButtonClosesOwningWindow) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  auto* close = rendered.window->findChild<QQuickItem*>("closeButton");
+  ASSERT_NE(close, nullptr);
+  rendered.click(close);
+  EXPECT_FALSE(rendered.window->isVisible());
 }

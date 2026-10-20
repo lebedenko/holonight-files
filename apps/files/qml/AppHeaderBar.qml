@@ -10,14 +10,19 @@ HnHeaderBar {
     sizeRole: HnControlSize.Xs
 
     required property DirectoryController controller
-    required property real sidebarWidth
+    required property Item listingPanel
+    signal closeRequested
 
-    // Breadcrumb text starts at the listing's left edge (Main.qml content row: the sidebar, no spacing), which
-    // is also the line-number gutter's left edge (line-number-gutter REQ-F-015).
-    readonly property real breadcrumbLeftInset: root.sidebarWidth
-    readonly property real breadcrumbPadding: HnMetrics.horizontalPadding(HnControlSize.Xs)
-    // Same gating as the Ctrl+O/Ctrl+I shortcuts (REQ-F-032).
-    readonly property bool historyEnabled: root.controller.vim.currentMode === VimModeController.Normal && !root.controller.tasks.hasPrompt
+    function sceneX(item: Item): real {
+        let result = 0;
+        while (item) {
+            result += item.x;
+            item = item.parent;
+        }
+        return result;
+    }
+    readonly property real breadcrumbLeftInset: sceneX(listingPanel) - sceneX(root)
+    readonly property bool historyEnabled: root.controller.historyNavigationEnabled
 
     horizontalPadding: 0
     verticalPadding: 5
@@ -33,7 +38,7 @@ HnHeaderBar {
     // Loader binds an unsized root item's width/height to its own — a bare Label root would be
     // stretched to the full header height and render top-aligned instead of centered.
     content: Item {
-        // History buttons sit inside the sidebar-width region, leaving the breadcrumb's x untouched
+        // History buttons sit inside the sidebar region, leaving the listing-aligned breadcrumb clear
         // (navigation-history REQ-F-030..036). NoFocus keeps Vim keys on the listing after a click.
         HnIconButton {
             id: backButton
@@ -42,7 +47,7 @@ HnHeaderBar {
             anchors.verticalCenter: parent.verticalCenter
             sizeRole: HnControlSize.Xs
             focusPolicy: Qt.NoFocus
-            icon.source: "qrc:/qt/qml/HolonightFiles/icons/go-back.svg"
+            icon.name: "go-previous"
             enabled: root.historyEnabled && root.controller.canGoBack
             Accessible.name: qsTr("Back")
             onClicked: root.controller.goBack()
@@ -55,27 +60,36 @@ HnHeaderBar {
             anchors.verticalCenter: parent.verticalCenter
             sizeRole: HnControlSize.Xs
             focusPolicy: Qt.NoFocus
-            icon.source: "qrc:/qt/qml/HolonightFiles/icons/go-forward.svg"
+            icon.name: "go-next"
             enabled: root.historyEnabled && root.controller.canGoForward
             Accessible.name: qsTr("Forward")
             onClicked: root.controller.goForward()
         }
 
+        HnHeaderCloseButton {
+            objectName: "closeButton"
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            focusPolicy: Qt.NoFocus
+            onClicked: root.closeRequested()
+        }
+
         Item {
             id: breadcrumbContainer
             objectName: "breadcrumbContainer"
-            x: root.breadcrumbLeftInset - root.breadcrumbPadding
+            x: root.breadcrumbLeftInset
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(0, parent.width - x - HnMetrics.internalSpacing(HnControlSize.Normal))
+            width: root.listingPanel.width
             height: HnMetrics.controlHeight(HnControlSize.Normal)
 
             HnBreadcrumbBar {
                 id: breadcrumbLabel
                 objectName: "breadcrumbLabel"
                 editable: false
+                clip: true
                 sizeRole: HnControlSize.Normal
                 anchors.fill: parent
-                anchors.leftMargin: root.breadcrumbPadding
                 enabled: root.historyEnabled && !root.controller.quickLookOpen
                 segments: root.controller.breadcrumbLabels
                 onSegmentActivated: index => root.controller.activateBreadcrumb(index)

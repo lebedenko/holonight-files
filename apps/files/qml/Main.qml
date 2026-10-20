@@ -50,12 +50,12 @@ HnApplicationWindow {
         // navigation-history REQ-F-020: matched by key code, so Ctrl+I is never mistaken for Tab.
         // Window context reaches it from the listing, a delegate editor or Quick Look alike.
         sequence: "Ctrl+O"
-        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
+        enabled: window.controller.historyNavigationEnabled
         onActivated: window.controller.navigateHistoryBack()
     }
     Shortcut {
         sequence: "Ctrl+I"
-        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
+        enabled: window.controller.historyNavigationEnabled
         onActivated: window.controller.navigateHistoryForward()
     }
     Shortcut {
@@ -92,7 +92,8 @@ HnApplicationWindow {
             z: 1
             objectName: "appHeaderBar"
             controller: window.controller
-            sidebarWidth: window.sidebarWidth
+            listingPanel: directoryListing
+            onCloseRequested: window.close()
             Layout.fillWidth: true
         }
 
@@ -151,6 +152,7 @@ HnApplicationWindow {
                 }
 
                 DirectoryListing {
+                    id: directoryListing
                     objectName: "directoryListing"
                     controller: window.controller
                     Controls.SplitView.fillWidth: true

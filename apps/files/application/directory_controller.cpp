@@ -121,6 +121,7 @@ void DirectoryController::openInternal(const QString& requestedPath, const QStri
   navigation_.openInternal(requestedPath, fallbackReason, restoreName, recordHistory);
 }
 QString DirectoryController::outgoingCursorName() const { return navigation_.outgoingCursorName(); }
+bool DirectoryController::historyNavigationEnabled() const { return sidebarActivationEnabled() && !finder_open_; }
 void DirectoryController::goBack() {
   takeCount();  // a click always means one step, whatever digits were typed (REQ-F-033)
   traverseHistory(-1, 1);

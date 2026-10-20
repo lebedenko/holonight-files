@@ -55,6 +55,7 @@ class DirectoryController : public QObject {
   Q_PROPERTY(VimModeController* vim READ vim CONSTANT)
   Q_PROPERTY(TaskManager* tasks READ tasks CONSTANT)
   Q_PROPERTY(bool quickLookOpen READ quickLookOpen NOTIFY changed)
+  Q_PROPERTY(bool historyNavigationEnabled READ historyNavigationEnabled NOTIFY changed)
   Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY changed)
   Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
   Q_PROPERTY(bool transfersEnabled READ transfersEnabled NOTIFY changed)
@@ -80,6 +81,7 @@ class DirectoryController : public QObject {
   VimModeController* vim() { return &vim_; }
   TaskManager* tasks() { return &tasks_; }
   [[nodiscard]] bool quickLookOpen() const { return preview_selection_.quick_look_open_; }
+  [[nodiscard]] bool historyNavigationEnabled() const;
   [[nodiscard]] bool canGoBack() const { return navigation_.jump_list_.canGoBack(); }
   [[nodiscard]] bool canGoForward() const { return navigation_.jump_list_.canGoForward(); }
   [[nodiscard]] QStringList breadcrumbLabels() const { return breadcrumbs_.labels(); }

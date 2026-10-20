@@ -3,12 +3,33 @@
 #include "directory_controller.h"
 
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QQuickItem>
 #include <QQuickWindow>
+
+namespace {
+bool handleHistoryMouseEvent(DirectoryController& controller, QMouseEvent* event) {
+  const auto button = event->button();
+  if (button != Qt::BackButton && button != Qt::ForwardButton) {
+    return false;
+  }
+  if (event->type() == QEvent::MouseButtonPress && controller.historyNavigationEnabled()) {
+    if (button == Qt::BackButton) {
+      controller.goBack();
+    } else {
+      controller.goForward();
+    }
+  }
+  event->accept();
+  return true;
+}
+}  // namespace
+
 // Intercept at the window boundary, before Qt dispatches to editors or application shortcuts.
 // Keeping the existing focus item avoids changing editor cursor/selection and input mode.
 bool WindowEventFilter::eventFilter(QObject* watched, QEvent* event) {
-  if (event->type() != QEvent::ShortcutOverride && event->type() != QEvent::KeyPress) {
+  if (event->type() != QEvent::ShortcutOverride && event->type() != QEvent::KeyPress &&
+      event->type() != QEvent::MouseButtonPress && event->type() != QEvent::MouseButtonRelease) {
     return false;
   }
   auto* window = qobject_cast<QQuickWindow*>(watched);
@@ -17,6 +38,14 @@ bool WindowEventFilter::eventFilter(QObject* watched, QEvent* event) {
   }
   if ((window == nullptr) || window->property("controller").value<DirectoryController*>() != &controller_) {
     return false;
+  }
+  if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) {
+    // Handle only the window dispatch; item delivery would otherwise navigate twice.
+    if (watched != window) {
+      return false;
+    }
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+    return handleHistoryMouseEvent(controller_, static_cast<QMouseEvent*>(event));
   }
   // The event type is checked above, as required by Qt event filters.
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
