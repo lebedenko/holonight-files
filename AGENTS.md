@@ -28,3 +28,7 @@ remain historical. No separate planning, readiness, handoff or closure commits a
 Keep routine logs and generated evidence in ignored build directories or CI artifacts.
 Provider and consumer implementation may proceed together; publish providers before
 consumer commits that reference them. Update umbrella pins per coherent milestone.
+
+## Gotchas
+
+- Prefer Qt-recognized underlying-type spellings while preserving enum values, width, and signedness.
