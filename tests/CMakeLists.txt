@@ -29,6 +29,12 @@ add_test(NAME files-smoke COMMAND files-smoke)
 set_tests_properties(files-smoke PROPERTIES ENVIRONMENT
   "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
 
+# Enum registration diagnostics must be observed before any other QML loads.
+add_test(NAME files-preview-scoped-enums
+  COMMAND files-smoke --gtest_filter=Files.PreviewServiceScopedEnumsRemainDistinct)
+set_tests_properties(files-preview-scoped-enums PROPERTIES ENVIRONMENT
+  "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}" TIMEOUT 15)
+
 # A fresh headless process prevents earlier rendered tests from hiding copy memory growth.
 qt_add_executable(files-memory-benchmark file_operation_memory_test.cpp)
 target_link_libraries(files-memory-benchmark PRIVATE files-private GTest::gtest)

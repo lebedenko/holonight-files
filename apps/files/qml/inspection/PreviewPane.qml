@@ -23,14 +23,14 @@ Item {
 
     function reportImageAreaSize(): void {
         const ratio = root.previewDevicePixelRatio;
-        root.preview.setRequestedSize(PreviewService.Pane, Qt.size(imageArea.width * ratio, imageArea.frameHeight * ratio));
+        root.preview.setRequestedSize(PreviewService.PreviewConsumer.Pane, Qt.size(imageArea.width * ratio, imageArea.frameHeight * ratio));
     }
 
     property bool fallbackDelayElapsed: false
     property string displayedFallbackIdentity
     property bool fallbackDisplayed: false
     property var displayedImage: undefined
-    readonly property bool showIconFallback: root.preview.hasEntry && !root.preview.hasImage && (!root.preview.busy || root.preview.previewErrorKind !== PreviewService.None || root.fallbackDelayElapsed || (root.fallbackDisplayed && root.displayedFallbackIdentity === root.preview.iconName))
+    readonly property bool showIconFallback: root.preview.hasEntry && !root.preview.hasImage && (!root.preview.busy || root.preview.previewErrorKind !== PreviewService.PreviewErrorKind.None || root.fallbackDelayElapsed || (root.fallbackDisplayed && root.displayedFallbackIdentity === root.preview.iconName))
 
     function discardThumbnail(): void {
         thumbnailFade.stop();
@@ -42,11 +42,11 @@ Item {
         if (!root.visible || !root.preview.hasEntry || root.preview.hasImage) {
             root.fallbackDisplayed = false;
             root.displayedFallbackIdentity = "";
-        } else if (!root.preview.busy || root.preview.previewErrorKind !== PreviewService.None || root.fallbackDelayElapsed || (root.fallbackDisplayed && root.displayedFallbackIdentity === root.preview.iconName)) {
+        } else if (!root.preview.busy || root.preview.previewErrorKind !== PreviewService.PreviewErrorKind.None || root.fallbackDelayElapsed || (root.fallbackDisplayed && root.displayedFallbackIdentity === root.preview.iconName)) {
             root.displayedFallbackIdentity = root.preview.iconName;
             root.fallbackDisplayed = true;
         }
-        if (!root.visible || !root.preview.hasEntry || root.preview.previewErrorKind !== PreviewService.None) {
+        if (!root.visible || !root.preview.hasEntry || root.preview.previewErrorKind !== PreviewService.PreviewErrorKind.None) {
             root.discardThumbnail();
         } else if (root.preview.hasImage) {
             root.discardThumbnail();
@@ -417,7 +417,7 @@ Item {
                 role: HnTypographyRole.Caption
                 color: HoloniightPalette.textAccent
                 rawText: root.preview.previewErrorMessage
-                visible: root.preview.previewErrorKind !== PreviewService.None
+                visible: root.preview.previewErrorKind !== PreviewService.PreviewErrorKind.None
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }

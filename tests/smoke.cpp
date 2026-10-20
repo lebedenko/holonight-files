@@ -61,6 +61,63 @@ QQuickItem* findVisual(QQuickItem* root, const QString& name) {
 }
 }  // namespace
 
+namespace {
+struct EnumClashDiagnostics {
+  std::atomic_int count{0};
+  QtMessageHandler previous = nullptr;
+};
+
+EnumClashDiagnostics enumClashDiagnostics;
+
+void captureEnumClashes(QtMsgType type, const QMessageLogContext& context, const QString& message) {
+  if (message.contains(QStringLiteral("enum"), Qt::CaseInsensitive) &&
+      (message.contains(QStringLiteral("clash"), Qt::CaseInsensitive) ||
+       message.contains(QStringLiteral("Previously registered"), Qt::CaseInsensitive))) {
+    enumClashDiagnostics.count.fetch_add(1);
+  }
+  if (enumClashDiagnostics.previous != nullptr) {
+    enumClashDiagnostics.previous(type, context, message);
+  }
+}
+}  // namespace
+
+TEST(Files, PreviewServiceScopedEnumsRemainDistinct) {
+  enumClashDiagnostics.count = 0;
+  enumClashDiagnostics.previous = qInstallMessageHandler(captureEnumClashes);
+  const auto restoreHandler = qScopeGuard([] { qInstallMessageHandler(enumClashDiagnostics.previous); });
+  QQmlEngine engine;
+  QQmlComponent component(&engine);
+  component.setData(R"(
+    import QtQml
+    import HolonightFiles
+    QtObject {
+      readonly property int errorUnsupported: PreviewService.PreviewErrorKind.Unsupported
+      readonly property int eligibilityUnsupported: PreviewService.QuickLookEligibility.Unsupported
+      readonly property int noError: PreviewService.PreviewErrorKind.None
+      readonly property int pane: PreviewService.PreviewConsumer.Pane
+      readonly property int quickLook: PreviewService.PreviewConsumer.QuickLook
+      readonly property bool aliasesAbsent: typeof PreviewService.Unsupported === "undefined"
+        && typeof PreviewService.None === "undefined"
+        && typeof PreviewService.Pane === "undefined"
+        && typeof PreviewService.QuickLook === "undefined"
+    }
+  )",
+                    QUrl(QStringLiteral("inline:preview-enums.qml")));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return component.status() != QQmlComponent::Loading; }));
+  std::unique_ptr<QObject> object(component.create());
+  ASSERT_NE(object, nullptr) << component.errorString().toStdString();
+  EXPECT_EQ(object->property("errorUnsupported").toInt(),
+            static_cast<int>(PreviewService::PreviewErrorKind::Unsupported));
+  EXPECT_EQ(object->property("eligibilityUnsupported").toInt(),
+            static_cast<int>(PreviewService::QuickLookEligibility::Unsupported));
+  EXPECT_NE(object->property("errorUnsupported"), object->property("eligibilityUnsupported"));
+  EXPECT_EQ(object->property("noError").toInt(), static_cast<int>(PreviewService::PreviewErrorKind::None));
+  EXPECT_EQ(object->property("pane").toInt(), static_cast<int>(PreviewService::PreviewConsumer::Pane));
+  EXPECT_EQ(object->property("quickLook").toInt(), static_cast<int>(PreviewService::PreviewConsumer::QuickLook));
+  EXPECT_TRUE(object->property("aliasesAbsent").toBool());
+  EXPECT_EQ(enumClashDiagnostics.count.load(), 0);
+}
+
 TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   QTemporaryDir dir(files_test::fixturePattern("window"));
   ASSERT_TRUE(dir.isValid());

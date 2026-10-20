@@ -48,7 +48,7 @@ Controls.Popup {
             return "";
         if (root.preview.mimeType === "inode/directory")
             return qsTr("Dir");
-        if (root.preview.quickLookErrorKind !== PreviewService.None)
+        if (root.preview.quickLookErrorKind !== PreviewService.PreviewErrorKind.None)
             return root.preview.quickLookErrorMessage;
         if (root.preview.mimeType.length === 0)
             return SizeFormat.formatSize(root.preview.size);
@@ -63,7 +63,7 @@ Controls.Popup {
             return SizeFormat.formatSize(root.preview.size);
         return root.preview.mimeTypeDescription.length > 0 ? root.preview.mimeTypeDescription : root.preview.mimeType;
     }
-    readonly property color metadataColor: root.preview.quickLookErrorKind !== PreviewService.None ? HoloniightPalette.error : HoloniightPalette.textMuted
+    readonly property color metadataColor: root.preview.quickLookErrorKind !== PreviewService.PreviewErrorKind.None ? HoloniightPalette.error : HoloniightPalette.textMuted
 
     parent: Controls.Overlay.overlay
     x: parent ? Math.round((parent.width - width) / 2) : 0
