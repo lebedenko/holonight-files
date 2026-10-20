@@ -141,8 +141,8 @@ TEST(WindowHistoryNavigation, NormalBreadcrumbFitsExtraSmallHeader) {
   checkGeometry(checkGeometry, bar);
   EXPECT_GT(segments, 0);
   for (auto* button : {rendered.back, rendered.forward}) {
-    EXPECT_EQ(button->width(), 24);
-    EXPECT_EQ(button->height(), 24);
+    EXPECT_EQ(button->width(), 28);
+    EXPECT_EQ(button->height(), 28);
     auto* icon = button->findChild<QQuickItem*>("hnIconButtonIcon");
     ASSERT_NE(icon, nullptr);
     EXPECT_EQ(icon->width(), 16);

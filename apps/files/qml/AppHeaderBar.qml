@@ -45,7 +45,7 @@ HnHeaderBar {
             objectName: "historyBackButton"
             x: HnMetrics.internalSpacing(HnControlSize.Normal)
             anchors.verticalCenter: parent.verticalCenter
-            sizeRole: HnControlSize.Xs
+            sizeRole: HnControlSize.Compact
             focusPolicy: Qt.NoFocus
             icon.name: "go-previous"
             enabled: root.historyEnabled && root.controller.canGoBack
@@ -58,7 +58,7 @@ HnHeaderBar {
             objectName: "historyForwardButton"
             x: backButton.x + backButton.width
             anchors.verticalCenter: parent.verticalCenter
-            sizeRole: HnControlSize.Xs
+            sizeRole: HnControlSize.Compact
             focusPolicy: Qt.NoFocus
             icon.name: "go-next"
             enabled: root.historyEnabled && root.controller.canGoForward
