@@ -5,9 +5,9 @@
 #include <QQmlParserStatus>
 #include <QSizeF>
 #include <QtQml/qqmlregistration.h>
+#include <QtTypes>
 
 #include <HolonightFileBrowser/preview/preview_service.h>
-#include <cstdint>
 
 // Per-overlay presentation state. The shared preview service remains independent of card layout.
 class QuickLookPresentationModel : public QObject, public QQmlParserStatus {
@@ -15,7 +15,7 @@ class QuickLookPresentationModel : public QObject, public QQmlParserStatus {
   QML_ELEMENT
   Q_INTERFACES(QQmlParserStatus)
  public:
-  enum class Kind : std::uint8_t { None, Pending, Image, Text, Markdown, Compact };
+  enum class Kind : quint8 { None, Pending, Image, Text, Markdown, Compact };
   Q_ENUM(Kind)
 
   Q_PROPERTY(PreviewService* preview READ preview WRITE setPreview NOTIFY previewChanged)

@@ -11,10 +11,19 @@
 #include <QQuickWindow>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QtVersionChecks>
 
 #include <gtest/gtest.h>
 
 namespace {
+// Qt 6.12 accepts floating-point drag coordinates; keep Qt 6.11 constructors supported.
+auto dragPosition(QPoint position) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 12, 0)
+  return QPointF(position);
+#else
+  return position;
+#endif
+}
 class DropArea : public FileDropArea {
  public:
   using FileDropArea::dragEnterEvent;
@@ -97,7 +106,8 @@ TEST(FileDrop, NativeEventsCopyMoveAndCleanFeedback) {
   area.setProperty("controller", QVariant::fromValue(&controller));
   QMimeData mime;
   mime.setUrls({QUrl::fromLocalFile(src.filePath("one"))});
-  QDragEnterEvent enter(QPoint(20, 20), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+  QDragEnterEvent enter(dragPosition(QPoint(20, 20)), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton,
+                        Qt::NoModifier);
   area.dragEnterEvent(&enter);
   EXPECT_TRUE(area.hovering());
   EXPECT_EQ(area.action(), Qt::CopyAction);
@@ -158,7 +168,7 @@ TEST(FileDrop, OffscreenListingRecomputesTargetsAndClampsEdgeScrolling) {
   QMimeData mime;
   mime.setUrls({QUrl::fromLocalFile(dir.filePath("folder00"))});
   const QPoint bottom(100, qRound(area->height()) - 4);
-  QDragEnterEvent enter(bottom, Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+  QDragEnterEvent enter(dragPosition(bottom), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
   QCoreApplication::sendEvent(area, &enter);
   ASSERT_TRUE(area->hovering());
   const int first = area->property("targetRow").toInt();
@@ -168,7 +178,8 @@ TEST(FileDrop, OffscreenListingRecomputesTargetsAndClampsEdgeScrolling) {
   list->setProperty("contentY", maximum);
   QTest::qWait(100);
   EXPECT_LE(list->property("contentY").toReal(), maximum);
-  QDragMoveEvent top(QPoint(100, 1), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+  QDragMoveEvent top(dragPosition(QPoint(100, 1)), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton,
+                     Qt::NoModifier);
   QCoreApplication::sendEvent(area, &top);
   list->setProperty("contentY", list->property("originY"));
   QTest::qWait(100);

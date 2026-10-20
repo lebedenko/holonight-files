@@ -2,8 +2,7 @@
 
 #include <QObject>
 #include <QPointer>
-
-#include <cstdint>
+#include <QtTypes>
 
 class DevicesModel;
 class PlacesModel;
@@ -18,7 +17,7 @@ class SidebarNavigator : public QObject {
  public:
   // Qt model roles/QML properties require implicit integer conversion.
   // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
-  enum Section : std::int8_t { None = -1, Places = 0, Devices = 1 };
+  enum Section : qint8 { None = -1, Places = 0, Devices = 1 };
   Q_ENUM(Section)
   SidebarNavigator(PlacesModel* places, DevicesModel* devices, QObject* parent = nullptr);
   [[nodiscard]] int section() const { return section_; }

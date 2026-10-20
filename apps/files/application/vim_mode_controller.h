@@ -7,8 +7,7 @@
 #include <QString>
 #include <QStringList>
 #include <QtQml/qqmlregistration.h>
-
-#include <cstdint>
+#include <QtTypes>
 
 // The NORMAL/VISUAL/SEARCH/INSERT mode state machine (docs/sdd/vim-modal-editing/SPEC.md). Owned
 // as a value member of DirectoryController, structurally analogous to PreviewService, but kept
@@ -39,11 +38,11 @@ class VimModeController : public QObject {
   Q_PROPERTY(QList<int> searchMatchRows READ searchMatchRows NOTIFY changed)
 
  public:
-  enum class Mode : std::uint8_t { Normal, Visual, Search, Insert };
+  enum class Mode : quint8 { Normal, Visual, Search, Insert };
   Q_ENUM(Mode)
-  enum class InsertKind : std::uint8_t { Prepend, Append, CreateBelow, CreateAbove };
+  enum class InsertKind : quint8 { Prepend, Append, CreateBelow, CreateAbove };
   Q_ENUM(InsertKind)
-  enum class InsertCommitAction : std::uint8_t { None, Touch, Rename, CreateDirectory, CreateFile };
+  enum class InsertCommitAction : quint8 { None, Touch, Rename, CreateDirectory, CreateFile };
   Q_ENUM(InsertCommitAction)
 
   struct InsertCommitResult {

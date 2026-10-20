@@ -9,6 +9,7 @@
 #include <QStringList>
 #include <QThread>
 #include <QtQml/qqmlregistration.h>
+#include <QtTypes>
 
 #include <atomic>
 #include <cstdint>
@@ -41,11 +42,11 @@ class TaskManager : public QObject {
  public:
   // Nested (like PreviewService's PreviewErrorKind) so QML resolves these as TaskManager.Copy,
   // TaskManager.Conflict, etc.
-  enum class TaskKind : std::uint8_t { Copy, Move, Trash };
+  enum class TaskKind : quint8 { Copy, Move, Trash };
   Q_ENUM(TaskKind)
-  enum class ConflictResolution : std::uint8_t { Skip, Overwrite, AutoRename, Cancel };
+  enum class ConflictResolution : quint8 { Skip, Overwrite, AutoRename, Cancel };
   Q_ENUM(ConflictResolution)
-  enum class PromptKind : std::uint8_t { None, Conflict, TrashConfirm };
+  enum class PromptKind : quint8 { None, Conflict, TrashConfirm };
   Q_ENUM(PromptKind)
 
   struct FailedItem {

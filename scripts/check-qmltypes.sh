@@ -8,4 +8,8 @@ test -s "$metadata"
 for type in DirectoryController DirectoryProxyModel PlacesModel VimModeController TaskManager PreviewService PreviewImageItem QuickLookPresentationModel WindowState IconFallbacks InspectionKeys SizeFormat; do
   grep -q "HolonightFiles/$type 1.0" "$metadata" || { echo "Missing metadata: $type" >&2; exit 1; }
 done
+if grep -Eq 'std::(u?int8_t)' "$metadata"; then
+  echo 'Unsupported enum base type in Files QML metadata: use quint8 or qint8.' >&2
+  exit 1
+fi
 echo 'Files QML metadata checks passed.'

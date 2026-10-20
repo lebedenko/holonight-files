@@ -5,6 +5,7 @@
 
 #include <QAbstractListModel>
 #include <QtQml/qqmlregistration.h>
+#include <QtTypes>
 
 #include <HolonightFileBrowser/places/place_availability_checker.h>
 #include <cstdint>
@@ -16,9 +17,9 @@
 class PlacesModel : public QAbstractListModel {
   Q_OBJECT
  public:
-  enum class Origin : std::uint8_t { Home, XdgUserDirectory, Bookmark };
+  enum class Origin : quint8 { Home, XdgUserDirectory, Bookmark };
   Q_ENUM(Origin)
-  enum class Status : std::uint8_t { Checking, Available, Unavailable };
+  enum class Status : quint8 { Checking, Available, Unavailable };
   Q_ENUM(Status)
   // Qt model roles/QML properties require implicit integer conversion.
   // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
