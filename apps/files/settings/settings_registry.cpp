@@ -50,7 +50,7 @@ void SettingsRegistry::declare(const QString& section, const Setting<bool>& sett
   entries_.push_back(std::move(entry));
 }
 
-std::vector<TomlDiagnostic> SettingsRegistry::apply(const TomlDocument& document) {
+std::vector<TomlDiagnostic> SettingsRegistry::apply(const TomlDocument& document, SettingSource source) {
   std::vector<TomlDiagnostic> diagnostics;
   for (const auto& key : document.rootKeys()) {
     const auto line = document.value({}, key).line;
@@ -87,14 +87,14 @@ std::vector<TomlDiagnostic> SettingsRegistry::apply(const TomlDocument& document
       diagnostics.push_back({
           .kind = TomlDiagnostic::Kind::WrongType,
           .message =
-              QCoreApplication::translate("settings", "%1: expected %2, found %3; using the default")
+              QCoreApplication::translate("settings", "%1: expected %2, found %3; retaining the previous value")
                   .arg(keyPath(entry.info.section, entry.info.key), typeName(entry.info.type), typeName(found.type)),
           .line = found.line,
       });
       continue;
     }
     entry.resolved = found;
-    entry.info.source = SettingSource::ConfigFile;
+    entry.info.source = source;
   }
   std::ranges::stable_sort(diagnostics, {}, &TomlDiagnostic::line);
   return diagnostics;

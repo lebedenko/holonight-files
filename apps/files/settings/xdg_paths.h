@@ -5,7 +5,11 @@
 // XDG Base Directory resolution for this application's own files (SPEC.md REQ-C-001). An unset,
 // empty or relative XDG_CONFIG_HOME/XDG_STATE_HOME is ignored in favour of the $HOME fallback, as
 // the specification requires. Resolved on every call; callers resolve once at startup.
+class WarningSink;
+
 namespace XdgPaths {
+// Select once at startup; names are validated filename components, never paths.
+QString sessionOverridePath(const QString& configPath, WarningSink& warnings);
 QString configFilePath();    // $XDG_CONFIG_HOME/holonight-files/config.toml
 QString stateDirPath();      // $XDG_STATE_HOME/holonight-files
 QString stateFilePath();     // stateDirPath()/state.toml

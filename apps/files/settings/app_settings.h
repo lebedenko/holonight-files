@@ -10,10 +10,10 @@
 
 class WarningSink;
 
-// Immutable, read-only view of config.toml (SPEC.md REQ-F-031). Loaded once in main() before any
-// folder opens (REQ-C-005); the finder independently reloads search settings on opening.
-// config.toml is only ever read, never created or written (REQ-C-003).
-// Adding a section means one member, one accessor and one declare()/read() line in load().
+// Immutable, read-only view of base and selected session configuration (SPEC.md REQ-F-031). Loaded once in main()
+// before any folder opens (REQ-C-005); the finder independently reloads search settings on opening. Configuration is
+// only ever read, never created or written (REQ-C-003). Adding a section means one member, one accessor and one
+// declare()/read() line in load().
 class AppSettings {
  public:
   static AppSettings load(const QString& configPath, WarningSink& warnings);

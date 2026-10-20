@@ -1,6 +1,10 @@
 #include "settings/xdg_paths.h"
 
+#include "settings/warning_sink.h"
+
+#include <QCoreApplication>
 #include <QDir>
+#include <QFileInfo>
 
 namespace {
 constexpr auto kApplicationDirectory = "holonight-files";
@@ -15,6 +19,31 @@ QString baseDirectory(const char* variable, const QString& homeRelativeFallback)
 }  // namespace
 
 namespace XdgPaths {
+QString sessionOverridePath(const QString& configPath, WarningSink& warnings) {
+  const QDir directory(QFileInfo(configPath).absolutePath());
+  for (auto name : qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(':', Qt::SkipEmptyParts)) {
+    bool valid = true;
+    for (auto& character : name) {
+      const auto code = character.unicode();
+      const bool allowed = (code >= 'a' && code <= 'z') || (code >= '0' && code <= '9') || code == '-' || code == '_';
+      if (code >= 'A' && code <= 'Z') {
+        character = QChar(code + ('a' - 'A'));
+      } else if (!allowed) {
+        valid = false;
+      }
+    }
+    if (!valid) {
+      warnings.warn(QCoreApplication::translate("settings", "invalid desktop name %1; ignored").arg(name));
+      continue;
+    }
+    const auto path = directory.filePath(QStringLiteral("config-%1.toml").arg(name));
+    if (QFileInfo::exists(path)) {
+      return path;
+    }
+  }
+  return {};
+}
+
 QString configFilePath() {
   return baseDirectory("XDG_CONFIG_HOME", QStringLiteral(".config")) + u'/' + QLatin1String(kApplicationDirectory) +
          QStringLiteral("/config.toml");

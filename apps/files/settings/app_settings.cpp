@@ -1,5 +1,6 @@
 #include "settings/app_settings.h"
 
+#include "settings/xdg_paths.h"
 #include "warning_sink.h"
 
 #include <QCoreApplication>
@@ -31,20 +32,25 @@ AppSettings AppSettings::defaults() {
 }
 
 AppSettings AppSettings::load(const QString& configPath, WarningSink& warnings) {
-  const auto parsed = TomlDocument::parseFile(configPath);
-  if (!parsed.file_exists) {
-    return defaults();
-  }
-  if (!parsed.diagnostics.empty()) {
-    const auto& error = parsed.diagnostics.front();
-    warnings.warn(located(
-        configPath, error.line,
-        QCoreApplication::translate("settings", "cannot read configuration (%1); using defaults").arg(error.message)));
-    return defaults();
-  }
   auto registry = declareAll();
-  for (const auto& diagnostic : registry.apply(parsed.document)) {
-    warnings.warn(located(configPath, diagnostic.line, diagnostic.message));
+  const auto overridePath = XdgPaths::sessionOverridePath(configPath, warnings);
+  for (const auto& path : {configPath, overridePath}) {
+    if (path.isEmpty()) {
+      continue;
+    }
+    const auto parsed = TomlDocument::parseFile(path);
+    if (!parsed.diagnostics.empty()) {
+      const auto& error = parsed.diagnostics.front();
+      warnings.warn(
+          located(path, error.line,
+                  QCoreApplication::translate("settings", "cannot read configuration (%1); retaining previous values")
+                      .arg(error.message)));
+      continue;
+    }
+    const auto source = path == configPath ? SettingSource::ConfigFile : SettingSource::SessionOverride;
+    for (const auto& diagnostic : registry.apply(parsed.document, source)) {
+      warnings.warn(located(path, diagnostic.line, diagnostic.message));
+    }
   }
   AppSettings settings;
   settings.readAll(registry);

@@ -13,25 +13,38 @@ PathFinderModel::PathFinderModel(PathScanFunction scanner, QObject* parent)
 }
 void PathFinderModel::configure() {
   setCachePath(PathIndexStore::cachePath());
-  setConfigurationLoader([] {
+  StderrWarningSink selectionWarnings;
+  const auto basePath = XdgPaths::configFilePath();
+  const auto overridePath = XdgPaths::sessionOverridePath(basePath, selectionWarnings);
+  setConfigurationLoader([basePath, overridePath] {
     SearchConfiguration result;
-    const auto path = XdgPaths::configFilePath();
-    const auto parsed = TomlDocument::parseFile(path);
-    result.valid = parsed.diagnostics.empty();
-    for (const auto& diagnostic : parsed.diagnostics) {
-      result.diagnostics.append(QStringLiteral("%1:%2: %3")
-                                    .arg(path)
-                                    .arg(diagnostic.line)
-                                    .arg(tr("Cannot read search configuration (%1). Retaining the last valid policy.")
-                                             .arg(diagnostic.message)));
+    result.valid = true;
+    SettingsRegistry registry;
+    GeneralSettings::declare(registry);
+    SearchSettings::declare(registry);
+    for (const auto& path : {basePath, overridePath}) {
+      if (path.isEmpty()) {
+        continue;
+      }
+      const auto parsed = TomlDocument::parseFile(path);
+      if (!parsed.diagnostics.empty()) {
+        result.valid = false;
+      }
+      for (const auto& diagnostic : parsed.diagnostics) {
+        result.diagnostics.append(QStringLiteral("%1:%2: %3")
+                                      .arg(path)
+                                      .arg(diagnostic.line)
+                                      .arg(tr("Cannot read search configuration (%1). Retaining the last valid policy.")
+                                               .arg(diagnostic.message)));
+      }
+      const auto source = path == basePath ? SettingSource::ConfigFile : SettingSource::SessionOverride;
+      if (parsed.diagnostics.empty()) {
+        for (const auto& diagnostic : registry.apply(parsed.document, source)) {
+          result.diagnostics.append(QStringLiteral("%1:%2: %3").arg(path).arg(diagnostic.line).arg(diagnostic.message));
+        }
+      }
     }
     if (result.valid) {
-      SettingsRegistry registry;
-      GeneralSettings::declare(registry);
-      SearchSettings::declare(registry);
-      for (const auto& diagnostic : registry.apply(parsed.document)) {
-        result.diagnostics.append(QStringLiteral("%1:%2: %3").arg(path).arg(diagnostic.line).arg(diagnostic.message));
-      }
       result.exclusions = SearchSettings::read(registry);
     }
     StderrWarningSink warnings;

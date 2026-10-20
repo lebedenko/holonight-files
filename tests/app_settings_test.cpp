@@ -127,3 +127,73 @@ TEST(AppSettings, ExistingConfigIsNeverModified) {
   EXPECT_EQ(QFileInfo(path).lastModified(), before);
   EXPECT_EQ(QDir(dir.filePath("holonight-files")).entryList(QDir::Files | QDir::Hidden).size(), 1);
 }
+
+TEST(AppSettings, SessionOverrideMergesIndividualKeysAndReplacesArrays) {
+  QTemporaryDir dir;
+  const auto base = writeConfig(dir.path(),
+                                "[general]\nrestore_last_location = true\n[search]\nexclude_paths = [\"/base\"]\n"
+                                "exclude_directory_patterns = [\"vendor\"]\n");
+  const auto profile = dir.filePath("holonight-files/config-holonight.toml");
+  QFile file(profile);
+  ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+  file.write("[search]\nexclude_paths = []\n");
+  file.close();
+  const ScopedEnvironmentVariable desktop("XDG_CURRENT_DESKTOP", ":Missing::HoloNight:Hyprland:");
+  RecordingWarningSink warnings;
+  const auto settings = AppSettings::load(base, warnings);
+  EXPECT_TRUE(settings.general().restoreLastLocation());
+  EXPECT_TRUE(settings.search().paths.isEmpty());
+  EXPECT_EQ(settings.search().patterns, QStringList{"vendor"});
+  EXPECT_EQ(settings.settingInfo()[0].source, SettingSource::ConfigFile);
+  EXPECT_EQ(settings.settingInfo()[1].source, SettingSource::SessionOverride);
+  EXPECT_EQ(settings.settingInfo()[2].source, SettingSource::ConfigFile);
+  EXPECT_TRUE(warnings.messages.isEmpty());
+}
+
+TEST(AppSettings, InvalidSelectedProfileRetainsBaseAndNeverFallsThrough) {
+  QTemporaryDir dir;
+  const auto base = writeConfig(dir.path(), "[general]\nrestore_last_location = true\n");
+  const ScopedEnvironmentVariable desktop("XDG_CURRENT_DESKTOP", "First:Later");
+  auto writeProfile = [&](const QString& name, const QByteArray& content) {
+    QFile file(dir.filePath("holonight-files/config-" + name + ".toml"));
+    EXPECT_TRUE(file.open(QIODevice::WriteOnly));
+    EXPECT_EQ(file.write(content), content.size());
+  };
+  writeProfile("later", "[general]\nrestore_last_location = false\n");
+  for (const auto& content : {QByteArray("[general]\nrestore_last_location = 42\n"), QByteArray("[general\ninvalid"),
+                              QByteArray("general = false\n")}) {
+    writeProfile("first", content);
+    RecordingWarningSink warnings;
+    const auto settings = AppSettings::load(base, warnings);
+    EXPECT_TRUE(settings.general().restoreLastLocation());
+    EXPECT_EQ(settings.settingInfo()[0].source, SettingSource::ConfigFile);
+    ASSERT_EQ(warnings.messages.size(), 1);
+    EXPECT_TRUE(warnings.messages[0].contains("config-first.toml"));
+  }
+  ASSERT_TRUE(QFile::remove(dir.filePath("holonight-files/config-first.toml")));
+  ASSERT_TRUE(QDir().mkdir(dir.filePath("holonight-files/config-first.toml")));
+  RecordingWarningSink warnings;
+  EXPECT_TRUE(AppSettings::load(base, warnings).general().restoreLastLocation());
+  EXPECT_FALSE(warnings.messages.isEmpty());
+}
+
+TEST(AppSettings, SessionOnlyConfigurationAndSafeDesktopNames) {
+  QTemporaryDir dir;
+  const auto base = dir.filePath("config.toml");
+  QFile file(dir.filePath("config-holonight-hyprland.toml"));
+  ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+  file.write("[general]\nrestore_last_location = true\n");
+  file.close();
+  const ScopedEnvironmentVariable desktop("XDG_CURRENT_DESKTOP", "../escape:/absolute:é:HoloNight-Hyprland");
+  RecordingWarningSink warnings;
+  const auto settings = AppSettings::load(base, warnings);
+  EXPECT_TRUE(settings.general().restoreLastLocation());
+  EXPECT_EQ(settings.settingInfo()[0].source, SettingSource::SessionOverride);
+  EXPECT_EQ(warnings.messages.size(), 3);
+  for (const auto& identity : {QString{}, QString("Missing")}) {
+    const ScopedEnvironmentVariable absent("XDG_CURRENT_DESKTOP", identity);
+    RecordingWarningSink absentWarnings;
+    EXPECT_FALSE(AppSettings::load(base, absentWarnings).general().restoreLastLocation());
+    EXPECT_TRUE(absentWarnings.messages.isEmpty());
+  }
+}

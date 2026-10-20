@@ -282,3 +282,36 @@ TEST(SearchExclusions, FirstMalformedConfigUsesBuiltinsAndUnreadableConfigRetain
   EXPECT_FALSE(model.error().isEmpty());
   EXPECT_TRUE(model.error().contains("Retaining"));
 }
+
+TEST(SearchExclusions, ReloadsSelectedSessionWithoutReselectingProfile) {
+  QTemporaryDir config;
+  QTemporaryDir directory;
+  const ScopedXdgConfigHome configHome(config.path());
+  const files_test::ScopedEnvironmentVariable desktop("XDG_CURRENT_DESKTOP", "First:Later");
+  const auto base = config.filePath("holonight-files/config.toml");
+  const auto selected = config.filePath("holonight-files/config-first.toml");
+  writeConfig(base, "[search]\nexclude_directory_patterns = [\"vendor\"]");
+  writeConfig(selected, "[search]\nexclude_directory_patterns = []");
+  writeConfig(config.filePath("holonight-files/config-later.toml"), "[search]\nexclude_directory_patterns = []");
+  ASSERT_TRUE(QDir().mkpath(directory.filePath("vendor")));
+  ASSERT_FALSE(files_test::writeFile(directory, "vendor/needle.txt").isEmpty());
+  PathFinderModel model;
+  auto reopen = [&] {
+    model.stop();
+    model.start(directory.path(), false);
+    return QTest::qWaitFor([&] { return !model.scanning(); });
+  };
+  ASSERT_TRUE(reopen());
+  EXPECT_EQ(model.indexedCount(), 2);
+  writeConfig(selected, "[search]\nexclude_directory_patterns = [\"vendor\"]");
+  ASSERT_TRUE(reopen());
+  EXPECT_EQ(model.indexedCount(), 0);
+  writeConfig(selected, "[search\ninvalid");
+  ASSERT_TRUE(reopen());
+  EXPECT_EQ(model.indexedCount(), 0);
+  EXPECT_FALSE(model.error().isEmpty());
+  ASSERT_TRUE(QFile::remove(selected));
+  ASSERT_TRUE(reopen());
+  EXPECT_EQ(model.indexedCount(), 0);
+  EXPECT_TRUE(model.error().isEmpty());
+}

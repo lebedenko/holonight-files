@@ -221,7 +221,7 @@ and pending native visual and accessibility acceptance.
 Files reads an optional `config.toml` once at startup from
 `$XDG_CONFIG_HOME/holonight-files/config.toml`, or `~/.config/holonight-files/config.toml`
 when `XDG_CONFIG_HOME` is unset, empty or not an absolute path. Files never creates or
-changes this file; edit it yourself and restart to apply changes. One setting exists:
+changes configuration files; edit them yourself and restart to apply general settings:
 
 ```toml
 [general]
@@ -238,9 +238,25 @@ bar says why (for example "last location does not exist"). The location is saved
 only on a normal close and only while the setting is enabled. When several windows close,
 the last one wins. A crash or kill leaves the previous state unchanged.
 
+At startup Files splits `XDG_CURRENT_DESKTOP` on colons, ignores empty names, and
+lowercases ASCII letters. It selects the first existing `config-<desktop>.toml`
+in the same directory. For `HoloNight-Hyprland:HoloNight:Hyprland`, lookup is
+`config-holonight-hyprland.toml`, `config-holonight.toml`, then `config-hyprland.toml`.
+Only ASCII letters, digits, hyphens and underscores are accepted in names; invalid
+names are diagnosed and skipped. No session identity or match means base settings only.
+
+The selected profile overrides individual keys over `config.toml` and built-in defaults.
+Omitted keys inherit; arrays replace the entire base array, including empty arrays.
+Invalid values retain inherited values. A malformed or unreadable selected profile
+is diagnosed and ignored without trying later candidates. Setting provenance records
+default, base file or session override; Files never saves flattened effective settings.
+The finder reloads the base and the selected profile when opened, retaining its last
+valid policy on parse/read errors. Profile selection stays fixed for the process;
+removing the selected file restores base inheritance until restart.
+
 A missing config file means defaults with no messages. An unparseable file is ignored as a
 whole with a single warning on stderr giving the path and line. A value of the wrong type
-falls back to its default, and unknown keys or sections are ignored. Each of these gets its
+retains its inherited value (or default), and unknown keys or sections are ignored. Each of these gets its
 own stderr warning. An unusable `state.toml` is also reported on stderr and treated as no
 remembered location. See the [app configuration specification](docs/sdd/app-configuration/SPEC.md).
 

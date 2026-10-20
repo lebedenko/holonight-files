@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <vector>
 
-enum class SettingSource : std::uint8_t { Default, ConfigFile };
+enum class SettingSource : std::uint8_t { Default, ConfigFile, SessionOverride };
 
 // What a future settings UI renders for one declared setting (SPEC.md REQ-F-030).
 struct SettingInfo {
@@ -26,9 +26,9 @@ class SettingsRegistry {
  public:
   void declare(const QString& section, const Setting<bool>& setting);
   void declare(const QString& section, const Setting<QStringList>& setting);
-  // Wrong-typed declared keys fall back to their defaults; undeclared sections and keys are
+  // Wrong-typed declared keys retain their previous values; undeclared sections and keys are
   // reported and ignored. Diagnostics are in source order.
-  std::vector<TomlDiagnostic> apply(const TomlDocument& document);
+  std::vector<TomlDiagnostic> apply(const TomlDocument& document, SettingSource source = SettingSource::ConfigFile);
   [[nodiscard]] bool value(const QString& section, const Setting<bool>& setting) const;
   [[nodiscard]] QStringList value(const QString& section, const Setting<QStringList>& setting) const;
   [[nodiscard]] std::vector<SettingInfo> settings() const;
