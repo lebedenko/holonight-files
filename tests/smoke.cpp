@@ -2581,7 +2581,7 @@ TEST(Files, QuickLookLineNavigationAndResizeProduceNoBindingLoops) {
   EXPECT_EQ(bindingLoopCounter().warnings.load(), 0);
 }
 
-// quick-look-redesign REQ-F-012: errors in the error color. Only entries that pass the Quick Look gate can open
+// Preview failures retain metadata and show a neutral caption. Only entries that pass the Quick Look gate can open
 // (images and text/plain), so the compact error card is reached via a corrupt image and an unreadable text file.
 TEST(Files, QuickLookCompactCardShowsErrorForUnreadableAndCorruptFiles) {
   QTemporaryDir dir(files_test::fixturePattern("quicklook-errors"));
@@ -2595,7 +2595,7 @@ TEST(Files, QuickLookCompactCardShowsErrorForUnreadableAndCorruptFiles) {
   QuickLookHarness harness;
   ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
   const auto* preview = harness.controller.preview();
-  const auto error = paletteColor(harness.engine, "error");
+  const auto muted = paletteColor(harness.engine, "textMuted");
   QStringList names{QStringLiteral("02-corrupt.jpg")};
   if (!deniedIsReadable) {  // privileged runs bypass file permissions
     names.prepend(QStringLiteral("01-denied.txt"));
@@ -2606,8 +2606,9 @@ TEST(Files, QuickLookCompactCardShowsErrorForUnreadableAndCorruptFiles) {
     ASSERT_NE(preview->previewErrorKind(), PreviewService::PreviewErrorKind::None);
     ASSERT_FALSE(preview->previewErrorMessage().isEmpty());
     EXPECT_EQ(preview->currentLineIndex(), -1);
-    EXPECT_EQ(quickLookText(harness, "quickLookMetadata"), preview->previewErrorMessage());
-    EXPECT_EQ(quickLookColor(harness, "quickLookMetadata"), error);
+    EXPECT_EQ(quickLookText(harness, "quickLookErrorNotice"), QStringLiteral("No preview available"));
+    EXPECT_NE(quickLookText(harness, "quickLookMetadata"), preview->previewErrorMessage());
+    EXPECT_EQ(quickLookColor(harness, "quickLookMetadata"), muted);
     EXPECT_TRUE(harness.window->findChild<QQuickItem*>("quickLookIcon")->isVisible());
     EXPECT_LT(popupSize(harness).width(), quickLookBounds(harness).width() / 2);
     expectCardWithinBounds(harness);

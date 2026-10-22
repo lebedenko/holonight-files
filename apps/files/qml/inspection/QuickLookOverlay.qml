@@ -48,8 +48,6 @@ Controls.Popup {
             return "";
         if (root.preview.mimeType === "inode/directory")
             return qsTr("Dir");
-        if (root.preview.quickLookErrorKind !== PreviewService.PreviewErrorKind.None)
-            return root.preview.quickLookErrorMessage;
         if (root.preview.mimeType.length === 0)
             return SizeFormat.formatSize(root.preview.size);
         if (root.preview.mimeType.indexOf("image/") === 0) {
@@ -63,7 +61,7 @@ Controls.Popup {
             return SizeFormat.formatSize(root.preview.size);
         return root.preview.mimeTypeDescription.length > 0 ? root.preview.mimeTypeDescription : root.preview.mimeType;
     }
-    readonly property color metadataColor: root.preview.quickLookErrorKind !== PreviewService.PreviewErrorKind.None ? HoloniightPalette.error : HoloniightPalette.textMuted
+    readonly property color metadataColor: HoloniightPalette.textMuted
 
     parent: Controls.Overlay.overlay
     x: parent ? Math.round((parent.width - width) / 2) : 0
@@ -200,20 +198,40 @@ Controls.Popup {
                 id: compactIcon
                 objectName: "quickLookIcon"
                 anchors.centerIn: parent
-                size: root.iconExtent
+                size: failureCaption.visible ? Math.max(32, root.iconExtent - failureCaption.implicitHeight - root.captionSpacing) : root.iconExtent
+                anchors.verticalCenterOffset: failureCaption.visible ? -(failureCaption.implicitHeight + root.captionSpacing) / 2 : 0
                 // A chain the listing or this icon already failed is not requested again (IconFallbacks).
                 property string failedChain
                 readonly property bool useFallback: IconFallbacks.isUnresolved(root.preview.iconName) || compactIcon.failedChain === root.preview.iconName
                 readonly property bool isFolderEntry: root.preview.isDirectory
                 source: presentation.kind !== QuickLookPresentationModel.Compact ? "" : !compactIcon.useFallback ? "image://icon/" + root.preview.iconName : compactIcon.isFolderEntry ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
                 rendering: compactIcon.useFallback ? HnIcon.Semantic : HnIcon.Original
-                visible: presentation.kind === QuickLookPresentationModel.Compact && !root.preview.hasImage
+                visible: presentation.kind === QuickLookPresentationModel.Compact && !root.preview.hasImage && !root.preview.quickLookBusy
                 onHasErrorChanged: if (hasError && !compactIcon.useFallback) {
                     const chain = root.preview.iconName;
                     IconFallbacks.markUnresolved(chain);
                     // Deferred: the failure is reported from inside the source assignment itself.
                     Qt.callLater(() => compactIcon.failedChain = chain);
                 }
+            }
+
+            HnLabel {
+                id: failureCaption
+                objectName: "quickLookErrorNotice"
+                anchors.bottom: parent.bottom
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                role: HnTypographyRole.Caption
+                color: HoloniightPalette.textMuted
+                rawText: qsTr("No preview available")
+                visible: !root.preview.hasImage && !root.preview.hasText && !root.preview.quickLookBusy && root.preview.quickLookErrorKind !== PreviewService.PreviewErrorKind.None
+                Accessible.description: root.preview.quickLookErrorMessage
+                HoverHandler {
+                    id: quickLookFailureHover
+                }
+                Controls.ToolTip.visible: quickLookFailureHover.hovered
+                Controls.ToolTip.text: root.preview.quickLookErrorMessage
             }
 
             Controls.BusyIndicator {
@@ -223,6 +241,7 @@ Controls.Popup {
                 height: width
                 visible: root.preview.quickLookBusy && !root.preview.hasImage && !root.preview.hasText
                 running: visible
+                Accessible.name: qsTr("Loading preview")
             }
         }
 

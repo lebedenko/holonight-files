@@ -46,7 +46,7 @@ Item {
             root.displayedFallbackIdentity = root.preview.iconName;
             root.fallbackDisplayed = true;
         }
-        if (!root.visible || !root.preview.hasEntry || root.preview.previewErrorKind !== PreviewService.PreviewErrorKind.None) {
+        if (!root.visible || !root.preview.hasEntry || (!root.preview.hasImage && root.preview.previewErrorKind !== PreviewService.PreviewErrorKind.None)) {
             root.discardThumbnail();
         } else if (root.preview.hasImage) {
             root.discardThumbnail();
@@ -278,6 +278,13 @@ Item {
                     source: root.preview.hasImage || !imageArea.showFallback ? "" : imageArea.isFolderEntry ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
                     visible: root.showIconFallback && imageArea.showFallback
                 }
+                Controls.BusyIndicator {
+                    objectName: "previewBusy"
+                    anchors.centerIn: parent
+                    visible: root.preview.busy && !root.preview.hasImage && root.displayedImage === undefined && !root.showIconFallback
+                    running: visible
+                    Accessible.name: qsTr("Loading preview")
+                }
                 Rectangle {
                     objectName: "previewIconFailurePlaceholder"
                     anchors.centerIn: parent
@@ -294,6 +301,23 @@ Item {
                         font.pixelSize: Math.min(64, imageArea.iconExtent * 0.6)
                     }
                 }
+            }
+
+            HnLabel {
+                objectName: "previewErrorNotice"
+                Layout.fillWidth: true
+                role: HnTypographyRole.Caption
+                color: HoloniightPalette.textMuted
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                rawText: qsTr("No preview available")
+                visible: !root.preview.hasImage && !root.preview.busy && root.preview.previewErrorKind !== PreviewService.PreviewErrorKind.None
+                Accessible.description: root.preview.previewErrorMessage
+                HoverHandler {
+                    id: previewFailureHover
+                }
+                Controls.ToolTip.visible: previewFailureHover.hovered
+                Controls.ToolTip.text: root.preview.previewErrorMessage
             }
 
             HnLabel {
@@ -402,33 +426,6 @@ Item {
                         visible: row.value.length > 0
                     }))
             }
-
-            HnLabel {
-                objectName: "previewLoadingNotice"
-                role: HnTypographyRole.Caption
-                color: HoloniightPalette.textMuted
-                rawText: qsTr("Loading…")
-                visible: root.preview.busy
-                Layout.fillWidth: true
-            }
-
-            HnLabel {
-                objectName: "previewErrorNotice"
-                role: HnTypographyRole.Caption
-                color: HoloniightPalette.textAccent
-                rawText: root.preview.previewErrorMessage
-                visible: root.preview.previewErrorKind !== PreviewService.PreviewErrorKind.None
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
-            }
         }
-    }
-
-    HnEmptyState {
-        anchors.centerIn: parent
-        width: parent.width - (2 * HnMetrics.internalSpacing(HnControlSize.Normal))
-        visible: !root.preview.hasEntry
-        titleText: qsTr("No selection")
-        descriptionText: qsTr("Select a file or folder to see its details here.")
     }
 }
