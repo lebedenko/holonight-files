@@ -57,6 +57,13 @@ bool WindowEventFilter::eventFilter(QObject* watched, QEvent* event) {
     return false;
   }
   event->accept();
+  // A reserved focus chord is inert while the prompt owns input; do not interpret
+  // its printable text as a prompt answer.
+  if (controller_.tasks()->hasPrompt() && keyEvent->modifiers().testFlag(Qt::ControlModifier) &&
+      (keyEvent->key() == Qt::Key_H || keyEvent->key() == Qt::Key_J || keyEvent->key() == Qt::Key_K ||
+       keyEvent->key() == Qt::Key_L)) {
+    return true;
+  }
   if (event->type() == QEvent::ShortcutOverride) {
     return true;
   }

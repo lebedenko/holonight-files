@@ -21,6 +21,43 @@ HnApplicationWindow {
     visible: true
     title: qsTr("HoloNight Files")
 
+    function routePanelFocus(direction: string): void {
+        let source = activeFocusItem;
+        while (source && source !== directoryListing && source !== sidebarPanel && source !== headerBar)
+            source = source.parent;
+        if (direction === "left" && (source === directoryListing || source === headerBar))
+            sidebarPanel.forceActiveFocus(Qt.TabFocusReason);
+        else if ((direction === "down" && source === headerBar) || (direction === "right" && source === sidebarPanel))
+            directoryListing.focusListing();
+        else if (direction === "up" && (source === directoryListing || source === sidebarPanel))
+            headerBar.focusCurrentSegment();
+    }
+
+    Shortcut {
+        sequence: "Ctrl+H"
+        context: Qt.WindowShortcut
+        enabled: window.controller.historyNavigationEnabled
+        onActivated: window.routePanelFocus("left")
+    }
+    Shortcut {
+        sequence: "Ctrl+J"
+        context: Qt.WindowShortcut
+        enabled: window.controller.historyNavigationEnabled
+        onActivated: window.routePanelFocus("down")
+    }
+    Shortcut {
+        sequence: "Ctrl+K"
+        context: Qt.WindowShortcut
+        enabled: window.controller.historyNavigationEnabled
+        onActivated: window.routePanelFocus("up")
+    }
+    Shortcut {
+        sequence: "Ctrl+L"
+        context: Qt.WindowShortcut
+        enabled: window.controller.historyNavigationEnabled
+        onActivated: window.routePanelFocus("right")
+    }
+
     function toggleFullscreen(): void {
         WindowState.setFullscreen(window, window.visibility !== Window.FullScreen);
     }
@@ -88,6 +125,7 @@ HnApplicationWindow {
         spacing: 0
 
         AppHeaderBar {
+            id: headerBar
             // Paint the owned bottom boundary above adjacent content backgrounds.
             z: 1
             objectName: "appHeaderBar"
@@ -114,6 +152,7 @@ HnApplicationWindow {
                 }
 
                 SidebarPanel {
+                    id: sidebarPanel
                     objectName: "sidebarPanel"
                     controller: window.controller
                     anchors.fill: parent

@@ -60,6 +60,11 @@ TEST(InspectionKeys, AcceptanceAndNullController) {
       EXPECT_FALSE(keys.overrideShortcut(Qt::Key_J, popup, visual));
     }
   }
+  for (const auto key : {Qt::Key_H, Qt::Key_J, Qt::Key_K, Qt::Key_L}) {
+    for (const bool popup : {false, true}) {
+      EXPECT_TRUE(keys.press(key, "j", Qt::ControlModifier, false, nullptr, popup));
+    }
+  }
   EXPECT_TRUE(keys.press(Qt::Key_O, "", Qt::ControlModifier, false, nullptr, true));
   EXPECT_TRUE(keys.release(Qt::Key_Space));
   EXPECT_FALSE(keys.release(Qt::Key_Escape));

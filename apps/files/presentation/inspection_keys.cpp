@@ -26,6 +26,11 @@ QString normalized(int key, const QString& text, bool popup) {
 bool InspectionKeys::press(int key, const QString& text, int modifiers, bool autoRepeat,
                            DirectoryController* controller, bool popup) const {
   const bool control = (modifiers & Qt::ControlModifier) != 0;
+  // Reserved panel-focus chords must never fall through as plain Vim movement when
+  // the window shortcuts are disabled by a mode or overlay.
+  if (control && (key == Qt::Key_H || key == Qt::Key_J || key == Qt::Key_K || key == Qt::Key_L)) {
+    return true;
+  }
   if (popup && control && (key == Qt::Key_O || key == Qt::Key_I)) {
     // History traversal does nothing in VISUAL, matching the window-level shortcuts.
     if (controller != nullptr && controller->vim()->currentMode() != VimModeController::Mode::Visual) {

@@ -61,7 +61,7 @@ Flickable {
             event.accepted = root.navigator.moveDown();
         } else if (event.key === Qt.Key_Up || event.text === "k") {
             event.accepted = root.navigator.moveUp();
-        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space || (event.modifiers === Qt.NoModifier && event.text === "l")) {
             root.activateCursor();
             event.accepted = true;
         } else if (event.text === "x") {

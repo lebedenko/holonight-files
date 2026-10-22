@@ -22,3 +22,23 @@ header-navigation contract. Regressions cover mouse regions, boundaries, counts,
 modal/editing gates, listing focus, breadcrumb edges at multiple window/sidebar/
 preview widths, and close activation. Physical mouse buttons, split dragging and
 light/dark fractional-scale parity remain manual native acceptance.
+
+## Directional panel focus
+
+In NORMAL mode, when no prompt, finder or Quick Look is open:
+
+| Focus | Ctrl+H | Ctrl+J | Ctrl+K | Ctrl+L |
+|---|---|---|---|---|
+| File listing | Places | Stay | Breadcrumbs | Stay |
+| Places | Stay | Stay | Breadcrumbs | File listing |
+| Breadcrumbs | Places | File listing | Stay | Stay |
+
+Breadcrumb entry always focuses the last segment (current directory). These keys
+only move focus; preview and footer are excluded. The listing retains startup
+focus, Tab traversal remains available, and SEARCH retains its footer input.
+
+Plain `l` activates the sidebar cursor, like Enter. In breadcrumbs, plain `h`/`l`
+moves keyboard focus left/right through visible segments and the ellipsis button,
+without navigation or wrapping. Enter activates the focused breadcrumb.
+See [panel keyboard navigation](sdd/panel-key-navigation.md) for scope and deferred
+Tab/Backtab design work.

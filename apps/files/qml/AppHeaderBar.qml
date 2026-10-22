@@ -13,6 +13,11 @@ HnHeaderBar {
     required property Item listingPanel
     signal closeRequested
 
+    function focusCurrentSegment(): bool {
+        const headerContent = root.contentItem as HeaderContent;
+        return headerContent ? headerContent.focusCurrentSegment() : false;
+    }
+
     function sceneX(item: Item): real {
         let result = 0;
         while (item) {
@@ -37,7 +42,13 @@ HnHeaderBar {
     // The label is wrapped in a plain Item (rather than being the Component's root) because a
     // Loader binds an unsized root item's width/height to its own — a bare Label root would be
     // stretched to the full header height and render top-aligned instead of centered.
-    content: Item {
+    content: HeaderContent {}
+
+    component HeaderContent: Item {
+        function focusCurrentSegment(): bool {
+            return breadcrumbLabel.focusCurrentSegment();
+        }
+
         // History buttons sit inside the sidebar region, leaving the listing-aligned breadcrumb clear
         // (navigation-history REQ-F-030..036). NoFocus keeps Vim keys on the listing after a click.
         HnIconButton {
@@ -87,6 +98,7 @@ HnHeaderBar {
                 id: breadcrumbLabel
                 objectName: "breadcrumbLabel"
                 editable: false
+                vimNavigation: true
                 clip: true
                 sizeRole: HnControlSize.Normal
                 anchors.fill: parent

@@ -11,6 +11,10 @@ Item {
     id: root
 
     required property DirectoryController controller
+    function focusListing(): void {
+        listView.forceActiveFocus(Qt.TabFocusReason);
+    }
+
     property bool previousQuickLookOpen: false
     Item {
         id: dragProxy

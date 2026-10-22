@@ -6,6 +6,7 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
 #include "icon_theme_fixtures.h"
+#include "sidebar_navigator.h"
 
 #include <QDir>
 #include <QFile>
@@ -491,4 +492,182 @@ TEST(WindowHistoryNavigation, CloseButtonClosesOwningWindow) {
   ASSERT_NE(close, nullptr);
   rendered.click(close);
   EXPECT_FALSE(rendered.window->isVisible());
+}
+
+TEST(WindowPanelFocus, RoutesEveryDirectionWithoutChangingBrowsingState) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  auto* sidebar = rendered.window->findChild<QQuickItem*>("sidebarPanel");
+  auto* bar = rendered.window->findChild<QQuickItem*>("breadcrumbLabel");
+  ASSERT_NE(sidebar, nullptr);
+  ASSERT_NE(bar, nullptr);
+  const auto currentName = QString("hnBreadcrumbSegment%1").arg(rendered.controller.breadcrumbLabels().size() - 1);
+  const auto findItem = [](auto&& self, QQuickItem* item, const QString& name) -> QQuickItem* {
+    if (item->objectName() == name) {
+      return item;
+    }
+    for (auto* child : item->childItems()) {
+      if (auto* found = self(self, child, name)) {
+        return found;
+      }
+    }
+    return nullptr;
+  };
+  auto* current = findItem(findItem, bar, currentName);
+  ASSERT_NE(current, nullptr);
+  const auto row = rendered.controller.cursorRow();
+  const auto section = rendered.controller.sidebarNavigator()->section();
+  const auto index = rendered.controller.sidebarNavigator()->index();
+  rendered.controller.handleKey("2");
+  struct Route {
+    QQuickItem* from;
+    Qt::Key key;
+    QQuickItem* to;
+  };
+  for (int repeat = 0; repeat < 2; ++repeat) {
+    for (const auto& route : {
+             Route{.from = rendered.list, .key = Qt::Key_H, .to = sidebar},
+             {.from = rendered.list, .key = Qt::Key_J, .to = rendered.list},
+             {.from = rendered.list, .key = Qt::Key_K, .to = current},
+             {.from = rendered.list, .key = Qt::Key_L, .to = rendered.list},
+             {.from = sidebar, .key = Qt::Key_H, .to = sidebar},
+             {.from = sidebar, .key = Qt::Key_J, .to = sidebar},
+             {.from = sidebar, .key = Qt::Key_K, .to = current},
+             {.from = sidebar, .key = Qt::Key_L, .to = rendered.list},
+             {.from = current, .key = Qt::Key_H, .to = sidebar},
+             {.from = current, .key = Qt::Key_J, .to = rendered.list},
+             {.from = current, .key = Qt::Key_K, .to = current},
+             {.from = current, .key = Qt::Key_L, .to = current},
+         }) {
+      route.from->forceActiveFocus(Qt::TabFocusReason);
+      QTest::keyClick(rendered.window, route.key, Qt::ControlModifier);
+      ASSERT_TRUE(QTest::qWaitFor([&] { return route.to->hasActiveFocus(); }))
+          << route.key << " from " << route.from->objectName().toStdString();
+      EXPECT_EQ(rendered.controller.currentPath(), rendered.c);
+      EXPECT_EQ(rendered.controller.cursorRow(), row);
+      EXPECT_EQ(rendered.controller.sidebarNavigator()->section(), section);
+      EXPECT_EQ(rendered.controller.sidebarNavigator()->index(), index);
+      EXPECT_EQ(rendered.controller.vim()->selectedCount(), 0);
+    }
+  }
+  EXPECT_TRUE(current->property("visualFocus").toBool());
+  rendered.list->forceActiveFocus();
+  QTest::keyClick(rendered.window, Qt::Key_J);
+  EXPECT_EQ(rendered.controller.cursorRow(), row + 2);  // pending count survived
+}
+
+TEST(WindowPanelFocus, HeaderEntryTargetsCurrentSegmentAtRootAndNarrowWidths) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  for (const auto& path : {rendered.c, QStringLiteral("/")}) {
+    rendered.controller.open(path);
+    ASSERT_TRUE(settled(rendered.controller));
+    for (const int width : {1000, 600}) {
+      rendered.window->resize(width, 400);
+      QTest::qWait(20);
+      rendered.list->forceActiveFocus();
+      QTest::keyClick(rendered.window, Qt::Key_K, Qt::ControlModifier);
+      ASSERT_TRUE(QTest::qWaitFor([&] {
+        return rendered.window->activeFocusItem()->objectName() ==
+               QString("hnBreadcrumbSegment%1").arg(rendered.controller.breadcrumbLabels().size() - 1);
+      }));
+      EXPECT_TRUE(rendered.window->activeFocusItem()->property("visualFocus").toBool());
+      EXPECT_EQ(rendered.controller.currentPath(), path);
+    }
+  }
+}
+
+TEST(WindowPanelFocus, ShortcutsPreserveFocusInModesAndOverlays) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  const auto checkKeys = [&] {
+    auto* focused = rendered.window->activeFocusItem();
+    const auto path = rendered.controller.currentPath();
+    const auto row = rendered.controller.cursorRow();
+    const auto mode = rendered.controller.vim()->currentMode();
+    for (const auto key : {Qt::Key_H, Qt::Key_J, Qt::Key_K, Qt::Key_L}) {
+      QTest::keyClick(rendered.window, key, Qt::ControlModifier);
+      EXPECT_EQ(rendered.window->activeFocusItem(), focused)
+          << "mode " << static_cast<int>(mode) << " key " << key << " original " << focused->objectName().toStdString()
+          << " now " << rendered.window->activeFocusItem()->objectName().toStdString();
+      EXPECT_EQ(rendered.controller.currentPath(), path);
+      EXPECT_EQ(rendered.controller.cursorRow(), row);
+      EXPECT_EQ(rendered.controller.vim()->currentMode(), mode);
+    }
+  };
+  QTest::keyClick(rendered.window, Qt::Key_J);
+  for (const auto key : {Qt::Key_V, Qt::Key_Slash, Qt::Key_I}) {
+    rendered.list->forceActiveFocus();
+    QTest::keyClick(rendered.window, key);
+    ASSERT_NE(rendered.controller.vim()->currentMode(), VimModeController::Mode::Normal);
+    QCoreApplication::processEvents();
+    checkKeys();
+    QTest::keyClick(rendered.window, Qt::Key_Escape);
+  }
+  QTest::keyClick(rendered.window, 'D', Qt::ShiftModifier);
+  ASSERT_TRUE(rendered.controller.tasks()->hasPrompt());
+  checkKeys();
+  ASSERT_TRUE(rendered.controller.tasks()->hasPrompt());
+  QTest::keyClick(rendered.window, Qt::Key_N);
+  ASSERT_FALSE(rendered.controller.tasks()->hasPrompt());
+  QTest::keyClick(rendered.window, Qt::Key_F);
+  QTest::keyClick(rendered.window, Qt::Key_F);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return rendered.controller.property("finderOpen").toBool(); }));
+  checkKeys();
+  QTest::keyClick(rendered.window, Qt::Key_Escape);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return rendered.list->hasActiveFocus(); }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return rendered.controller.preview()->quickLookEligible(); }));
+  QTest::keyClick(rendered.window, Qt::Key_Space);
+  auto* popup = rendered.window->findChild<QObject*>("quickLookOverlay");
+  ASSERT_NE(popup, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return popup->property("opened").toBool(); }));
+  checkKeys();
+}
+
+TEST(WindowPanelFocus, RecognizesSidebarChildrenAndExcludesPreviewAndFooter) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  auto* places = rendered.window->findChild<QQuickItem*>("placesPanel");
+  ASSERT_NE(places, nullptr);
+  places->forceActiveFocus();
+  QTest::keyClick(rendered.window, Qt::Key_L, Qt::ControlModifier);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return rendered.list->hasActiveFocus(); }));
+  for (const auto* name : {"previewContainer", "footerBar"}) {
+    auto* item = rendered.window->findChild<QQuickItem*>(name);
+    ASSERT_NE(item, nullptr);
+    item->forceActiveFocus();
+    for (const auto key : {Qt::Key_H, Qt::Key_J, Qt::Key_K, Qt::Key_L}) {
+      QTest::keyClick(rendered.window, key, Qt::ControlModifier);
+      EXPECT_TRUE(item->hasActiveFocus());
+    }
+  }
+}
+
+TEST(WindowPanelFocus, ListingOwnsStartupFocus) {
+  HistoryWindow rendered;
+  ASSERT_EQ(rendered.engine.rootObjects().size(), 1);
+  auto* window = qobject_cast<QQuickWindow*>(rendered.engine.rootObjects().first());
+  ASSERT_NE(window, nullptr);
+  window->requestActivate();
+  ASSERT_TRUE(QTest::qWaitForWindowActive(window));
+  auto* list = window->findChild<QQuickItem*>("directoryListView");
+  ASSERT_NE(list, nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return list->hasActiveFocus(); }));
+}
+
+TEST(WindowPanelFocus, PlainHLMovesWithinBreadcrumbsWithoutNavigating) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  QTest::keyClick(rendered.window, Qt::Key_K, Qt::ControlModifier);
+  auto* current = rendered.window->activeFocusItem();
+  ASSERT_TRUE(current->objectName().startsWith("hnBreadcrumbSegment"));
+  QTest::keyClick(rendered.window, Qt::Key_H);
+  EXPECT_NE(rendered.window->activeFocusItem(), current);
+  EXPECT_TRUE(rendered.window->activeFocusItem()->property("visualFocus").toBool());
+  EXPECT_EQ(rendered.controller.currentPath(), rendered.c);
+  QTest::keyClick(rendered.window, Qt::Key_L);
+  EXPECT_EQ(rendered.window->activeFocusItem(), current);
+  QTest::keyClick(rendered.window, Qt::Key_L);
+  EXPECT_EQ(rendered.window->activeFocusItem(), current);
+  EXPECT_EQ(rendered.controller.currentPath(), rendered.c);
 }
