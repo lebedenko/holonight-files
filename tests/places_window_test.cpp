@@ -696,13 +696,17 @@ TEST(PlacesWindow, SidebarKeysCrossActivateAndRemove) {
     ASSERT_TRUE(QTest::qWaitFor([&] { return !view.controller.scanning(); }));
     view.sidebar->forceActiveFocus();
     navigator->setCursor(SidebarNavigator::Places, lastPlace);
-    EXPECT_TRUE(view.press(key, key == Qt::Key_L ? "l" : key == Qt::Key_Space ? " " : "\r"));
+    EXPECT_TRUE(view.press(key, key == Qt::Key_L       ? QStringLiteral("l")
+                                : key == Qt::Key_Space ? QStringLiteral(" ")
+                                                       : QStringLiteral("\r")));
     ASSERT_TRUE(QTest::qWaitFor([&] { return !view.controller.scanning(); }));
     EXPECT_EQ(view.controller.currentPath(), view.dir.filePath("target")) << key;
 
     view.storage_backend.calls.clear();
     view.focusDevice("usb");
-    EXPECT_TRUE(view.press(key, key == Qt::Key_L ? "l" : key == Qt::Key_Space ? " " : "\r"));
+    EXPECT_TRUE(view.press(key, key == Qt::Key_L       ? QStringLiteral("l")
+                                : key == Qt::Key_Space ? QStringLiteral(" ")
+                                                       : QStringLiteral("\r")));
     ASSERT_TRUE(QTest::qWaitFor([&] { return !view.storage_backend.calls.isEmpty(); })) << key;
     EXPECT_EQ(view.storage_backend.calls.last().operation, StorageOperation::Mount);
     view.finishLastCall("org.freedesktop.UDisks2.Error.Failed");
