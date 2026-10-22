@@ -8,7 +8,7 @@ tasks:
     - task: build
       vars:
         PRESET: '{{.PRESET}}'
-    - build/{{.PRESET}}/apps/files/hn-files {{.CLI_ARGS}}
+    - build/{{.PRESET}}/run-files {{.CLI_ARGS}}
   format:
     desc: Format with the pinned container tools
     cmds:

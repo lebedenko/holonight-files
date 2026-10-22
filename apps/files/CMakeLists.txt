@@ -139,4 +139,9 @@ function(add_files_application target)
 endfunction()
 
 add_files_application(hn-files main.cpp)
+# Keep development launches on the same providers as QML tooling and CTest.
+string(REPLACE "'" "'\\''" _files_run_qml_path "${FILES_RUNTIME_QML_PATH}")
+file(GENERATE OUTPUT "${PROJECT_BINARY_DIR}/run-files"
+  CONTENT "#!/bin/sh\nexec '${CMAKE_COMMAND}' -E env 'QML_IMPORT_PATH=${_files_run_qml_path}' '$<TARGET_FILE:hn-files>' \"$@\"\n"
+  FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 install(TARGETS hn-files RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

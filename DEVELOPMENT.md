@@ -6,6 +6,11 @@ CMake reports missing packages and never downloads them. Use `cmake --preset dev
 The development preset enables tests; `release` stages optimized builds.
 clangd uses `build/dev/compile_commands.json`.
 
+`task run` builds and launches through `build/<preset>/run-files`, which uses the
+QML provider paths configured by CMake, matching tooling and tests. Pass application
+arguments with `task run CLI_ARGS='/path/to/folder'`. Directly launching the build
+binary requires setting `QML_IMPORT_PATH` yourself when using a development prefix.
+
 `task format` uses the pinned image. `task check` is the acceptance gate: fresh provider
 builds, build, tests, format, static analysis, applicable QML checks and REUSE.
 `task check:integration` adds Release staging and project runtime checks. GitHub invokes

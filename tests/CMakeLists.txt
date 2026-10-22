@@ -103,6 +103,8 @@ endforeach()
 
 # Runner correctness is deterministic; the performance matrix remains opt-in.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME files-development-launcher COMMAND ${Python3_EXECUTABLE}
+  "${CMAKE_SOURCE_DIR}/scripts/check-development-launcher.py" "${CMAKE_BINARY_DIR}/run-files")
 add_test(NAME files-preview-runner COMMAND ${Python3_EXECUTABLE}
   "${CMAKE_SOURCE_DIR}/scripts/check-measure-preview.py")
 set_tests_properties(files-preview-runner PROPERTIES TIMEOUT 30)
