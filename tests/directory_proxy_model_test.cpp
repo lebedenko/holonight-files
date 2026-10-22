@@ -183,3 +183,29 @@ TEST(FilesDirectoryProxyModel, ParentRowAlwaysVisibleAcrossHiddenToggle) {
   EXPECT_EQ(proxy.rowCount(), 1);
   EXPECT_EQ(proxy.data(proxy.index(0, 0), DirectoryModel::NameRole).toString(), "..");
 }
+
+TEST(FilesDirectoryProxyModel, ParentFilteringComposesWithHiddenAndSortAndEmptyDirectories) {
+  QTemporaryDir dir(fixturePattern("proxy-parent"));
+  ASSERT_FALSE(writeFile(dir, ".hidden").isEmpty());
+  ASSERT_FALSE(writeFile(dir, "a").isEmpty());
+  ASSERT_FALSE(writeFile(dir, "b").isEmpty());
+  DirectoryModel model;
+  FilesDirectoryProxyModel proxy;
+  proxy.setSourceModel(&model);
+  model.load(dir.path());
+  ASSERT_TRUE(settled(model));
+  proxy.setParentVisible(false);
+  EXPECT_EQ(proxyNames(proxy), (QStringList{"a", "b"}));
+  proxy.setSortDescending(true);
+  proxy.setHiddenVisible(true);
+  EXPECT_EQ(proxyNames(proxy), (QStringList{"b", "a", ".hidden"}));
+  proxy.setParentVisible(true);
+  EXPECT_EQ(proxyNames(proxy), (QStringList{"..", "b", "a", ".hidden"}));
+  QTemporaryDir empty(fixturePattern("proxy-parent-empty"));
+  proxy.setParentVisible(false);
+  model.load(empty.path());
+  ASSERT_TRUE(settled(model));
+  EXPECT_EQ(proxy.rowCount(), 0);
+  proxy.setParentVisible(true);
+  EXPECT_EQ(proxyNames(proxy), (QStringList{".."}));
+}

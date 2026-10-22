@@ -77,7 +77,51 @@ HnHeaderBar {
             onClicked: root.controller.goForward()
         }
 
+        HnIconButton {
+            id: upButton
+            objectName: "parentUpButton"
+            x: forwardButton.x + forwardButton.width
+            anchors.verticalCenter: parent.verticalCenter
+            sizeRole: HnControlSize.Compact
+            focusPolicy: Qt.NoFocus
+            icon.name: "go-up"
+            enabled: root.historyEnabled && root.controller.canGoUp
+            Accessible.name: qsTr("Up")
+            onClicked: root.controller.goUp()
+        }
+        Row {
+            id: viewSelector
+            objectName: "viewSelector"
+            anchors.right: closeButton.left
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            HnIconButton {
+                objectName: "listViewButton"
+                sizeRole: HnControlSize.Compact
+                focusPolicy: Qt.NoFocus
+                icon.name: "view-list-details"
+                checkable: true
+                autoExclusive: true
+                checked: !root.controller.iconView
+                enabled: root.historyEnabled
+                Accessible.name: qsTr("List")
+                onClicked: root.controller.setIconView(false)
+            }
+            HnIconButton {
+                objectName: "iconViewButton"
+                sizeRole: HnControlSize.Compact
+                focusPolicy: Qt.NoFocus
+                icon.name: "view-grid"
+                checkable: true
+                autoExclusive: true
+                checked: root.controller.iconView
+                enabled: root.historyEnabled
+                Accessible.name: qsTr("Icons")
+                onClicked: root.controller.setIconView(true)
+            }
+        }
         HnHeaderCloseButton {
+            id: closeButton
             objectName: "closeButton"
             anchors.right: parent.right
             anchors.rightMargin: 12
@@ -91,7 +135,7 @@ HnHeaderBar {
             objectName: "breadcrumbContainer"
             x: root.breadcrumbLeftInset
             anchors.verticalCenter: parent.verticalCenter
-            width: root.listingPanel.width
+            width: Math.max(0, Math.min(root.listingPanel.width, viewSelector.x - x - 8))
             height: HnMetrics.controlHeight(HnControlSize.Normal)
 
             HnBreadcrumbBar {

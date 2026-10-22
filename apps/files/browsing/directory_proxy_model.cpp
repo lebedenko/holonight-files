@@ -61,3 +61,16 @@ bool FilesDirectoryProxyModel::lessThan(const QModelIndex& left, const QModelInd
   }
   return false;
 }
+
+void FilesDirectoryProxyModel::setParentVisible(bool visible) {
+  if (parent_visible_ == visible) {
+    return;
+  }
+  beginFilterChange();
+  parent_visible_ = visible;
+  endFilterChange(QSortFilterProxyModel::Direction::Rows);
+}
+bool FilesDirectoryProxyModel::filterAcceptsRow(int row, const QModelIndex& parent) const {
+  return (parent_visible_ || !sourceModel()->index(row, 0, parent).data(DirectoryRoles::IsParentRole).toBool()) &&
+         DirectoryProxyModel::filterAcceptsRow(row, parent);
+}

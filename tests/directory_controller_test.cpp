@@ -2441,3 +2441,122 @@ TEST(DirectoryController, SidebarNavigatorWalksThePlacesAndDevicesModels) {
   EXPECT_EQ(navigator->section(), SidebarNavigator::Devices);
   EXPECT_EQ(navigator->index(), 0);
 }
+
+TEST(DirectoryController, IconViewPreservesSelectionAndFiltersParent) {
+  QTemporaryDir dir(fixturePattern("icon-selection"));
+  writeFile(dir, "a.txt");
+  writeFile(dir, "b.txt");
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  controller.selectEntry(2);
+  const auto path = controller.cursorPath();
+  controller.setIconView(true);
+  EXPECT_TRUE(controller.iconView());
+  EXPECT_EQ(controller.listing()->rowCount(), 2);
+  EXPECT_EQ(controller.cursorPath(), path);
+  EXPECT_EQ(controller.cursorRow(), 1);
+  controller.setIconView(false);
+  EXPECT_EQ(controller.cursorPath(), path);
+  controller.selectEntry(0);
+  controller.setIconView(true);
+  EXPECT_EQ(controller.cursorRow(), 0);
+  EXPECT_EQ(controller.listing()->index(0, 0).data(DirectoryModel::NameRole).toString(), "a.txt");
+}
+
+TEST(DirectoryController, IconViewEmptyFolderAndInteractionGuards) {
+  QTemporaryDir dir(fixturePattern("icon-empty"));
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  controller.handleKey("v");
+  controller.setIconView(true);
+  // An empty list cannot enter VISUAL, so start SEARCH to exercise modal ownership.
+  controller.handleKey("/");
+  controller.setIconView(false);
+  EXPECT_TRUE(controller.iconView());
+  controller.cancelSearchEditing();
+  EXPECT_EQ(controller.listing()->rowCount(), 0);
+  controller.handleKey("o");
+  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Insert);
+  controller.setIconView(false);
+  EXPECT_TRUE(controller.iconView());
+  controller.cancelInsertEditing();
+  controller.setProperty("finderOpen", true);
+  controller.setIconView(false);
+  EXPECT_TRUE(controller.iconView());
+  controller.setProperty("finderOpen", false);
+  controller.tasks()->requestTrashConfirmation({dir.path()});
+  controller.setIconView(false);
+  EXPECT_TRUE(controller.iconView());
+  controller.tasks()->respondToTrashConfirm(false, controller.tasks()->promptId());
+  controller.setIconView(false);
+  EXPECT_FALSE(controller.iconView());
+}
+
+TEST(DirectoryController, IconSpatialCountsClampIncompleteRowsAndResize) {
+  QTemporaryDir dir(fixturePattern("icon-motion"));
+  for (int i = 0; i < 8; ++i) {
+    writeFile(dir, QString::number(i) + ".txt");
+  }
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  controller.setIconView(true);
+  controller.setGridDimensions(3, 4);
+  controller.handleKey("l");
+  controller.handleKey("j");
+  EXPECT_EQ(controller.cursorRow(), 4);
+  controller.handleKey("9");
+  controller.handleKey("j");
+  EXPECT_EQ(controller.cursorRow(), 7);
+  controller.handleKey("j");
+  EXPECT_EQ(controller.cursorRow(), 7);
+  controller.handleKey("9");
+  controller.handleKey("k");
+  EXPECT_EQ(controller.cursorRow(), 1);
+  controller.handleKey("k");
+  EXPECT_EQ(controller.cursorRow(), 1);
+  controller.setGridDimensions(2, 4);
+  controller.handleKey("ArrowDown");
+  EXPECT_EQ(controller.cursorRow(), 3);
+  controller.handleKey("Ctrl+D");
+  EXPECT_EQ(controller.cursorRow(), 7);
+  controller.handleKey("v");
+  controller.selectEntry(2);
+  EXPECT_TRUE(controller.vim()->isRowSelected(5));
+  controller.activateEntry(0);
+  EXPECT_EQ(controller.currentPath(), dir.path());
+  controller.setIconView(false);
+  EXPECT_TRUE(controller.iconView());
+}
+
+TEST(DirectoryController, IconUpRestoresExitedFolderAndDiscardsCount) {
+  QTemporaryDir dir(fixturePattern("icon-up"));
+  ASSERT_TRUE(QDir(dir.path()).mkdir("child"));
+  writeFile(dir, "z.txt");
+  writeFile(dir, "zz.txt");
+  DirectoryController controller;
+  controller.setIconView(true);
+  controller.open(dir.filePath("child"));
+  controller.setIconView(false);
+  controller.setIconView(true);
+  ASSERT_TRUE(settled(controller));
+  controller.handleKey("9");
+  controller.goUp();
+  controller.setIconView(false);
+  controller.setIconView(true);
+  ASSERT_TRUE(settled(controller));
+  EXPECT_EQ(controller.currentPath(), dir.path());
+  EXPECT_EQ(controller.listing()->index(controller.cursorRow(), 0).data(DirectoryModel::NameRole).toString(), "child");
+  controller.handleKey("l");
+  EXPECT_EQ(controller.cursorRow(), 1);
+  controller.goBack();
+  ASSERT_TRUE(settled(controller));
+  EXPECT_EQ(controller.currentPath(), dir.filePath("child"));
+  controller.open("/");
+  ASSERT_TRUE(settled(controller));
+  EXPECT_FALSE(controller.canGoUp());
+  controller.goUp();
+  EXPECT_EQ(controller.currentPath(), "/");
+}

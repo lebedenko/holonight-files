@@ -472,7 +472,7 @@ TEST(WindowHistoryNavigation, BreadcrumbFrameTracksListingEdges) {
       rendered.window->setProperty("sidebarWidth", sidebar);
       ASSERT_TRUE(QTest::qWaitFor([&] {
         return qAbs(bar->mapToScene(QPointF()).x() - listing->mapToScene(QPointF()).x()) < 0.5 &&
-               qAbs(HistoryWindow::sceneRight(bar) - HistoryWindow::sceneRight(listing)) < 0.5;
+               HistoryWindow::sceneRight(bar) <= HistoryWindow::sceneRight(listing) + 0.5;
       }));
       EXPECT_LE(HistoryWindow::sceneRight(bar), close->mapToScene(QPointF()).x());
     }
@@ -481,7 +481,7 @@ TEST(WindowHistoryNavigation, BreadcrumbFrameTracksListingEdges) {
   for (int previewWidth : {220, 300, 260}) {
     ASSERT_TRUE(QQmlProperty::write(preview, "Controls.SplitView.preferredWidth", previewWidth, qmlContext(preview)));
     ASSERT_TRUE(QTest::qWaitFor([&] { return qAbs(preview->width() - previewWidth) < 0.5; }));
-    EXPECT_NEAR(HistoryWindow::sceneRight(bar), HistoryWindow::sceneRight(listing), 0.5);
+    EXPECT_LE(HistoryWindow::sceneRight(bar), HistoryWindow::sceneRight(listing) + 0.5);
   }
 }
 
@@ -670,4 +670,112 @@ TEST(WindowPanelFocus, PlainHLMovesWithinBreadcrumbsWithoutNavigating) {
   QTest::keyClick(rendered.window, Qt::Key_L);
   EXPECT_EQ(rendered.window->activeFocusItem(), current);
   EXPECT_EQ(rendered.controller.currentPath(), rendered.c);
+}
+
+TEST(WindowHistoryNavigation, IconSelectorAndUpRetainListingFocus) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  auto* icons = rendered.window->findChild<QQuickItem*>("iconViewButton");
+  auto* listButton = rendered.window->findChild<QQuickItem*>("listViewButton");
+  auto* upButton = rendered.window->findChild<QQuickItem*>("parentUpButton");
+  ASSERT_NE(icons, nullptr);
+  ASSERT_NE(listButton, nullptr);
+  ASSERT_NE(upButton, nullptr);
+  rendered.click(icons);
+  EXPECT_TRUE(rendered.controller.iconView());
+  EXPECT_TRUE(icons->property("checked").toBool());
+  EXPECT_FALSE(listButton->property("checked").toBool());
+  auto* grid = rendered.window->findChild<QQuickItem*>("directoryGridView");
+  ASSERT_NE(grid, nullptr);
+  EXPECT_EQ(rendered.window->findChild<QQuickItem*>("directoryListView"), nullptr);
+  EXPECT_EQ(rendered.window->findChild<QQuickItem*>("lineNumberGutterStrip"), nullptr);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return grid->hasActiveFocus(); }));
+  QTest::keyClick(rendered.window, Qt::Key_Right);
+  EXPECT_EQ(rendered.controller.cursorRow(), 1);
+  rendered.click(upButton);
+  ASSERT_TRUE(settled(rendered.controller));
+  EXPECT_EQ(rendered.controller.currentPath(), rendered.dir.path());
+  EXPECT_EQ(rendered.controller.listing()
+                ->index(rendered.controller.cursorRow(), 0)
+                .data(DirectoryModel::NameRole)
+                .toString(),
+            "c");
+  rendered.click(listButton);
+  EXPECT_FALSE(rendered.controller.iconView());
+  EXPECT_TRUE(listButton->property("checked").toBool());
+}
+
+TEST(WindowHistoryNavigation, MouseSelectsThenDoubleClickOpensFolderInBothViews) {
+  for (bool icons : {false, true}) {
+    HistoryWindow rendered;
+    ASSERT_TRUE(rendered.start());
+    rendered.controller.open(rendered.dir.path());
+    ASSERT_TRUE(settled(rendered.controller));
+    rendered.controller.setIconView(icons);
+    QQuickItem* entry = nullptr;
+    ASSERT_TRUE(QTest::qWaitFor([&] {
+      auto* view = rendered.window->findChild<QQuickItem*>(icons ? "directoryGridView" : "directoryListView");
+      if (!view) return false;
+      for (auto* candidate : view->property("contentItem").value<QQuickItem*>()->childItems()) {
+        if (candidate->objectName() == (icons ? "directoryIconDelegate" : "directoryEntryDelegate") &&
+            candidate->property("name").toString() == "b") {
+          entry = candidate;
+          return candidate->isVisible();
+        }
+      }
+      return false;
+    }));
+    rendered.click(entry);
+    EXPECT_EQ(rendered.controller.currentPath(), rendered.dir.path());
+    EXPECT_EQ(rendered.controller.listing()
+                  ->index(rendered.controller.cursorRow(), 0)
+                  .data(DirectoryModel::NameRole)
+                  .toString(),
+              "b");
+    const auto center = entry->mapToScene(QPointF(entry->width() / 2, entry->height() / 2)).toPoint();
+    QTest::mouseDClick(rendered.window, Qt::LeftButton, Qt::NoModifier, center);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return rendered.controller.currentPath() == rendered.b; }));
+    ASSERT_TRUE(settled(rendered.controller));
+  }
+}
+
+TEST(WindowHistoryNavigation, IconInlineCreateAndRenameReturnFocus) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  rendered.controller.setIconView(true);
+  auto* grid = rendered.window->findChild<QQuickItem*>("directoryGridView");
+  ASSERT_NE(grid, nullptr);
+  for (const auto* command : {"o", "a"}) {
+    if (QString(command) == "a") {
+      int createdRow = -1;
+      ASSERT_TRUE(QTest::qWaitFor([&] {
+        for (int row = 0; row < rendered.controller.listing()->rowCount(); ++row) {
+          if (rendered.controller.listing()->index(row, 0).data(DirectoryModel::NameRole).toString() == "created.txt") {
+            createdRow = row;
+            return true;
+          }
+        }
+        return false;
+      }));
+      rendered.controller.selectEntry(createdRow);
+    }
+    ASSERT_TRUE(rendered.controller.handleKey(command));
+    QQuickItem* editor = nullptr;
+    ASSERT_TRUE(QTest::qWaitFor([&] {
+      for (auto* entry : grid->property("contentItem").value<QQuickItem*>()->childItems()) {
+        auto* field = entry->findChild<QQuickItem*>("inlineNameEditor");
+        if (field && field->isVisible() && field->hasActiveFocus()) {
+          editor = field;
+          return true;
+        }
+      }
+      return false;
+    }));
+    const QString name = QString(command) == "o" ? "created.txt" : "renamed.txt";
+    rendered.controller.updateInsertText(name);
+    QTest::keyClick(rendered.window, Qt::Key_Return);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return QFile::exists(QDir(rendered.c).filePath(name)); }));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return grid->hasActiveFocus(); }));
+  }
+  EXPECT_FALSE(QFile::exists(QDir(rendered.c).filePath("created.txt")));
 }

@@ -7,6 +7,9 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QPersistentModelIndex>
+
+#include <HolonightFileBrowser/grid_navigation.h>
 
 DirectoryController::DirectoryController(QObject* parent) : DirectoryController(nullptr, parent) {}
 DirectoryController::DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
@@ -122,6 +125,44 @@ void DirectoryController::openInternal(const QString& requestedPath, const QStri
 }
 QString DirectoryController::outgoingCursorName() const { return navigation_.outgoingCursorName(); }
 bool DirectoryController::historyNavigationEnabled() const { return sidebarActivationEnabled() && !finder_open_; }
+bool DirectoryController::canGoUp() const { return !currentPath().isEmpty() && !QDir(currentPath()).isRoot(); }
+void DirectoryController::goUp() {
+  takeCount();
+  if (historyNavigationEnabled() && canGoUp()) {
+    navigateParent();
+  }
+}
+void DirectoryController::setIconView(bool icons) {
+  if (!historyNavigationEnabled() || icons == icon_view_) {
+    return;
+  }
+  const QPersistentModelIndex source = listing()->mapToSource(listing()->index(cursorRow(), 0));
+  icon_view_ = icons;
+  listing()->setParentVisible(!icons);
+  const auto target = listing()->mapFromSource(source);
+  navigation_.cursor_row_ = target.isValid() ? target.row() : 0;
+  ++editing_.listing_revision_;
+  vim_.updateSearchPositions(entryNameAt(cursorRow()));
+  emit changed();
+}
+void DirectoryController::setGridDimensions(int columns, int rows) {
+  const int width = qMax(1, columns);
+  viewport_rows_ = qMax(1, rows);
+  if (grid_columns_ != width) {
+    grid_columns_ = width;
+    emit changed();
+  }
+}
+void DirectoryController::selectEntry(int row) {
+  if (transfersEnabled() && row >= 0 && row < listing()->rowCount()) {
+    setCursorRow(row);
+  }
+}
+void DirectoryController::activateEntry(int row) {
+  if (historyNavigationEnabled()) {
+    openEntry(row);
+  }
+}
 void DirectoryController::goBack() {
   takeCount();  // a click always means one step, whatever digits were typed (REQ-F-033)
   traverseHistory(-1, 1);
@@ -309,6 +350,7 @@ bool DirectoryController::handleKey(const QString& key) {
                                                 .prompt = tasks_.promptKind(),
                                                 .quick_look_open = quickLookOpen(),
                                                 .can_preview = canPreviewSelection(),
+                                                .icon_view = icon_view_,
                                             });
   execute(command);
   return command.consumed;
@@ -319,6 +361,23 @@ void DirectoryController::execute(const FileCommand& command) {
     case Kind::None:
       break;
     case Kind::Move:
+      if (icon_view_) {
+        using namespace HolonightFileBrowser;
+        const int lastRow = qMax(0, listing()->rowCount() - 1) / grid_columns_;
+        const qint64 targetRow =
+            qBound(qint64{0}, qint64{cursorRow() / grid_columns_} + command.count, qint64{lastRow});
+        const int steps = static_cast<int>(qAbs(targetRow - (cursorRow() / grid_columns_)));
+        int target = cursorRow();
+        for (int i = 0; i < steps; ++i) {
+          target = gridTarget(target, command.count < 0 ? GridMove::RowUp : GridMove::RowDown, listing()->rowCount(),
+                              grid_columns_, viewport_rows_);
+        }
+        setCursorRow(target);
+      } else {
+        setCursorRow(qint64{cursorRow()} + command.count);
+      }
+      break;
+    case Kind::MoveHorizontal:
       setCursorRow(qint64{cursorRow()} + command.count);
       break;
     case Kind::First:
@@ -350,7 +409,8 @@ void DirectoryController::execute(const FileCommand& command) {
       preview_.moveCurrentLine(command.count);
       break;
     case Kind::HalfPage:
-      setCursorRow(qint64{cursorRow()} + (qint64{command.count} * qMax(1, viewport_rows_ / 2)));
+      setCursorRow(qint64{cursorRow()} +
+                   (qint64{command.count} * qMax(1, viewport_rows_ / 2) * (icon_view_ ? grid_columns_ : 1)));
       break;
     case Kind::SwapVisualEnd: {
       const int target = vim_.visualAnchorRow();

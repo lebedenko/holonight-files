@@ -1,7 +1,8 @@
 #include "inspection_keys.h"
 
 namespace {
-QString normalized(int key, const QString& text, bool popup) {
+QString normalized(int key, const QString& text, bool popup, const DirectoryController* controller) {
+  const bool arrows = popup || (controller != nullptr && controller->iconView());
   switch (key) {
     case Qt::Key_Space:
       return QStringLiteral(" ");
@@ -12,9 +13,13 @@ QString normalized(int key, const QString& text, bool popup) {
     case Qt::Key_Enter:
       return QStringLiteral("Enter");
     case Qt::Key_Up:
-      return popup ? QStringLiteral("ArrowUp") : text;
+      return arrows ? QStringLiteral("ArrowUp") : text;
+    case Qt::Key_Left:
+      return arrows ? QStringLiteral("ArrowLeft") : text;
+    case Qt::Key_Right:
+      return arrows ? QStringLiteral("ArrowRight") : text;
     case Qt::Key_Down:
-      return popup ? QStringLiteral("ArrowDown") : text;
+      return arrows ? QStringLiteral("ArrowDown") : text;
     default:
       return text;
   }
@@ -46,7 +51,7 @@ bool InspectionKeys::press(int key, const QString& text, int modifiers, bool aut
     return controller != nullptr &&
            controller->handleKey(key == Qt::Key_U ? QStringLiteral("Ctrl+U") : QStringLiteral("Ctrl+D"));
   }
-  const auto input = normalized(key, text, popup);
+  const auto input = normalized(key, text, popup, controller);
   if (popup && input != " " && input != "Escape" && input != "j" && input != "k" && input != "ArrowUp" &&
       input != "ArrowDown") {
     return false;

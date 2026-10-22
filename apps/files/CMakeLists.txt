@@ -86,6 +86,8 @@ function(add_files_application target)
     qml/PathFinderPopup.qml
     qml/AppHeaderBar.qml
     qml/listing/DirectoryListing.qml
+    qml/listing/ListPresentation.qml
+    qml/listing/IconPresentation.qml
     qml/places/PlacesPanel.qml
     qml/places/DevicesPanel.qml
     qml/places/SidebarPanel.qml

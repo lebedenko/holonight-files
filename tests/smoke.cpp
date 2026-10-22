@@ -43,8 +43,12 @@ class FileUrlReceiver : public QObject {
   Q_OBJECT
  public:
   QUrl received;
+  int calls = 0;
  public slots:
-  void receive(const QUrl& url) { received = url; }
+  void receive(const QUrl& url) {
+    received = url;
+    ++calls;
+  }
 };
 
 namespace {
@@ -3259,4 +3263,58 @@ TEST(Files, MarkdownQuickLookStyleTracksThemeChanges) {
   EXPECT_NE(style->property("h1Font").value<QFont>(), initialHeading);
   EXPECT_EQ(style->property("codeBlockFont").value<QFont>().pointSizeF(), 16);
   EXPECT_EQ(harness.window->findChild<QQuickItem*>("quickLookMarkdownView"), view);
+}
+
+TEST(Files, MouseFileActivationSelectsPreviewsAndOpensExactlyOnce) {
+  for (bool icons : {false, true}) {
+    SCOPED_TRACE(icons ? "Icons" : "List");
+    QTemporaryDir dir(files_test::fixturePattern("mouse-file"));
+    const auto path = files_test::writeFile(dir, "a.txt", "preview me");
+    DirectoryController controller;
+    auto loaded = loadActiveWindow(controller, dir.path());
+    ASSERT_NE(loaded.list, nullptr);
+    controller.setIconView(icons);
+    auto* view = loaded.window->findChild<QQuickItem*>(icons ? "directoryGridView" : "directoryListView");
+    ASSERT_NE(view, nullptr);
+    QQuickItem* entry = nullptr;
+    ASSERT_TRUE(QTest::qWaitFor([&] {
+      for (auto* candidate : view->property("contentItem").value<QQuickItem*>()->childItems()) {
+        if (candidate->property("name").toString() == "a.txt") {
+          entry = candidate;
+          return true;
+        }
+      }
+      return false;
+    }));
+    FileUrlReceiver receiver;
+    QDesktopServices::setUrlHandler("file", &receiver, "receive");
+    const auto cleanup = qScopeGuard([] { QDesktopServices::unsetUrlHandler("file"); });
+    const auto center = entry->mapToScene(QPointF(entry->width() / 2, entry->height() / 2)).toPoint();
+    QTest::mouseClick(loaded.window, Qt::LeftButton, Qt::NoModifier, center);
+    EXPECT_EQ(receiver.calls, 0);
+    EXPECT_EQ(controller.listing()->index(controller.cursorRow(), 0).data(DirectoryModel::PathRole).toString(), path);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->hasEntry() && !controller.preview()->busy(); }));
+    EXPECT_EQ(controller.preview()->name(), "a.txt");
+    QTest::mouseDClick(loaded.window, Qt::LeftButton, Qt::NoModifier, center);
+    EXPECT_EQ(receiver.calls, 1);
+    EXPECT_EQ(receiver.received, QUrl::fromLocalFile(path));
+    controller.handleKey("v");
+    QTest::mouseDClick(loaded.window, Qt::LeftButton, Qt::NoModifier, center);
+    EXPECT_EQ(receiver.calls, 1);
+    controller.handleKey("Escape");
+    ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }));
+    QTest::keyClick(loaded.window, Qt::Key_Space);
+    ASSERT_TRUE(controller.quickLookOpen());
+    controller.setIconView(!icons);
+    EXPECT_EQ(controller.iconView(), icons);
+    QTest::keyClick(loaded.window, Qt::Key_Escape);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return view->hasActiveFocus(); }));
+    controller.handleKey("/");
+    ASSERT_TRUE(QTest::qWaitFor([&] { return loaded.window->activeFocusItem() != view; }));
+    auto* searchOwner = loaded.window->activeFocusItem();
+    QTest::mouseClick(loaded.window, Qt::LeftButton, Qt::NoModifier, center);
+    EXPECT_EQ(loaded.window->activeFocusItem(), searchOwner);
+    EXPECT_EQ(receiver.calls, 1);
+    controller.cancelSearchEditing();
+  }
 }

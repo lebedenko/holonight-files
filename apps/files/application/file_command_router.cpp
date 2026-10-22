@@ -44,11 +44,11 @@ bool FileCommandRouter::handleCountAndMotionKeys(const QString& key, bool isDigi
     command_.kind = FileCommand::Kind::Last;
     return true;
   }
-  if (key == u"j") {
+  if (key == u"j" || (context_.icon_view && key == u"ArrowDown")) {
     command_ = {.kind = FileCommand::Kind::Move, .count = takeCount()};
     return true;
   }
-  if (key == u"k") {
+  if (key == u"k" || (context_.icon_view && key == u"ArrowUp")) {
     command_ = {.kind = FileCommand::Kind::Move, .count = -takeCount()};
     return true;
   }
@@ -200,8 +200,10 @@ bool FileCommandRouter::handleKey(const QString& key) {
     return true;
   }
 
+  if (handleGridHorizontalKey(key)) {
+    return true;
+  }
   const bool isDigit = key.size() == 1 && key.at(0) >= u'0' && key.at(0) <= u'9';
-  const bool isMotionKey = key == u"g" || key == u"G" || key == u"j" || key == u"k";
   if (key == u"Ctrl+U" || key == u"Ctrl+D") {
     pending_g_ = false;
     command_ = {.kind = FileCommand::Kind::HalfPage, .count = key == u"Ctrl+D" ? takeCount() : -takeCount()};
@@ -218,7 +220,7 @@ bool FileCommandRouter::handleKey(const QString& key) {
       command_.kind = FileCommand::Kind::ExitVisual;
       return true;
     }
-    if (!isDigit && !isMotionKey) {
+    if (!isDigit && !isMotionKey(key)) {
       // REQ-C-004: VISUAL has no other operation consumer this stage — every key besides a
       // count-prefixed motion, Escape, or a file-operation key above is swallowed as a no-op.
       takeCount();
@@ -368,4 +370,20 @@ bool FileCommandRouter::handlePromptKey(const QString& key) {
       break;
   }
   return true;
+}
+
+bool FileCommandRouter::handleGridHorizontalKey(const QString& key) {
+  if (!context_.icon_view || (key != u"h" && key != u"l" && key != u"ArrowLeft" && key != u"ArrowRight")) {
+    return false;
+  }
+  pending_g_ = false;
+  command_ = {
+      .kind = FileCommand::Kind::MoveHorizontal,
+      .count = (key == u"h" || key == u"ArrowLeft") ? -takeCount() : takeCount(),
+  };
+  return true;
+}
+bool FileCommandRouter::isMotionKey(const QString& key) const {
+  return key == u"g" || key == u"G" || key == u"j" || key == u"k" ||
+         (context_.icon_view && (key == u"ArrowUp" || key == u"ArrowDown"));
 }

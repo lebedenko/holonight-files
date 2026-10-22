@@ -12,6 +12,7 @@ struct FileCommand {
   enum class Kind : std::uint8_t {
     None,
     Move,
+    MoveHorizontal,
     First,
     Last,
     ToggleHidden,
@@ -50,10 +51,11 @@ struct FileCommand {
   bool consumed = true;
 };
 struct FileCommandContext {
-  VimModeController::Mode mode;
-  TaskManager::PromptKind prompt;
-  bool quick_look_open;
-  bool can_preview;
+  VimModeController::Mode mode = VimModeController::Mode::Normal;
+  TaskManager::PromptKind prompt = TaskManager::PromptKind::None;
+  bool quick_look_open = false;
+  bool can_preview = false;
+  bool icon_view = false;
 };
 class FileCommandRouter {
  public:
@@ -68,6 +70,8 @@ class FileCommandRouter {
   bool handleNormalOnlyKey(const QString& key);
   void expirePendingCommands();
   bool handleKey(const QString& key);
+  bool handleGridHorizontalKey(const QString& key);
+  [[nodiscard]] bool isMotionKey(const QString& key) const;
   bool handleFinderKey(const QString& key);
   bool handleFileOperationKey(const QString& key, bool isVisual);
   bool handlePromptKey(const QString& key);

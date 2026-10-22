@@ -59,6 +59,9 @@ class DirectoryController : public QObject {
   Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY changed)
   Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
   Q_PROPERTY(bool transfersEnabled READ transfersEnabled NOTIFY changed)
+  Q_PROPERTY(bool iconView READ iconView NOTIFY changed)
+  Q_PROPERTY(bool canGoUp READ canGoUp NOTIFY changed)
+  Q_PROPERTY(int gridColumns READ gridColumns NOTIFY changed)
   Q_PROPERTY(bool finderOpen MEMBER finder_open_ NOTIFY changed)
  public:
   explicit DirectoryController(QObject* parent = nullptr);
@@ -85,6 +88,14 @@ class DirectoryController : public QObject {
   [[nodiscard]] bool canGoBack() const { return navigation_.jump_list_.canGoBack(); }
   [[nodiscard]] bool canGoForward() const { return navigation_.jump_list_.canGoForward(); }
   [[nodiscard]] QStringList breadcrumbLabels() const { return breadcrumbs_.labels(); }
+  [[nodiscard]] bool iconView() const { return icon_view_; }
+  [[nodiscard]] bool canGoUp() const;
+  [[nodiscard]] int gridColumns() const { return grid_columns_; }
+  Q_INVOKABLE void setIconView(bool icons);
+  Q_INVOKABLE void setGridDimensions(int columns, int rows);
+  Q_INVOKABLE void selectEntry(int row);
+  Q_INVOKABLE void activateEntry(int row);
+  Q_INVOKABLE void goUp();
   Q_INVOKABLE void activateBreadcrumb(int index);
   Q_INVOKABLE void open(const QString& path, const QString& fallbackReason = {});
   Q_INVOKABLE bool acceptFinderResult(int row);
@@ -189,6 +200,8 @@ class DirectoryController : public QObject {
   bool finder_open_ = false;
   QString status_message_;
   int viewport_rows_ = 20;
+  int grid_columns_ = 1;
+  bool icon_view_ = false;
 
   NavigationSession navigation_{*this};
   EditingSession editing_{*this};

@@ -138,56 +138,67 @@ TEST(FileDrop, NativeEventsCopyMoveAndCleanFeedback) {
 }
 
 TEST(FileDrop, OffscreenListingRecomputesTargetsAndClampsEdgeScrolling) {
-  QTemporaryDir dir(files_test::fixturePattern("drop-scroll"));
-  for (int i = 0; i < 40; ++i) {
-    ASSERT_TRUE(QDir(dir.path()).mkdir(QStringLiteral("folder%1").arg(i, 2, 10, QLatin1Char('0'))));
+  for (bool icons : {false, true}) {
+    QTemporaryDir dir(files_test::fixturePattern("drop-scroll"));
+    for (int i = 0; i < 40; ++i) {
+      ASSERT_TRUE(QDir(dir.path()).mkdir(QStringLiteral("folder%1").arg(i, 2, 10, QLatin1Char('0'))));
+    }
+    DirectoryController controller;
+    controller.setIconView(icons);
+    controller.open(dir.path());
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+    QQmlEngine engine;
+    initializeFilesEngine(engine);
+    QQmlComponent component(&engine);
+    component.loadFromModule("HolonightFiles", "DirectoryListing");
+    std::unique_ptr<QObject> object(
+        component.createWithInitialProperties({{"controller", QVariant::fromValue(&controller)}}));
+    ASSERT_NE(object, nullptr) << component.errorString().toStdString();
+    auto* root = qobject_cast<QQuickItem*>(object.get());
+    ASSERT_NE(root, nullptr);
+    QQuickWindow window;
+    root->setParentItem(window.contentItem());
+    root->setSize({700, 240});
+    window.setGeometry(0, 0, 700, 240);
+    window.show();
+    auto* area = root->findChild<FileDropArea*>("fileDropArea");
+    auto* list = root->findChild<QQuickItem*>(icons ? "directoryGridView" : "directoryListView");
+    ASSERT_NE(area, nullptr);
+    ASSERT_NE(list, nullptr);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return list->property("contentHeight").toReal() > list->height(); }));
+    QMetaObject::invokeMethod(list, "forceLayout");
+    QMimeData mime;
+    mime.setUrls({QUrl::fromLocalFile(dir.filePath("folder00"))});
+    if (icons) {
+      const QPoint secondCell(qRound(list->property("cellWidth").toReal() * 1.5), 60);
+      QDragEnterEvent horizontal(dragPosition(secondCell), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(area, &horizontal);
+      EXPECT_EQ(area->property("targetRow").toInt(), 1);
+      EXPECT_EQ(controller.dropDestination(1), dir.filePath("folder01"));
+    }
+    const QPoint bottom(100, qRound(area->height()) - 4);
+    QDragEnterEvent enter(dragPosition(bottom), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(area, &enter);
+    ASSERT_TRUE(area->hovering());
+    const int first = area->property("targetRow").toInt();
+    ASSERT_GE(first, 0);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return area->property("targetRow").toInt() > first; }));
+    const qreal maximum =
+        list->property("originY").toReal() + list->property("contentHeight").toReal() - list->height();
+    list->setProperty("contentY", maximum);
+    QTest::qWait(100);
+    EXPECT_LE(list->property("contentY").toReal(), maximum);
+    QDragMoveEvent top(dragPosition(QPoint(100, 1)), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton,
+                       Qt::NoModifier);
+    QCoreApplication::sendEvent(area, &top);
+    list->setProperty("contentY", list->property("originY"));
+    QTest::qWait(100);
+    EXPECT_GE(list->property("contentY").toReal(), list->property("originY").toReal());
+    QDragLeaveEvent leave;
+    QCoreApplication::sendEvent(area, &leave);
+    EXPECT_FALSE(area->hovering());
+    EXPECT_EQ(area->property("targetRow").toInt(), -1);
   }
-  DirectoryController controller;
-  controller.open(dir.path());
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
-  QQmlEngine engine;
-  initializeFilesEngine(engine);
-  QQmlComponent component(&engine);
-  component.loadFromModule("HolonightFiles", "DirectoryListing");
-  std::unique_ptr<QObject> object(
-      component.createWithInitialProperties({{"controller", QVariant::fromValue(&controller)}}));
-  ASSERT_NE(object, nullptr) << component.errorString().toStdString();
-  auto* root = qobject_cast<QQuickItem*>(object.get());
-  ASSERT_NE(root, nullptr);
-  QQuickWindow window;
-  root->setParentItem(window.contentItem());
-  root->setSize({700, 240});
-  window.setGeometry(0, 0, 700, 240);
-  window.show();
-  auto* area = root->findChild<FileDropArea*>("fileDropArea");
-  auto* list = root->findChild<QQuickItem*>("directoryListView");
-  ASSERT_NE(area, nullptr);
-  ASSERT_NE(list, nullptr);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return list->property("contentHeight").toReal() > list->height(); }));
-  QMetaObject::invokeMethod(list, "forceLayout");
-  QMimeData mime;
-  mime.setUrls({QUrl::fromLocalFile(dir.filePath("folder00"))});
-  const QPoint bottom(100, qRound(area->height()) - 4);
-  QDragEnterEvent enter(dragPosition(bottom), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
-  QCoreApplication::sendEvent(area, &enter);
-  ASSERT_TRUE(area->hovering());
-  const int first = area->property("targetRow").toInt();
-  ASSERT_GE(first, 0);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return area->property("targetRow").toInt() > first; }));
-  const qreal maximum = list->property("originY").toReal() + list->property("contentHeight").toReal() - list->height();
-  list->setProperty("contentY", maximum);
-  QTest::qWait(100);
-  EXPECT_LE(list->property("contentY").toReal(), maximum);
-  QDragMoveEvent top(dragPosition(QPoint(100, 1)), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton,
-                     Qt::NoModifier);
-  QCoreApplication::sendEvent(area, &top);
-  list->setProperty("contentY", list->property("originY"));
-  QTest::qWait(100);
-  EXPECT_GE(list->property("contentY").toReal(), list->property("originY").toReal());
-  QDragLeaveEvent leave;
-  QCoreApplication::sendEvent(area, &leave);
-  EXPECT_FALSE(area->hovering());
-  EXPECT_EQ(area->property("targetRow").toInt(), -1);
 }
 
 TEST(FileDrop, ConflictsCancellationStaleSourcesAndWorkerSafeguards) {

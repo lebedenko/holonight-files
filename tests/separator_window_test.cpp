@@ -210,6 +210,9 @@ TEST(Files, WindowSeparatorJunctions) {
   ASSERT_NE(listing, nullptr);
   auto* preview = window->findChild<QQuickItem*>("previewContainer");
   ASSERT_NE(preview, nullptr);
+  auto* list = window->findChild<QQuickItem*>("directoryListView");
+  ASSERT_NE(list, nullptr);
+  auto* detailedPresentation = list->parentItem()->parentItem();
   auto* handle = separators[6];
   auto* mask = qobject_cast<QQuickItem*>(handle->containmentMask());
   ASSERT_NE(mask, nullptr);
@@ -229,8 +232,8 @@ TEST(Files, WindowSeparatorJunctions) {
     EXPECT_DOUBLE_EQ(mask->x() + (mask->width() / 2), handle->width() / 2);
     EXPECT_TRUE(handle->contains(QPointF(mask->x() + 0.5, handle->height() / 2)));
     EXPECT_TRUE(handle->contains(QPointF(mask->x() + mask->width() - 0.5, handle->height() / 2)));
-    EXPECT_EQ(separators[3]->isVisible(), listing->property("showSize").toBool());
-    EXPECT_EQ(separators[4]->isVisible(), listing->property("showModified").toBool());
+    EXPECT_EQ(separators[3]->isVisible(), detailedPresentation->property("showSize").toBool());
+    EXPECT_EQ(separators[4]->isVisible(), detailedPresentation->property("showModified").toBool());
     QList<QRectF> bounds;
     for (auto* item : separators) {
       bounds.append(expectedStroke(item, dpr));
