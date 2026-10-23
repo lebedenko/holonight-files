@@ -2,7 +2,7 @@ add_files_application(files-smoke file_drop_test.cpp smoke.cpp separator_window_
   devices_model_test.cpp storage_policy_test.cpp capacity_probe_test.cpp sidebar_navigator_test.cpp
   directory_controller_test.cpp directory_performance_test.cpp initial_directory_test.cpp
   thumbnail_service_test.cpp exif_reader_test.cpp text_preview_service_test.cpp preview_service_test.cpp
-  preview_consumer_dpr_test.cpp quick_look_presentation_model_test.cpp preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp preview_performance_test.cpp
+  preview_consumer_dpr_test.cpp grid_thumbnail_test.cpp quick_look_presentation_model_test.cpp preview_integration_test.cpp preview_decode_limits_test.cpp preview_stress_test.cpp preview_performance_test.cpp
   name_validator_test.cpp path_finder_test.cpp path_index_store_test.cpp search_exclusion_test.cpp vim_mode_controller_test.cpp
   clipboard_register_test.cpp file_operation_service_test.cpp trash_service_test.cpp
   task_manager_test.cpp directory_controller_file_ops_test.cpp icon_name_resolver_test.cpp icon_image_provider_test.cpp

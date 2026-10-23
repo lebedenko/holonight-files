@@ -1,5 +1,6 @@
 #include "directory_fixtures.h"
 #include "engine_setup.h"
+#include "grid_thumbnails.h"
 #include "icon_fallbacks.h"
 #include "inspection_keys.h"
 
@@ -10,6 +11,7 @@
 
 #include <gtest/gtest.h>
 #include <memory>
+#include <sys/stat.h>
 
 TEST(IconFallbacks, ExactChainsAreSharedWithinEngineAndIsolatedBetweenEngines) {
   QQmlEngine first;
@@ -156,4 +158,36 @@ TEST(InspectionKeys, ArrowKeysReachTheQuickLookLineMoverOnlyInPopups) {
   EXPECT_TRUE(keys.press(Qt::Key_Up, "", 0, false, &controller, true));
   EXPECT_EQ(controller.preview()->currentLineIndex(), 1);
   EXPECT_EQ(controller.cursorRow(), 1);
+}
+
+TEST(GridThumbnails, EligibilityNativeEncodingAndPhysicalSizing) {
+  GridThumbnails thumbnails;
+  for (const auto& suffix : HolonightImages::supportedSuffixes() + QStringList{"svg"}) {
+    EXPECT_EQ(thumbnails.eligible("photo." + suffix.toUpper(), false, false, S_IFREG), suffix != "pdf");
+  }
+  for (const auto* name : {"file", "file.pdf", "file.mp4", "file.txt"}) {
+    EXPECT_FALSE(thumbnails.eligible(name, false, false, S_IFREG));
+  }
+  EXPECT_FALSE(thumbnails.eligible("a.png", true, false, S_IFDIR));
+  EXPECT_FALSE(thumbnails.eligible("a.png", false, true, S_IFREG));
+  EXPECT_FALSE(thumbnails.eligible("a.png", false, false, S_IFIFO));
+  const QByteArray native = QByteArray("/tmp/a #?%") + static_cast<char>(0xff) + ".png";
+  for (qreal ratio : {1.0, 1.25, 1.5, 1.5625, 2.0}) {
+    const auto url = thumbnails.source(native, ratio, 7);
+    EXPECT_EQ(url.host(), "thumbnail");
+    const auto parts = url.path().mid(1).split('/');
+    ASSERT_EQ(parts.size(), 3);
+    EXPECT_EQ(parts[0].toInt(), static_cast<int>(std::ceil(64 * ratio)));
+    EXPECT_EQ(parts[1], "7");
+    EXPECT_EQ(QByteArray::fromBase64(parts[2].toLatin1(), QByteArray::Base64UrlEncoding), native);
+  }
+  QQmlEngine engine;
+  initializeFilesEngine(engine);
+  auto* provider = engine.imageProvider("thumbnail");
+  ASSERT_NE(provider, nullptr);
+  initializeFilesEngine(engine);
+  EXPECT_EQ(provider, engine.imageProvider("thumbnail"));
+  QQmlEngine other;
+  initializeFilesEngine(other);
+  EXPECT_NE(provider, other.imageProvider("thumbnail"));
 }

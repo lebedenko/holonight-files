@@ -10,9 +10,12 @@ watching, and NORMAL-mode keyboard navigation (`j`/`k`, count-prefixed
 motions, `gg`/`G`, `h`/`l`/Enter, `.` for hidden files, `s` to reverse filename sorting).
 The compact List/Icons selector sits 8 px after the breadcrumb frame and changes presentation
 for the current session. The selected view has a primary-colored icon and subtle background.
-Icons show 64 px themed icons and two-line filenames, with 8 px between tiles
+Icons show 64 px image thumbnails or themed icons and two-line filenames, with 8 px between tiles
 and around the container edges, including selection and hover backgrounds.
 There are no line numbers or parent tile.
+
+Grid view shows supported raster images and SVGs as asynchronous thumbnails in the existing 64 × 64 px icon area. Thumbnails preserve aspect ratio, transparency and image orientation, use the first animation frame, and keep small raster originals at native size. Folders, extensionless and unsupported files retain their icons; icons also remain visible while thumbnails load or if decoding fails. Requests follow display scaling and refreshed file metadata, and only instantiated grid tiles request thumbnails.
+
 In either view, click to select and preview, then double-click or press Enter to
 open. In VISUAL mode a click extends the selection and double-click does not
 open. The Up button opens the parent and selects the folder just exited.

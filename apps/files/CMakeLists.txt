@@ -120,6 +120,7 @@ function(add_files_application target)
       "${app_dir}/presentation/engine_setup.h"
       "${app_dir}/presentation/icon_fallbacks.cpp"
       "${app_dir}/presentation/icon_fallbacks.h"
+      "${app_dir}/presentation/grid_thumbnails.h"
       "${app_dir}/presentation/inspection_keys.cpp"
       "${app_dir}/presentation/inspection_keys.h"
       "${app_dir}/presentation/quick_look_presentation_model.cpp"

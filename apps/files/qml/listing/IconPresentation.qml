@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as Controls
 import Holonight.Core
 import Holonight.Controls
@@ -85,6 +86,13 @@ Item {
             required property bool isSymlink
             required property bool statFailed
             required property string statError
+            required property var nativePath
+            required property int mode
+            required property real size
+            required property date modified
+            property int thumbnailGeneration: 0
+            onSizeChanged: ++thumbnailGeneration
+            onModifiedChanged: ++thumbnailGeneration
             width: listView.cellWidth
             height: listView.cellHeight
             HnListDelegate {
@@ -126,6 +134,20 @@ Item {
                         property string failedChain
                         readonly property bool skipRequest: knownUnresolved || failedChain === delegate.iconName
                         readonly property bool showFallback: skipRequest || themeIcon.hasError
+                        readonly property bool thumbnailReady: thumbnail.status === Image.Ready
+
+                        Image {
+                            id: thumbnail
+                            objectName: "gridThumbnail"
+                            anchors.centerIn: parent
+                            width: Math.min(64, implicitWidth)
+                            height: Math.min(64, implicitHeight)
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            cache: false
+                            visible: iconCell.thumbnailReady
+                            source: GridThumbnails.eligible(cell.name, cell.isDir, cell.statFailed, cell.mode) ? GridThumbnails.source(cell.nativePath, root.Window.window ? root.Window.window.devicePixelRatio : 1, cell.thumbnailGeneration) : ""
+                        }
 
                         // Theme icon, untinted in its own colours (REQ-F-003). The chain in iconName is
                         // walked by the C++ image provider; a total miss surfaces as hasError.
@@ -136,7 +158,7 @@ Item {
                             size: 64
                             source: iconCell.skipRequest ? "" : "image://icon/" + delegate.iconName
                             rendering: HnIcon.Original
-                            visible: !iconCell.showFallback
+                            visible: !iconCell.thumbnailReady && !iconCell.showFallback
                             onHasErrorChanged: if (hasError) {
                                 const chain = delegate.iconName;
                                 IconFallbacks.markUnresolved(chain);
@@ -151,7 +173,7 @@ Item {
                             anchors.centerIn: parent
                             size: 64
                             source: !iconCell.showFallback ? "" : delegate.isDir ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
-                            visible: iconCell.showFallback
+                            visible: !iconCell.thumbnailReady && iconCell.showFallback
                         }
                         // Keep a visible marker even if the packaged SVG cannot be decoded.
                         Rectangle {
@@ -162,7 +184,7 @@ Item {
                             radius: 3
                             color: "transparent"
                             border.color: HoloniightPalette.textMuted
-                            visible: iconCell.showFallback && fallbackIcon.hasError
+                            visible: !iconCell.thumbnailReady && iconCell.showFallback && fallbackIcon.hasError
                             Text {
                                 anchors.centerIn: parent
                                 text: "?"
