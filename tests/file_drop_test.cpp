@@ -137,6 +137,87 @@ TEST(FileDrop, NativeEventsCopyMoveAndCleanFeedback) {
   EXPECT_FALSE(area.hovering());
 }
 
+TEST(FileDrop, IconTilesKeepEightPixelGapsAndPaddingAcrossResizeAndScroll) {
+  QTemporaryDir dir(files_test::fixturePattern("icon-spacing"));
+  for (int i = 0; i < 11; ++i) {
+    files_test::writeFile(dir, QStringLiteral("file%1.txt").arg(i, 2, 10, QLatin1Char('0')));
+  }
+  DirectoryController controller;
+  controller.setIconView(true);
+  controller.open(dir.path());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
+  QQmlEngine engine;
+  initializeFilesEngine(engine);
+  QQmlComponent component(&engine);
+  component.loadFromModule("HolonightFiles", "DirectoryListing");
+  std::unique_ptr<QObject> object(
+      component.createWithInitialProperties({{"controller", QVariant::fromValue(&controller)}}));
+  ASSERT_NE(object, nullptr) << component.errorString().toStdString();
+  auto* root = qobject_cast<QQuickItem*>(object.get());
+  ASSERT_NE(root, nullptr);
+  QQuickWindow window;
+  root->setParentItem(window.contentItem());
+  window.setGeometry(0, 0, 700, 300);
+  window.show();
+  auto* grid = root->findChild<QQuickItem*>("directoryGridView");
+  ASSERT_NE(grid, nullptr);
+  auto tile = [&](int row) -> QQuickItem* {
+    for (auto* cell : grid->property("contentItem").value<QQuickItem*>()->childItems()) {
+      if (cell->property("index").toInt() == row) {
+        if (auto* item = cell->findChild<QQuickItem*>("directoryIconDelegate")) {
+          return item;
+        }
+      }
+    }
+    return nullptr;
+  };
+  for (int width : {700, 430, 120}) {
+    SCOPED_TRACE(width);
+    root->setSize({static_cast<qreal>(width), 300});
+    controller.selectEntry(0);
+    QMetaObject::invokeMethod(grid, "forceLayout");
+    const int columns = grid->property("columns").toInt();
+    ASSERT_TRUE(QTest::qWaitFor([&] { return tile(0) && tile(columns); }));
+    auto* first = tile(0);
+    const auto start = first->mapToItem(root, QPointF());
+    EXPECT_NEAR(start.x(), 8, 0.01);
+    EXPECT_NEAR(start.y(), 8, 0.01);
+    EXPECT_EQ(first->height(), 128);
+    EXPECT_TRUE(first->property("highlighted").toBool());
+    auto* icon = first->findChild<QQuickItem*>("iconColumnField");
+    ASSERT_NE(icon, nullptr);
+    EXPECT_EQ(icon->size(), QSizeF(64, 64));
+    auto* nextRow = tile(columns);
+    EXPECT_NEAR(nextRow->mapToItem(root, QPointF()).y() - start.y() - first->height(), 8, 0.01);
+    if (columns > 1) {
+      ASSERT_NE(tile(1), nullptr);
+      EXPECT_NEAR(tile(1)->mapToItem(root, QPointF()).x() - start.x() - first->width(), 8, 0.01);
+    }
+    ASSERT_NE(tile(columns - 1), nullptr);
+    auto* lastColumn = tile(columns - 1);
+    EXPECT_NEAR(width - lastColumn->mapToItem(root, QPointF(lastColumn->width(), 0)).x(), 8, 0.01);
+    grid->forceActiveFocus();
+    QTest::keyClick(&window, Qt::Key_Down);
+    EXPECT_EQ(controller.cursorRow(), columns);
+    controller.selectEntry(10);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return tile(10); }));
+    QMetaObject::invokeMethod(grid, "positionViewAtEnd");
+    QMetaObject::invokeMethod(grid, "forceLayout");
+    auto* last = tile(10);
+    EXPECT_NEAR(300 - last->mapToItem(root, QPointF(0, last->height())).y(), 8, 0.01);
+    const auto center = last->mapToScene(QPointF(last->width() / 2, last->height() / 2)).toPoint();
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center);
+    EXPECT_EQ(controller.cursorRow(), 10);
+    ASSERT_TRUE(controller.handleKey("a"));
+    ASSERT_TRUE(QTest::qWaitFor([&] {
+      auto* editor = tile(10)->findChild<QQuickItem*>("inlineNameEditor");
+      return editor && editor->isVisible() && editor->hasActiveFocus();
+    }));
+    QTest::keyClick(&window, Qt::Key_Escape);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return grid->hasActiveFocus(); }));
+  }
+}
+
 TEST(FileDrop, OffscreenListingRecomputesTargetsAndClampsEdgeScrolling) {
   for (bool icons : {false, true}) {
     QTemporaryDir dir(files_test::fixturePattern("drop-scroll"));
@@ -170,13 +251,35 @@ TEST(FileDrop, OffscreenListingRecomputesTargetsAndClampsEdgeScrolling) {
     QMimeData mime;
     mime.setUrls({QUrl::fromLocalFile(dir.filePath("folder00"))});
     if (icons) {
-      const QPoint secondCell(qRound(list->property("cellWidth").toReal() * 1.5), 60);
+      auto checkTarget = [&](QPoint point, int expected) {
+        QDragMoveEvent move(dragPosition(point), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(area, &move);
+        EXPECT_EQ(area->property("targetRow").toInt(), expected);
+      };
+      const QPoint secondCell(qRound(list->property("cellWidth").toReal() * 1.5) + 4, 60);
       QDragEnterEvent horizontal(dragPosition(secondCell), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
       QCoreApplication::sendEvent(area, &horizontal);
       EXPECT_EQ(area->property("targetRow").toInt(), 1);
       EXPECT_EQ(controller.dropDestination(1), dir.filePath("folder01"));
+      auto* outline = area->findChild<QQuickItem*>("iconDropOutline");
+      ASSERT_NE(outline, nullptr);
+      EXPECT_TRUE(outline->isVisible());
+      EXPECT_NEAR(outline->x(), list->property("cellWidth").toReal() + 8, 0.01);
+      EXPECT_NEAR(outline->y(), 8, 0.01);
+      EXPECT_NEAR(outline->width(), list->property("cellWidth").toReal() - 8, 0.01);
+      EXPECT_EQ(outline->height(), 128);
+      list->setProperty("contentY", 10);
+      EXPECT_NEAR(outline->y(), -2, 0.01);
+      list->setProperty("contentY", 0);
+      checkTarget({2, 60}, -1);
+      checkTarget({6, 60}, -1);
+      checkTarget({qRound(list->property("cellWidth").toReal()) + 4, 60}, -1);
+      checkTarget({60, 140}, -1);
+      root->setWidth(430);
+      QMetaObject::invokeMethod(list, "forceLayout");
+      checkTarget({qRound(list->property("cellWidth").toReal() * 1.5) + 4, 60}, 1);
     }
-    const QPoint bottom(100, qRound(area->height()) - 4);
+    const QPoint bottom(100, qRound(area->height()) - 16);
     QDragEnterEvent enter(dragPosition(bottom), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(area, &enter);
     ASSERT_TRUE(area->hovering());

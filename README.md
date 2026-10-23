@@ -9,7 +9,9 @@ sorted directory listing with a fixed places sidebar, live filesystem
 watching, and NORMAL-mode keyboard navigation (`j`/`k`, count-prefixed
 motions, `gg`/`G`, `h`/`l`/Enter, `.` for hidden files, `s` to reverse filename sorting).
 The header's List/Icons selector changes presentation for the current session.
-Icons show themed icons and filenames, with no line numbers or parent tile.
+Icons show 64 px themed icons and two-line filenames, with 8 px between tiles
+and around the container edges, including selection and hover backgrounds.
+There are no line numbers or parent tile.
 In either view, click to select and preview, then double-click or press Enter to
 open. In VISUAL mode a click extends the selection and double-click does not
 open. The Up button opens the parent and selects the folder just exited.

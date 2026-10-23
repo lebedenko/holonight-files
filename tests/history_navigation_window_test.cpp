@@ -716,7 +716,11 @@ TEST(WindowHistoryNavigation, MouseSelectsThenDoubleClickOpensFolderInBothViews)
     ASSERT_TRUE(QTest::qWaitFor([&] {
       auto* view = rendered.window->findChild<QQuickItem*>(icons ? "directoryGridView" : "directoryListView");
       if (!view) return false;
-      for (auto* candidate : view->property("contentItem").value<QQuickItem*>()->childItems()) {
+      for (auto* cell : view->property("contentItem").value<QQuickItem*>()->childItems()) {
+        auto* candidate = icons ? cell->findChild<QQuickItem*>("directoryIconDelegate") : cell;
+        if (!candidate) {
+          continue;
+        }
         if (candidate->objectName() == (icons ? "directoryIconDelegate" : "directoryEntryDelegate") &&
             candidate->property("name").toString() == "b") {
           entry = candidate;
