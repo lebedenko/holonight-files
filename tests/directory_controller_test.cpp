@@ -2442,6 +2442,35 @@ TEST(DirectoryController, SidebarNavigatorWalksThePlacesAndDevicesModels) {
   EXPECT_EQ(navigator->index(), 0);
 }
 
+TEST(DirectoryController, IconViewNotifiesOnlyAcceptedChangesAfterRestoringCursor) {
+  QTemporaryDir dir(fixturePattern("icon-notify"));
+  writeFile(dir, "a.txt");
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  controller.selectEntry(1);
+  const auto path = controller.cursorPath();
+  QSignalSpy changed(&controller, &DirectoryController::iconViewChanged);
+  QObject::connect(&controller, &DirectoryController::iconViewChanged, &controller, [&] {
+    EXPECT_EQ(controller.cursorPath(), path);
+    EXPECT_EQ(controller.listing()->rowCount(), controller.iconView() ? 1 : 2);
+  });
+  controller.setIconView(false);
+  EXPECT_EQ(changed.count(), 0);
+  controller.setIconView(true);
+  EXPECT_EQ(changed.count(), 1);
+  controller.setIconView(true);
+  controller.setGridDimensions(3, 4);
+  controller.setGridDimensions(2, 5);
+  EXPECT_EQ(changed.count(), 1);
+  controller.handleKey("/");
+  controller.setIconView(false);
+  EXPECT_EQ(changed.count(), 1);
+  controller.cancelSearchEditing();
+  controller.setIconView(false);
+  EXPECT_EQ(changed.count(), 2);
+}
+
 TEST(DirectoryController, IconViewPreservesSelectionAndFiltersParent) {
   QTemporaryDir dir(fixturePattern("icon-selection"));
   writeFile(dir, "a.txt");

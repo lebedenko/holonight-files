@@ -59,7 +59,7 @@ class DirectoryController : public QObject {
   Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY changed)
   Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY changed)
   Q_PROPERTY(bool transfersEnabled READ transfersEnabled NOTIFY changed)
-  Q_PROPERTY(bool iconView READ iconView NOTIFY changed)
+  Q_PROPERTY(bool iconView READ iconView NOTIFY iconViewChanged)
   Q_PROPERTY(bool canGoUp READ canGoUp NOTIFY changed)
   Q_PROPERTY(int gridColumns READ gridColumns NOTIFY changed)
   Q_PROPERTY(bool finderOpen MEMBER finder_open_ NOTIFY changed)
@@ -145,6 +145,7 @@ class DirectoryController : public QObject {
   void openRestoreCandidate(const QString& path);
 
  signals:
+  void iconViewChanged();
   void changed();
   void navigated();
   void finderRequested(bool directoriesOnly);

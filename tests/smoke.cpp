@@ -1759,6 +1759,39 @@ void countBindingLoops(QtMsgType type, const QMessageLogContext& context, const 
 
 }  // namespace
 
+TEST(Files, ListingLoaderSwitchesAndResizesWithoutBindingLoops) {
+  bindingLoopCounter().warnings.store(0);
+  bindingLoopCounter().previous = qInstallMessageHandler(countBindingLoops);
+  const auto restoreHandler = qScopeGuard([] { qInstallMessageHandler(bindingLoopCounter().previous); });
+  QTemporaryDir dir(files_test::fixturePattern("listing-loader"));
+  for (int i = 0; i < 30; ++i) {
+    ASSERT_FALSE(files_test::writeFile(dir, QString::number(i) + ".txt", "entry").isEmpty());
+  }
+  for (bool initialIcons : {false, true}) {
+    SCOPED_TRACE(initialIcons);
+    DirectoryController controller;
+    controller.setIconView(initialIcons);
+    auto loaded = loadActiveWindow(controller, dir.path());
+    ASSERT_NE(loaded.window, nullptr);
+    for (int iteration = 0; iteration < 6; ++iteration) {
+      const bool icons = iteration % 2 == 0 ? initialIcons : !initialIcons;
+      controller.setIconView(icons);
+      for (int width : {800, 1200, 900}) {
+        loaded.window->resize(width, 700);
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+          auto* view = loaded.window->findChild<QQuickItem*>(icons ? "directoryGridView" : "directoryListView");
+          return view != nullptr && view->width() > 0 && view->isVisible();
+        }));
+        QCoreApplication::processEvents();
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+          return loaded.window->findChild<QQuickItem*>(icons ? "directoryListView" : "directoryGridView") == nullptr;
+        }));
+      }
+    }
+  }
+  EXPECT_EQ(bindingLoopCounter().warnings.load(), 0);
+}
+
 // info-sidebar-redesign REQ-F-005/REQ-F-030: one formatter, so the listing and the sidebar agree.
 TEST(Files, PreviewSidebarSizeMatchesListingAndDirectoriesShowDir) {
   QTemporaryDir dir(files_test::fixturePattern("sidebar-size"));

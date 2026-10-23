@@ -143,6 +143,7 @@ void DirectoryController::setIconView(bool icons) {
   navigation_.cursor_row_ = target.isValid() ? target.row() : 0;
   ++editing_.listing_revision_;
   vim_.updateSearchPositions(entryNameAt(cursorRow()));
+  emit iconViewChanged();
   emit changed();
 }
 void DirectoryController::setGridDimensions(int columns, int rows) {
