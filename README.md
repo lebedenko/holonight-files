@@ -8,7 +8,8 @@ acceptance status is tracked in [browse-folder verification](docs/sdd/browse-fol
 sorted directory listing with a fixed places sidebar, live filesystem
 watching, and NORMAL-mode keyboard navigation (`j`/`k`, count-prefixed
 motions, `gg`/`G`, `h`/`l`/Enter, `.` for hidden files, `s` to reverse filename sorting).
-The header's List/Icons selector changes presentation for the current session.
+The compact List/Icons selector sits 8 px after the breadcrumb frame and changes presentation
+for the current session. The selected view has a primary-colored icon and subtle background.
 Icons show 64 px themed icons and two-line filenames, with 8 px between tiles
 and around the container edges, including selection and hover backgrounds.
 There are no line numbers or parent tile.
@@ -511,5 +512,6 @@ listing space targets the current directory. Drops copy by default; hold Shift t
 Ctrl to copy. Link requests (Ctrl+Shift) are unsupported. Hover near the listing's top or bottom
 edge to scroll; folders do not open automatically. Existing task conflict prompts apply.
 
-The header breadcrumb frame follows the full listing width during resizing. Its right-hand
+The header breadcrumb frame follows the listing width during resizing, reserving space for
+the view selector and close button. Its right-hand
 close button uses the shared [header control](docs/header-navigation.md).

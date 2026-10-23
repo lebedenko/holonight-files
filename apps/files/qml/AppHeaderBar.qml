@@ -44,6 +44,23 @@ HnHeaderBar {
     // stretched to the full header height and render top-aligned instead of centered.
     content: HeaderContent {}
 
+    component ViewButton: HnIconButton {
+        id: button
+        sizeRole: HnControlSize.Compact
+        focusPolicy: Qt.NoFocus
+        checkable: true
+        autoExclusive: true
+        enabled: root.historyEnabled
+        icon.color: checked && enabled ? HoloniightPalette.primary : "transparent"
+
+        Binding {
+            target: button.background
+            property: "color"
+            when: button.checked && (!button.enabled || (!button.down && !(button.HnInputInteraction.hoverAllowed && button.hovered)))
+            value: HoloniightPalette.surfaceRaised
+        }
+    }
+
     component HeaderContent: Item {
         function focusCurrentSegment(): bool {
             return breadcrumbLabel.focusCurrentSegment();
@@ -92,30 +109,19 @@ HnHeaderBar {
         Row {
             id: viewSelector
             objectName: "viewSelector"
-            anchors.right: closeButton.left
-            anchors.rightMargin: 8
+            x: breadcrumbContainer.x + breadcrumbContainer.width + 8
             anchors.verticalCenter: parent.verticalCenter
-            HnIconButton {
+            ViewButton {
                 objectName: "listViewButton"
-                sizeRole: HnControlSize.Compact
-                focusPolicy: Qt.NoFocus
                 icon.name: "view-list-details"
-                checkable: true
-                autoExclusive: true
                 checked: !root.controller.iconView
-                enabled: root.historyEnabled
                 Accessible.name: qsTr("List")
                 onClicked: root.controller.setIconView(false)
             }
-            HnIconButton {
+            ViewButton {
                 objectName: "iconViewButton"
-                sizeRole: HnControlSize.Compact
-                focusPolicy: Qt.NoFocus
                 icon.name: "view-grid"
-                checkable: true
-                autoExclusive: true
                 checked: root.controller.iconView
-                enabled: root.historyEnabled
                 Accessible.name: qsTr("Icons")
                 onClicked: root.controller.setIconView(true)
             }
@@ -135,7 +141,7 @@ HnHeaderBar {
             objectName: "breadcrumbContainer"
             x: root.breadcrumbLeftInset
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(0, Math.min(root.listingPanel.width, viewSelector.x - x - 8))
+            width: Math.max(0, Math.min(root.listingPanel.width, closeButton.x - x - viewSelector.width - 16))
             height: HnMetrics.controlHeight(HnControlSize.Normal)
 
             HnBreadcrumbBar {

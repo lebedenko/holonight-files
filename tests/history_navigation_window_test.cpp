@@ -14,6 +14,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQmlExpression>
 #include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -464,6 +465,15 @@ TEST(WindowHistoryNavigation, BreadcrumbFrameTracksListingEdges) {
   ASSERT_NE(bar, nullptr);
   ASSERT_NE(listing, nullptr);
   ASSERT_NE(close, nullptr);
+  auto* selector = rendered.window->findChild<QQuickItem*>("viewSelector");
+  ASSERT_NE(selector, nullptr);
+  const auto checkSelector = [&] {
+    EXPECT_NEAR(selector->mapToScene(QPointF()).x() - HistoryWindow::sceneRight(bar), 8, 0.5);
+    EXPECT_LE(HistoryWindow::sceneRight(selector) + 8, close->mapToScene(QPointF()).x() + 0.5);
+    EXPECT_NEAR(selector->mapToScene(QPointF(0, selector->height() / 2)).y(),
+                bar->mapToScene(QPointF(0, bar->height() / 2)).y(), 0.5);
+    EXPECT_NEAR(HistoryWindow::sceneRight(close), rendered.window->width() - 12, 0.5);
+  };
   auto* preview = rendered.window->findChild<QQuickItem*>("previewContainer");
   ASSERT_NE(preview, nullptr);
   for (int width : {1000, 420, 800}) {
@@ -472,16 +482,66 @@ TEST(WindowHistoryNavigation, BreadcrumbFrameTracksListingEdges) {
       rendered.window->setProperty("sidebarWidth", sidebar);
       ASSERT_TRUE(QTest::qWaitFor([&] {
         return qAbs(bar->mapToScene(QPointF()).x() - listing->mapToScene(QPointF()).x()) < 0.5 &&
-               HistoryWindow::sceneRight(bar) <= HistoryWindow::sceneRight(listing) + 0.5;
+               HistoryWindow::sceneRight(bar) <= HistoryWindow::sceneRight(listing) + 0.5 &&
+               qAbs(HistoryWindow::sceneRight(close) - (width - 12)) < 0.5;
       }));
-      EXPECT_LE(HistoryWindow::sceneRight(bar), close->mapToScene(QPointF()).x());
+      checkSelector();
     }
   }
   rendered.window->setWidth(1000);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return qAbs(HistoryWindow::sceneRight(close) - 988) < 0.5; }));
   for (int previewWidth : {220, 300, 260}) {
     ASSERT_TRUE(QQmlProperty::write(preview, "Controls.SplitView.preferredWidth", previewWidth, qmlContext(preview)));
     ASSERT_TRUE(QTest::qWaitFor([&] { return qAbs(preview->width() - previewWidth) < 0.5; }));
     EXPECT_LE(HistoryWindow::sceneRight(bar), HistoryWindow::sceneRight(listing) + 0.5);
+    checkSelector();
+  }
+}
+
+TEST(WindowHistoryNavigation, ViewSelectorHighlightsControllerSelectionThroughHoverAndModalGuard) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  auto* list = rendered.window->findChild<QQuickItem*>("listViewButton");
+  auto* icons = rendered.window->findChild<QQuickItem*>("iconViewButton");
+  ASSERT_NE(list, nullptr);
+  ASSERT_NE(icons, nullptr);
+  const auto paletteColor = [&](const QString& token) {
+    QQmlExpression expression(qmlContext(list), list, "HoloniightPalette." + token);
+    return expression.evaluate().value<QColor>();
+  };
+  const auto background = [](QQuickItem* button) { return button->property("background").value<QQuickItem*>(); };
+  for (bool iconView : {false, true, false}) {
+    rendered.controller.setIconView(iconView);
+    auto* selected = iconView ? icons : list;
+    auto* other = iconView ? list : icons;
+    ASSERT_TRUE(QTest::qWaitFor([&] { return selected->property("checked").toBool(); }));
+    EXPECT_FALSE(other->property("checked").toBool());
+    EXPECT_EQ(background(other)->property("color").value<QColor>(), QColor(Qt::transparent));
+    EXPECT_EQ(selected->property("focusPolicy").toInt(), Qt::NoFocus);
+    auto* icon = selected->findChild<QQuickItem*>("hnIconButtonIcon");
+    ASSERT_NE(icon, nullptr);
+    ASSERT_NE(background(selected), nullptr);
+    EXPECT_EQ(icon->property("resolvedColor").value<QColor>(), paletteColor("primary"));
+    EXPECT_EQ(background(selected)->property("color").value<QColor>(), paletteColor("surfaceRaised"));
+    QTest::mouseMove(rendered.window,
+                     selected->mapToScene(QPointF(selected->width() / 2, selected->height() / 2)).toPoint());
+    ASSERT_TRUE(QTest::qWaitFor([&] { return selected->property("hovered").toBool(); }));
+    EXPECT_TRUE(selected->property("checked").toBool());
+    EXPECT_EQ(icon->property("resolvedColor").value<QColor>(), paletteColor("primary"));
+    EXPECT_EQ(background(selected)->property("color").value<QColor>(), paletteColor("surfaceHover"));
+    const auto center = selected->mapToScene(QPointF(selected->width() / 2, selected->height() / 2)).toPoint();
+    QTest::mousePress(rendered.window, Qt::LeftButton, Qt::NoModifier, center);
+    EXPECT_TRUE(selected->property("checked").toBool());
+    EXPECT_EQ(background(selected)->property("color").value<QColor>(), paletteColor("surface"));
+    QTest::mouseRelease(rendered.window, Qt::LeftButton, Qt::NoModifier, center);
+    rendered.controller.setProperty("finderOpen", true);
+    ASSERT_FALSE(selected->isEnabled());
+    EXPECT_TRUE(selected->property("checked").toBool());
+    EXPECT_EQ(icon->property("resolvedColor").value<QColor>(), icon->property("disabledColor").value<QColor>());
+    EXPECT_EQ(background(selected)->property("color").value<QColor>(), paletteColor("surfaceRaised"));
+    rendered.controller.setProperty("finderOpen", false);
+    QTest::mouseMove(rendered.window, QPoint(1, 1));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !selected->property("hovered").toBool(); }));
   }
 }
 
