@@ -93,7 +93,6 @@ TEST(DirectoryControllerFileOps, VisualYCopiesSelectionAndExitsToNormal) {
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
-  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("v"));
   EXPECT_TRUE(controller.handleKey("j"));
   EXPECT_EQ(controller.vim()->selectedCount(), 2);
@@ -118,7 +117,6 @@ TEST(DirectoryControllerFileOps, VisualDCutsSelectionAndExitsToNormal) {
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
-  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("v"));
   EXPECT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("d"));
@@ -246,7 +244,6 @@ TEST(DirectoryControllerFileOps, VisualDTrashesEntireSelectionAfterOneConfirmati
   DirectoryController controller;
   controller.open(src.path());
   ASSERT_TRUE(settled(controller));
-  ASSERT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("v"));
   EXPECT_TRUE(controller.handleKey("j"));
   EXPECT_TRUE(controller.handleKey("j"));

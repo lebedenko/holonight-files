@@ -11,7 +11,6 @@ class FilesDirectoryProxyModel : public DirectoryProxyModel {
   Q_PROPERTY(bool sortDescending READ sortDescending WRITE setSortDescending NOTIFY sortDescendingChanged)
  public:
   explicit FilesDirectoryProxyModel(QObject* parent = nullptr);
-  void setParentVisible(bool visible);
   void setEditing(bool editing) { editing_ = editing; }
   void setHiddenVisible(bool visible);
   void setSortDescending(bool descending);
@@ -29,7 +28,6 @@ class FilesDirectoryProxyModel : public DirectoryProxyModel {
   [[nodiscard]] bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
 
  private:
-  bool parent_visible_ = true;
   bool editing_ = false;
   int placeholder_source_row_ = -1;
   QString placeholder_anchor_name_;

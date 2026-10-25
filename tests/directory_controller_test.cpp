@@ -62,11 +62,11 @@ TEST(DirectoryController, JAndKMoveTheCursorByOneAndClampAtBoundaries) {
   EXPECT_TRUE(controller.handleKey("j"));
   EXPECT_EQ(controller.cursorRow(), 2);
   EXPECT_TRUE(controller.handleKey("j"));
-  EXPECT_EQ(controller.cursorRow(), 3);
-  EXPECT_TRUE(controller.handleKey("j"));  // already at bottom; stays clamped
-  EXPECT_EQ(controller.cursorRow(), 3);
-  EXPECT_TRUE(controller.handleKey("k"));
   EXPECT_EQ(controller.cursorRow(), 2);
+  EXPECT_TRUE(controller.handleKey("j"));  // already at bottom; stays clamped
+  EXPECT_EQ(controller.cursorRow(), 2);
+  EXPECT_TRUE(controller.handleKey("k"));
+  EXPECT_EQ(controller.cursorRow(), 1);
 }
 
 TEST(DirectoryController, NumericPrefixAppliesAsMotionCount) {
@@ -88,7 +88,7 @@ TEST(DirectoryController, NumericPrefixAppliesAsMotionCount) {
   EXPECT_TRUE(controller.handleKey("1"));
   EXPECT_TRUE(controller.handleKey("0"));
   EXPECT_TRUE(controller.handleKey("j"));
-  EXPECT_EQ(controller.cursorRow(), 10);  // clamped to the last row (11 entries)
+  EXPECT_EQ(controller.cursorRow(), 9);  // clamped to the last row (10 entries)
 }
 
 TEST(DirectoryController, CountBufferResetsAfterAnyKeyMotionOrNot) {
@@ -116,7 +116,7 @@ TEST(DirectoryController, GgJumpsToFirstRowAndGJumpsToLastRow) {
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   EXPECT_TRUE(controller.handleKey("G"));
-  EXPECT_EQ(controller.cursorRow(), 5);
+  EXPECT_EQ(controller.cursorRow(), 4);
   EXPECT_TRUE(controller.handleKey("g"));
   EXPECT_TRUE(controller.handleKey("g"));
   EXPECT_EQ(controller.cursorRow(), 0);
@@ -255,19 +255,13 @@ TEST(DirectoryController, HNavigatesToParentDirectory) {
   EXPECT_EQ(QDir(controller.currentPath()).canonicalPath(), QDir(parent.path()).canonicalPath());
 }
 
-TEST(DirectoryController, ParentRowPreviewsTheParentFolderUnderItsOwnName) {
-  QTemporaryDir parent(fixturePattern("ctrl-parent-preview"));
-  ASSERT_TRUE(parent.isValid());
-  ASSERT_TRUE(QDir(parent.path()).mkdir("child"));
+TEST(DirectoryController, EmptyListingHasNoPreview) {
+  QTemporaryDir dir(fixturePattern("ctrl-empty-preview"));
   DirectoryController controller;
-  controller.open(QDir(parent.path()).filePath("child"));
+  controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
-  ASSERT_EQ(controller.cursorRow(), 0);
-  const QFileInfo parentInfo(parent.path());
-  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->modified().isValid(); }));
-  EXPECT_EQ(controller.preview()->name(), parentInfo.fileName());
-  EXPECT_EQ(controller.preview()->mimeType(), QStringLiteral("inode/directory"));
-  EXPECT_EQ(controller.preview()->modified().toSecsSinceEpoch(), parentInfo.lastModified().toSecsSinceEpoch());
+  EXPECT_EQ(controller.listing()->rowCount(), 0);
+  EXPECT_FALSE(controller.preview()->hasEntry());
 }
 
 TEST(DirectoryController, CursorRowStaysClampedToZeroOnAnEmptyDirectory) {
@@ -298,11 +292,11 @@ TEST(DirectoryController, WatcherObservesCreateRenameDeleteWithoutExplicitRefres
     return result;
   };
   ASSERT_FALSE(writeFile(dir, "created").isEmpty());
-  ASSERT_TRUE(QTest::qWaitFor([&] { return names() == QStringList{"..", "created"}; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return names() == QStringList{"created"}; }));
   ASSERT_TRUE(QFile::rename(dir.filePath("created"), dir.filePath("renamed")));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return names() == QStringList{"..", "renamed"}; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return names() == QStringList{"renamed"}; }));
   ASSERT_TRUE(QFile::remove(dir.filePath("renamed")));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return names() == QStringList{".."}; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return names() == QStringList{}; }));
 }
 
 TEST(DirectoryController, SpaceTogglesQuickLookWhenACursorIsOnAValidRow) {
@@ -363,21 +357,18 @@ TEST(DirectoryController, Stage1And2KeybindingsStillDispatchThroughHandleKeyUnch
   EXPECT_EQ(controller.cursorRow(), 0);
 
   // "." hidden-files toggle, unchanged since Stage 1: dotfile joins the listing.
-  EXPECT_EQ(controller.listing()->rowCount(), 4);
-  EXPECT_TRUE(controller.handleKey("."));
-  EXPECT_EQ(controller.listing()->rowCount(), 5);
+  EXPECT_EQ(controller.listing()->rowCount(), 3);
   EXPECT_TRUE(controller.handleKey("."));
   EXPECT_EQ(controller.listing()->rowCount(), 4);
+  EXPECT_TRUE(controller.handleKey("."));
+  EXPECT_EQ(controller.listing()->rowCount(), 3);
 
-  // "s" sort-direction toggle, unchanged since Stage 1: row 1 identity reverses while row 0 stays "..".
-  EXPECT_EQ(nameAt(0), "..");
-  EXPECT_EQ(nameAt(1), "a.txt");
+  // "s" sort-direction toggle, unchanged since Stage 1: the first entry reverses.
+  EXPECT_EQ(nameAt(0), "a.txt");
   EXPECT_TRUE(controller.handleKey("s"));
-  EXPECT_EQ(nameAt(0), "..");
-  EXPECT_EQ(nameAt(1), "c.txt");
+  EXPECT_EQ(nameAt(0), "c.txt");
   EXPECT_TRUE(controller.handleKey("s"));
-  EXPECT_EQ(nameAt(0), "..");
-  EXPECT_EQ(nameAt(1), "a.txt");
+  EXPECT_EQ(nameAt(0), "a.txt");
 
   // Space Quick Look, unchanged since Stage 2 (now gated on the previewed file's MIME).
   EXPECT_TRUE(controller.handleKey("j"));
@@ -564,8 +555,8 @@ TEST(DirectoryController, VPressEntersVisualModeAndEscapeExitsIt) {
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
   EXPECT_TRUE(controller.handleKey("v"));
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Visual);
-  EXPECT_EQ(controller.cursorRow(), 1);
-  EXPECT_FALSE(controller.vim()->isRowSelected(0));
+  EXPECT_EQ(controller.cursorRow(), 0);
+  EXPECT_TRUE(controller.vim()->isRowSelected(0));
   EXPECT_EQ(controller.vim()->selectedCount(), 1);
   EXPECT_TRUE(controller.handleKey("Escape"));
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
@@ -584,16 +575,16 @@ TEST(DirectoryController, VisualModeMotionsExtendSelectionAndCountedMotionsWork)
   EXPECT_TRUE(controller.handleKey("V"));
   EXPECT_TRUE(controller.handleKey("3"));
   EXPECT_TRUE(controller.handleKey("j"));
-  EXPECT_EQ(controller.cursorRow(), 4);
+  EXPECT_EQ(controller.cursorRow(), 3);
   EXPECT_EQ(controller.vim()->selectedCount(), 4);
-  EXPECT_FALSE(controller.vim()->isRowSelected(0));
-  for (int row = 1; row <= 4; ++row) {
+  EXPECT_TRUE(controller.vim()->isRowSelected(0));
+  for (int row = 0; row <= 3; ++row) {
     EXPECT_TRUE(controller.vim()->isRowSelected(row));
   }
   EXPECT_TRUE(controller.handleKey("g"));
   EXPECT_TRUE(controller.handleKey("g"));
-  EXPECT_EQ(controller.cursorRow(), 1);
-  EXPECT_FALSE(controller.vim()->isRowSelected(0));
+  EXPECT_EQ(controller.cursorRow(), 0);
+  EXPECT_TRUE(controller.vim()->isRowSelected(0));
   EXPECT_EQ(controller.vim()->selectedCount(), 1);
 }
 
@@ -807,19 +798,17 @@ TEST(DirectoryController, OPlacesThePlaceholderImmediatelyBelowTheCursorRegardle
   auto nameAt = [&](int row) {
     return controller.listing()->data(controller.listing()->index(row, 0), DirectoryModel::NameRole).toString();
   };
-  ASSERT_TRUE(controller.handleKey("j"));
-  ASSERT_TRUE(controller.handleKey("j"));  // cursor to "c.txt" (row 2)
+  ASSERT_TRUE(controller.handleKey("j"));  // cursor to "c.txt" (row 1)
   ASSERT_EQ(nameAt(controller.cursorRow()), "c.txt");
   ASSERT_TRUE(controller.handleKey("o"));
-  ASSERT_EQ(controller.listing()->rowCount(), 5);
+  ASSERT_EQ(controller.listing()->rowCount(), 4);
   // The placeholder (its committed name would alphabetically sort as "b*", between a and c) must
   // stay pinned right after "c.txt", not jump to where an empty name would naturally sort.
-  EXPECT_EQ(nameAt(0), "..");
-  EXPECT_EQ(nameAt(1), "a.txt");
-  EXPECT_EQ(nameAt(2), "c.txt");
-  EXPECT_EQ(nameAt(3), "");  // the placeholder itself
-  EXPECT_EQ(nameAt(4), "e.txt");
-  EXPECT_EQ(controller.cursorRow(), 3);
+  EXPECT_EQ(nameAt(0), "a.txt");
+  EXPECT_EQ(nameAt(1), "c.txt");
+  EXPECT_EQ(nameAt(2), "");  // the placeholder itself
+  EXPECT_EQ(nameAt(3), "e.txt");
+  EXPECT_EQ(controller.cursorRow(), 2);
   controller.cancelInsertEditing();
 }
 
@@ -835,16 +824,14 @@ TEST(DirectoryController, OAboveThePlaceholderPlacesItImmediatelyBeforeTheCursor
   auto nameAt = [&](int row) {
     return controller.listing()->data(controller.listing()->index(row, 0), DirectoryModel::NameRole).toString();
   };
-  ASSERT_TRUE(controller.handleKey("j"));
-  ASSERT_TRUE(controller.handleKey("j"));  // cursor to "c.txt" (row 2)
+  ASSERT_TRUE(controller.handleKey("j"));  // cursor to "c.txt" (row 1)
   ASSERT_TRUE(controller.handleKey("O"));
-  ASSERT_EQ(controller.listing()->rowCount(), 5);
-  EXPECT_EQ(nameAt(0), "..");
-  EXPECT_EQ(nameAt(1), "a.txt");
-  EXPECT_EQ(nameAt(2), "");  // the placeholder, immediately above "c.txt"
-  EXPECT_EQ(nameAt(3), "c.txt");
-  EXPECT_EQ(nameAt(4), "e.txt");
-  EXPECT_EQ(controller.cursorRow(), 2);
+  ASSERT_EQ(controller.listing()->rowCount(), 4);
+  EXPECT_EQ(nameAt(0), "a.txt");
+  EXPECT_EQ(nameAt(1), "");  // the placeholder, immediately above "c.txt"
+  EXPECT_EQ(nameAt(2), "c.txt");
+  EXPECT_EQ(nameAt(3), "e.txt");
+  EXPECT_EQ(controller.cursorRow(), 1);
   controller.cancelInsertEditing();
 }
 
@@ -873,7 +860,7 @@ TEST(DirectoryController, ExclusiveCreationPreservesRacingCollisionAndRetainsEdi
   controller.commitInsertEditing();
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Insert);
   EXPECT_EQ(controller.vim()->insertText(), "race");
-  EXPECT_EQ(controller.listing()->rowCount(), 2);
+  EXPECT_EQ(controller.listing()->rowCount(), 1);
   QFile file(dir.filePath("race"));
   ASSERT_TRUE(file.open(QIODevice::ReadOnly));
   EXPECT_EQ(file.readAll(), "keep contents");
@@ -1060,7 +1047,7 @@ TEST(DirectoryController, SearchRepeatInvalidatesAndEscapeRestoresFilenameIdenti
                 .toString(),
             "b");
   ASSERT_TRUE(QFile::remove(dir.filePath("b")));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 5; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 4; }));
   controller.handleKey("n");
   EXPECT_EQ(controller.listing()
                 ->data(controller.listing()->index(controller.cursorRow(), 0), DirectoryModel::NameRole)
@@ -1069,9 +1056,9 @@ TEST(DirectoryController, SearchRepeatInvalidatesAndEscapeRestoresFilenameIdenti
   controller.handleKey("/");
   controller.updateSearchQuery("c");
   ASSERT_TRUE(QFile::remove(dir.filePath(".b")));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 4; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 3; }));
   controller.cancelSearchEditing();
-  EXPECT_EQ(controller.cursorRow(), 1);  // Removed pre-search identity falls back to original row.
+  EXPECT_EQ(controller.cursorRow(), 0);  // Removed pre-search identity falls back to original row.
 }
 
 TEST(DirectoryController, PendingScansCannotMoveEditorAndCancelReconciles) {
@@ -1115,7 +1102,7 @@ TEST(DirectoryController, PendingScansCannotMoveEditorAndCancelReconciles) {
     DirectoryModelTestAccess::beforeOpen(model, {});
     controller.cancelInsertEditing();
     ASSERT_TRUE(settled(controller));
-    EXPECT_EQ(controller.listing()->rowCount(), 602);
+    EXPECT_EQ(controller.listing()->rowCount(), 601);
   }
 }
 
@@ -1231,7 +1218,7 @@ TEST(DirectoryController, NavigateParentPositionsCursorOnChildBasename) {
   controller.handleKey("h");
   ASSERT_TRUE(settled(controller));
   EXPECT_EQ(controller.currentPath(), fixture.root);
-  EXPECT_EQ(controller.cursorRow(), 2);
+  EXPECT_EQ(controller.cursorRow(), 1);
   EXPECT_EQ(cursorName(controller), "mid");
 }
 
@@ -1246,7 +1233,7 @@ TEST(DirectoryController, NavigateParentFallsBackToRowZeroWhenBasenameMissing) {
   ASSERT_TRUE(settled(controller));
   EXPECT_EQ(controller.currentPath(), fixture.mid);
   EXPECT_EQ(controller.cursorRow(), 0);
-  EXPECT_EQ(cursorName(controller), "..");
+  EXPECT_EQ(cursorName(controller), "aaa");
 }
 
 TEST(DirectoryController, RestoreAppliedOnLoadCompletionToNamedRow) {
@@ -1261,8 +1248,8 @@ TEST(DirectoryController, RestoreAppliedOnLoadCompletionToNamedRow) {
   ASSERT_TRUE(settled(controller));
   controller.handleKey("h");
   ASSERT_TRUE(settled(controller));
-  ASSERT_EQ(controller.listing()->rowCount(), 1204);
-  EXPECT_EQ(controller.cursorRow(), 3);
+  ASSERT_EQ(controller.listing()->rowCount(), 1203);
+  EXPECT_EQ(controller.cursorRow(), 2);
   EXPECT_EQ(cursorName(controller), "dir-z");
   // Case-sensitive: a differently cased sibling never matches (REQ-C-004).
   ASSERT_TRUE(QDir(dir.path()).mkdir("Dir-Q"));
@@ -1287,7 +1274,7 @@ TEST(DirectoryController, RestoreFallsBackToRowZeroWhenTargetNotVisible) {
   ASSERT_TRUE(settled(controller));
   EXPECT_FALSE(controller.listing()->hiddenVisible());
   EXPECT_EQ(controller.cursorRow(), 0);
-  EXPECT_EQ(cursorName(controller), "..");
+  EXPECT_EQ(cursorName(controller), "aaa");
 }
 
 TEST(DirectoryController, RestoreNotAppliedAgainstEmptyListingDuringLoadReset) {
@@ -1301,7 +1288,7 @@ TEST(DirectoryController, RestoreNotAppliedAgainstEmptyListingDuringLoadReset) {
     controller.handleKey("h");
     ASSERT_TRUE(gate.waitEntered());
     EXPECT_TRUE(controller.scanning());
-    EXPECT_EQ(controller.listing()->rowCount(), 1);
+    EXPECT_EQ(controller.listing()->rowCount(), 0);
     EXPECT_EQ(controller.cursorRow(), 0);
     gate.release();
     ASSERT_TRUE(settled(controller));
@@ -1328,7 +1315,7 @@ TEST(DirectoryController, ExplicitJCancelsPendingRestoreBeforeLoadCompletes) {
     gate.release();
     ASSERT_TRUE(settled(controller));
     EXPECT_EQ(controller.cursorRow(), 0) << motion;  // the motion ran on an empty listing
-    EXPECT_EQ(cursorName(controller), "..") << motion;
+    EXPECT_EQ(cursorName(controller), "aaa") << motion;
   }
 }
 
@@ -1380,17 +1367,17 @@ TEST(DirectoryController, WatcherRefreshAfterRestoreDoesNotMoveCursor) {
   ASSERT_EQ(cursorName(controller), "b.txt");
   const int row = controller.cursorRow();
   writeFile(dir, "c.txt");
-  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 5 && !controller.scanning(); }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 4 && !controller.scanning(); }));
   EXPECT_EQ(controller.cursorRow(), row);
   // Without an explicit move in between, a refresh still leaves the restored row alone.
   controller.open(fixture.mid);
   ASSERT_TRUE(settled(controller));
   controller.handleKey("h");
   ASSERT_TRUE(settled(controller));
-  ASSERT_EQ(controller.cursorRow(), 2);
+  ASSERT_EQ(controller.cursorRow(), 1);
   ASSERT_TRUE(QDir(dir.path()).mkdir("0-first"));  // sorts before "mid", shifting it down a row
-  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 6 && !controller.scanning(); }));
-  EXPECT_EQ(controller.cursorRow(), 2);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 5 && !controller.scanning(); }));
+  EXPECT_EQ(controller.cursorRow(), 1);
 }
 
 namespace {
@@ -1464,7 +1451,6 @@ TEST(DirectoryController, OpenNavigateIntoNavigateParentAllUpdateHistory) {
   const auto fixture = buildHistoryFixture(dir);
   DirectoryController controller;
   ASSERT_TRUE(openSettled(controller, dir.path()));
-  controller.handleKey("j");
   controller.handleKey("j");  // "b"
   controller.handleKey("l");
   ASSERT_TRUE(settled(controller));
@@ -1496,7 +1482,6 @@ TEST(DirectoryController, CursorEntryNameCapturedOnEveryNavigationAwayMethod) {
   };
 
   ASSERT_TRUE(openSettled(controller, fixture.a));
-  controller.handleKey("j");
   controller.handleKey("j");                        // 2.txt
   ASSERT_TRUE(openSettled(controller, fixture.b));  // open()
   EXPECT_EQ(storedName(fixture.a), "2.txt");
@@ -1745,7 +1730,7 @@ TEST(DirectoryController, PendingCountConsumedByHistoryNavigationRegardlessOfOut
   controller.navigateHistoryBack();  // gated off in VISUAL, but still consumes the count
   EXPECT_EQ(controller.currentPath(), fixture.c);
   controller.handleKey("j");
-  EXPECT_EQ(controller.cursorRow(), 2);
+  EXPECT_EQ(controller.cursorRow(), 1);
 }
 
 TEST(DirectoryController, GoBackAndGoForwardAlwaysUseCountOneIgnoringPendingCount) {
@@ -2245,89 +2230,34 @@ TEST(DirectoryController, ShutdownIgnoresDuplicateWorkerCompletionsAndRepeatedRe
   EXPECT_EQ(finished.count(), 1);
 }
 
-TEST(DirectoryController, ParentRowActivatesNavigateParent) {
+TEST(DirectoryController, ParentNavigationUsesKeyboardAndUpButton) {
   QTemporaryDir parent(fixturePattern("parent-nav"));
-  ASSERT_TRUE(parent.isValid());
   ASSERT_TRUE(QDir(parent.path()).mkdir("child"));
-  const auto childPath = QDir(parent.path()).filePath("child");
-  writeFile(parent, "child/item.txt");
   DirectoryController controller;
-  controller.open(childPath);
+  for (const auto* key : {"h"}) {
+    controller.open(parent.filePath("child"));
+    ASSERT_TRUE(settled(controller));
+    EXPECT_EQ(controller.listing()->rowCount(), 0);
+    EXPECT_TRUE(controller.handleKey(key));
+    ASSERT_TRUE(settled(controller));
+    EXPECT_EQ(controller.currentPath(), parent.path());
+    EXPECT_EQ(cursorName(controller), "child");
+  }
+  controller.open(parent.filePath("child"));
   ASSERT_TRUE(settled(controller));
-  EXPECT_EQ(controller.cursorRow(), 0);
-  EXPECT_EQ(cursorName(controller), "..");
-  EXPECT_TRUE(controller.listing()->data(controller.listing()->index(0, 0), DirectoryModel::IsParentRole).toBool());
-
-  // 'l' key navigates to parent
-  EXPECT_TRUE(controller.handleKey("l"));
-  ASSERT_TRUE(settled(controller));
-  EXPECT_EQ(controller.currentPath(), parent.path());
-  EXPECT_EQ(cursorName(controller), "child");
-
-  // Re-enter child
-  EXPECT_TRUE(controller.handleKey("l"));
-  ASSERT_TRUE(settled(controller));
-  EXPECT_EQ(controller.currentPath(), childPath);
-  EXPECT_EQ(controller.cursorRow(), 0);
-
-  // 'Return' key navigates to parent
-  EXPECT_TRUE(controller.handleKey("Return"));
-  ASSERT_TRUE(settled(controller));
-  EXPECT_EQ(controller.currentPath(), parent.path());
-  EXPECT_EQ(cursorName(controller), "child");
-
-  // Re-enter child and click row 0 (openEntry(0))
-  EXPECT_TRUE(controller.handleKey("l"));
-  ASSERT_TRUE(settled(controller));
-  EXPECT_EQ(controller.currentPath(), childPath);
-  controller.openEntry(0);
+  controller.goUp();
   ASSERT_TRUE(settled(controller));
   EXPECT_EQ(controller.currentPath(), parent.path());
   EXPECT_EQ(cursorName(controller), "child");
 }
 
-TEST(DirectoryController, ParentRowProtectedFromOperations) {
-  QTemporaryDir dir(fixturePattern("parent-ops"));
-  ASSERT_TRUE(dir.isValid());
-  writeFile(dir, "file.txt");
-  DirectoryController controller;
-  controller.open(dir.path());
-  ASSERT_TRUE(settled(controller));
-  EXPECT_EQ(controller.cursorRow(), 0);
-  EXPECT_EQ(cursorName(controller), "..");
-
-  // Rename keys (i / a) are no-ops
-  EXPECT_TRUE(controller.handleKey("i"));
-  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
-  EXPECT_TRUE(controller.handleKey("a"));
-  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
-
-  // Trash key (D) is a no-op
-  EXPECT_TRUE(controller.handleKey("D"));
-  EXPECT_FALSE(controller.tasks()->hasPrompt());
-
-  // Yank and cut chords (yy, dd) are no-ops
-  EXPECT_TRUE(controller.handleKey("y"));
-  EXPECT_TRUE(controller.handleKey("y"));
-  EXPECT_TRUE(controller.handleKey("d"));
-  EXPECT_TRUE(controller.handleKey("d"));
-
-  // Destination paste does nothing because clipboard is empty
-  QTemporaryDir dst(fixturePattern("parent-ops-dst"));
-  controller.open(dst.path());
-  ASSERT_TRUE(settled(controller));
-  EXPECT_TRUE(controller.handleKey("p"));
-  EXPECT_FALSE(controller.tasks()->busy());
-  EXPECT_EQ(controller.listing()->rowCount(), 1);  // only synthetic ".."
-}
-
-TEST(DirectoryController, VisualSelectionSkipsParentRowAndRequiresARealEntry) {
+TEST(DirectoryController, VisualSelectionRequiresARealEntry) {
   QTemporaryDir dir(fixturePattern("parent-visual"));
   ASSERT_TRUE(dir.isValid());
   DirectoryController controller;
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
-  ASSERT_EQ(controller.listing()->rowCount(), 1);
+  ASSERT_EQ(controller.listing()->rowCount(), 0);
   EXPECT_TRUE(controller.handleKey("v"));
   EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
   EXPECT_EQ(controller.vim()->selectedCount(), 0);
@@ -2335,46 +2265,32 @@ TEST(DirectoryController, VisualSelectionSkipsParentRowAndRequiresARealEntry) {
   writeFile(dir, "item.txt");
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
-  ASSERT_EQ(controller.listing()->rowCount(), 2);
+  ASSERT_EQ(controller.listing()->rowCount(), 1);
   EXPECT_TRUE(controller.handleKey("v"));
-  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_EQ(controller.cursorRow(), 0);
   EXPECT_EQ(controller.vim()->selectedCount(), 1);
-  EXPECT_FALSE(controller.vim()->isRowSelected(0));
+  EXPECT_TRUE(controller.vim()->isRowSelected(0));
   EXPECT_TRUE(controller.handleKey("k"));
-  EXPECT_EQ(controller.cursorRow(), 1);
-  EXPECT_FALSE(controller.vim()->isRowSelected(0));
+  EXPECT_EQ(controller.cursorRow(), 0);
+  EXPECT_TRUE(controller.vim()->isRowSelected(0));
 }
 
-TEST(DirectoryController, ParentRowExcludedFromSearchAndQuickLook) {
-  QTemporaryDir dir(fixturePattern("parent-search-ql"));
-  ASSERT_TRUE(dir.isValid());
-  writeFile(dir, "item.txt");
+TEST(DirectoryController, FirstEntrySupportsSearchAndQuickLook) {
+  QTemporaryDir dir(fixturePattern("first-search-ql"));
+  writeNumberedLines(dir, "item.txt", 5);
   DirectoryController controller;
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   EXPECT_EQ(controller.cursorRow(), 0);
-  EXPECT_EQ(cursorName(controller), "..");
-
-  // Space Quick Look on parent row is a no-op
+  EXPECT_EQ(cursorName(controller), "item.txt");
+  ASSERT_TRUE(quickLookReady(controller));
   EXPECT_TRUE(controller.handleKey(" "));
-  EXPECT_FALSE(controller.quickLookOpen());
-
-  // Search query "." matches "item.txt" (row 1), never ".." (row 0)
+  EXPECT_TRUE(controller.quickLookOpen());
+  controller.handleKey("Escape");
   EXPECT_TRUE(controller.handleKey("/"));
   controller.updateSearchQuery(".");
   EXPECT_EQ(cursorName(controller), "item.txt");
-  EXPECT_EQ(controller.cursorRow(), 1);
-  controller.cancelSearchEditing();
-
-  // Position cursor on row 1 ("item.txt")
-  EXPECT_TRUE(controller.handleKey("j"));
-  EXPECT_EQ(cursorName(controller), "item.txt");
-
-  // Search query ".." matches nothing (excludes parent row) so cursor does NOT jump to row 0
-  EXPECT_TRUE(controller.handleKey("/"));
-  controller.updateSearchQuery("..");
-  EXPECT_EQ(cursorName(controller), "item.txt");
-  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_EQ(controller.cursorRow(), 0);
   controller.cancelSearchEditing();
 }
 
@@ -2453,7 +2369,7 @@ TEST(DirectoryController, IconViewNotifiesOnlyAcceptedChangesAfterRestoringCurso
   QSignalSpy changed(&controller, &DirectoryController::iconViewChanged);
   QObject::connect(&controller, &DirectoryController::iconViewChanged, &controller, [&] {
     EXPECT_EQ(controller.cursorPath(), path);
-    EXPECT_EQ(controller.listing()->rowCount(), controller.iconView() ? 1 : 2);
+    EXPECT_EQ(controller.listing()->rowCount(), 1);
   });
   controller.setIconView(false);
   EXPECT_EQ(changed.count(), 0);
@@ -2478,7 +2394,7 @@ TEST(DirectoryController, IconViewPreservesSelectionAndFiltersParent) {
   DirectoryController controller;
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
-  controller.selectEntry(2);
+  controller.selectEntry(1);
   const auto path = controller.cursorPath();
   controller.setIconView(true);
   EXPECT_TRUE(controller.iconView());
@@ -2588,4 +2504,31 @@ TEST(DirectoryController, IconUpRestoresExitedFolderAndDiscardsCount) {
   EXPECT_FALSE(controller.canGoUp());
   controller.goUp();
   EXPECT_EQ(controller.currentPath(), "/");
+}
+
+TEST(DirectoryController, EmptyListingCreationAndCancellationWorkInBothViews) {
+  QTemporaryDir dir(fixturePattern("empty-create-views"));
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  for (bool icons : {false, true}) {
+    controller.setIconView(icons);
+    EXPECT_EQ(controller.listing()->rowCount(), 0);
+    controller.handleKey("v");
+    EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+    for (const auto* key : {"o", "O"}) {
+      controller.handleKey(key);
+      EXPECT_EQ(controller.listing()->rowCount(), 1);
+      EXPECT_EQ(controller.cursorRow(), 0);
+      controller.cancelInsertEditing();
+      EXPECT_EQ(controller.listing()->rowCount(), 0);
+    }
+    controller.handleKey("o");
+    controller.updateInsertText("created.txt");
+    controller.commitInsertEditing();
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && controller.listing()->rowCount() == 1; }));
+    EXPECT_EQ(cursorName(controller), "created.txt");
+    ASSERT_TRUE(QFile::remove(dir.filePath("created.txt")));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 0; }));
+  }
 }

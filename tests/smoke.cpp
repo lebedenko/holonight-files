@@ -144,7 +144,7 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
   auto* list = window->findChild<QQuickItem*>("directoryListView");
   ASSERT_NE(list, nullptr);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return list->property("count").toInt() == 32; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return list->property("count").toInt() == 31; }));
   auto expectCursor = [&](int row) {
     EXPECT_EQ(controller.cursorRow(), row);
     EXPECT_TRUE(QTest::qWaitFor([&] { return list->property("currentIndex").toInt() == row; }));
@@ -176,7 +176,7 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
     QTest::keyClick(window, Qt::Key_9);
   }
   QTest::keyClick(window, Qt::Key_J);
-  expectCursor(31);
+  expectCursor(30);
   for (int i = 0; i < 40; ++i) {
     QTest::keyClick(window, Qt::Key_9);
   }
@@ -188,7 +188,7 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   QTest::keyClick(window, Qt::Key_J);
   expectCursor(1);
   QTest::keyClick(window, 'G', Qt::ShiftModifier);
-  expectCursor(31);
+  expectCursor(30);
   QTest::keyClick(window, Qt::Key_G);
   QTest::keyClick(window, Qt::Key_G);
   expectCursor(0);
@@ -206,19 +206,17 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   }
   EXPECT_TRUE(controller.listing()->hiddenVisible());
   EXPECT_TRUE(controller.listing()->sortDescending());
-  EXPECT_EQ(list->property("count").toInt(), 33);
+  EXPECT_EQ(list->property("count").toInt(), 32);
   QTest::keyClick(window, Qt::Key_S);
   QTest::keyClick(window, Qt::Key_Period);
-  EXPECT_EQ(list->property("count").toInt(), 32);
-  QTest::keyClick(window, Qt::Key_J);
-  expectCursor(1);
+  EXPECT_EQ(list->property("count").toInt(), 31);
+  expectCursor(0);
   for (const auto enter : {Qt::Key_L, Qt::Key_Return, Qt::Key_Enter}) {
     QTest::keyClick(window, enter);
     ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
     EXPECT_EQ(controller.currentPath(), dir.filePath("child"));
-    EXPECT_EQ(list->property("count").toInt(), 3);
-    QTest::keyClick(window, Qt::Key_J);
-    expectCursor(1);
+    EXPECT_EQ(list->property("count").toInt(), 2);
+    expectCursor(0);
     auto* placeholder = qvariant_cast<QQuickItem*>(list->property("currentItem"));
     ASSERT_NE(placeholder, nullptr);
     EXPECT_TRUE(placeholder->property("statFailed").toBool());
@@ -494,7 +492,7 @@ TEST(Files, LineNumberGutterHybridNumberingFollowsCursorSortAndFilter) {
   ASSERT_NE(loaded.list, nullptr);
   auto* window = loaded.window;
   auto* list = loaded.list;
-  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 6; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 5; }));
 
   QTest::keyClick(window, Qt::Key_2);
   QTest::keyClick(window, Qt::Key_J);
@@ -504,7 +502,7 @@ TEST(Files, LineNumberGutterHybridNumberingFollowsCursorSortAndFilter) {
   for (auto* label : labels) {
     texts.append(label->property("text").toString());
   }
-  EXPECT_EQ(texts, (QStringList{"2", "1", "3", "1", "2", "3"}));
+  EXPECT_EQ(texts, (QStringList{"2", "1", "3", "1", "2"}));
   EXPECT_TRUE(gutterMatchesCursor(list, controller));
   for (auto* label : labels) {
     EXPECT_EQ(label->property("font").value<QFont>().family(),
@@ -542,28 +540,28 @@ TEST(Files, LineNumberGutterHybridNumberingFollowsCursorSortAndFilter) {
 
   // REQ-F-007: hidden-files toggle and sort-order changes renumber every visible row.
   QTest::keyClick(window, Qt::Key_Period);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 7; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 6; }));
   EXPECT_TRUE(gutterMatchesCursor(list, controller));
   QTest::keyClick(window, Qt::Key_S);
   ASSERT_TRUE(controller.listing()->sortDescending());
   EXPECT_TRUE(QTest::qWaitFor([&] { return gutterMatchesCursor(list, controller); }));
   QTest::keyClick(window, Qt::Key_S);
   QTest::keyClick(window, Qt::Key_Period);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 6; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 5; }));
   EXPECT_TRUE(gutterMatchesCursor(list, controller));
 
   // REQ-F-008: a watcher refresh adding an entry above the cursor renumbers the rows.
   QTest::keyClick(window, 'G', Qt::ShiftModifier);
-  ASSERT_EQ(controller.cursorRow(), 5);
+  ASSERT_EQ(controller.cursorRow(), 4);
   ASSERT_FALSE(files_test::writeFile(dir, "a-first.txt").isEmpty());
-  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 7; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 6; }));
   EXPECT_TRUE(QTest::qWaitFor([&] { return gutterMatchesCursor(list, controller); }));
 }
 
 TEST(Files, LineNumberGutterWidthGrowsWithDigitsButBreadcrumbStays) {
   QTemporaryDir dir(files_test::fixturePattern("gutter-width"));
   ASSERT_TRUE(dir.isValid());
-  files_test::populateEntries(dir, 998);
+  files_test::populateEntries(dir, 999);
   DirectoryController controller;
   auto loaded = loadActiveWindow(controller, dir.path());
   ASSERT_NE(loaded.list, nullptr);
@@ -617,14 +615,14 @@ TEST(Files, LineNumberGutterNumbersPlaceholderRowsAndClearsForInlineEditor) {
   ASSERT_NE(loaded.list, nullptr);
   auto* window = loaded.window;
   auto* list = loaded.list;
-  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 5; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 4; }));
   QTest::keyClick(window, Qt::Key_J);
   ASSERT_EQ(controller.cursorRow(), 1);
 
   // REQ-F-012: the o placeholder (below the cursor, which moves onto it) is numbered like any row.
   QTest::keyClick(window, Qt::Key_O);
   ASSERT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Insert);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 6; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 5; }));
   const int placeholderRow = controller.vim()->editingRow();
   EXPECT_EQ(placeholderRow, 2);
   EXPECT_TRUE(gutterMatchesCursor(list, controller));
@@ -642,7 +640,7 @@ TEST(Files, LineNumberGutterNumbersPlaceholderRowsAndClearsForInlineEditor) {
 
   // Cancelling removes the placeholder and renumbers the remaining rows.
   QTest::keyClick(window, Qt::Key_Escape);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 5; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 4; }));
   EXPECT_TRUE(QTest::qWaitFor([&] { return gutterMatchesCursor(list, controller); }));
 
   // Committing re-sorts the new entry; every row still matches its proxy index.
@@ -652,7 +650,7 @@ TEST(Files, LineNumberGutterNumbersPlaceholderRowsAndClearsForInlineEditor) {
   ASSERT_NE(editor, nullptr);
   editor->setProperty("text", "zz-last.txt");
   QTest::keyClick(window, Qt::Key_Return);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && gutterLabels(list).size() == 6; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && gutterLabels(list).size() == 5; }));
   EXPECT_TRUE(QFile::exists(dir.filePath("zz-last.txt")));
   EXPECT_TRUE(QTest::qWaitFor([&] { return gutterMatchesCursor(list, controller); }));
 }
@@ -671,11 +669,11 @@ TEST(Files, LineNumberGutterHeaderStaysForEmptyAndUnreadableDirectories) {
   ASSERT_NE(header, nullptr);
   ASSERT_TRUE(QTest::qWaitFor([&] { return !gutterLabels(list).isEmpty(); }));
 
-  // REQ-F-013: an empty directory has parent row (gutter size 1) and keeps the header spacer.
+  // REQ-F-013: an empty directory has no rows and keeps the header spacer.
   controller.open(dir.filePath("empty"));
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
-  EXPECT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 1; }));
-  EXPECT_EQ(list->property("count").toInt(), 1);
+  EXPECT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 0; }));
+  EXPECT_EQ(list->property("count").toInt(), 0);
   EXPECT_TRUE(header->isVisible());
   EXPECT_EQ(header->width(), loaded.listing->property("lineNumberGutterWidth").toReal());
 
@@ -728,8 +726,8 @@ QList<QQuickItem*> filenameRunsFor(QQuickItem* list, const QString& entryName) {
 }  // namespace
 
 // entry-type-name-styling: symlinks render italic + secondary color (REQ-F-001), folders render
-// bold (REQ-F-002), regular files are unchanged (REQ-F-003), and the ".." row follows the folder
-// rule (REQ-F-004) — a symlink-to-directory renders as a symlink, not a folder (REQ-F-001 wins).
+// bold (REQ-F-002), and regular files are unchanged (REQ-F-003).
+// A symlink-to-directory renders as a symlink, not a folder (REQ-F-001 wins).
 TEST(Files, EntryNameStylingReflectsFolderSymlinkAndFile) {
   QTemporaryDir dir(files_test::fixturePattern("name-styling"));
   ASSERT_TRUE(dir.isValid());
@@ -740,7 +738,7 @@ TEST(Files, EntryNameStylingReflectsFolderSymlinkAndFile) {
   DirectoryController controller;
   auto loaded = loadActiveWindow(controller, dir.path());
   ASSERT_NE(loaded.list, nullptr);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && loaded.list->property("count").toInt() == 5; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && loaded.list->property("count").toInt() == 4; }));
   // Delegate instantiation lags one event-loop turn behind the count change.
   ASSERT_TRUE(QTest::qWaitFor([&] { return !filenameRunsFor(loaded.list, QStringLiteral("plain.txt")).isEmpty(); }));
 
@@ -750,7 +748,6 @@ TEST(Files, EntryNameStylingReflectsFolderSymlinkAndFile) {
     bool bold;
   };
   for (const auto& expectation : {
-           Expectation{.name = "..", .italic = false, .bold = true},
            Expectation{.name = "plain.txt", .italic = false, .bold = false},
            Expectation{.name = "folder", .italic = false, .bold = true},
            Expectation{.name = "file-link", .italic = true, .bold = false},
@@ -902,10 +899,10 @@ TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
     controller.open(dir.path());
     auto* list = window->findChild<QQuickItem*>("directoryListView");
     ASSERT_NE(list, nullptr);
-    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && list->property("count").toInt() == 4; }));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && list->property("count").toInt() == 3; }));
 
-    // Sorted folders first: 0 .., 1 a-folder, 2 b-notes.txt, 3 c-dangling.
-    for (const int row : {0, 1}) {
+    // Sorted folders first: 0 a-folder, 1 b-notes.txt, 2 c-dangling.
+    for (const int row : {0}) {
       ASSERT_TRUE(QTest::qWaitFor([&] {
         const auto folder = rowIcons(list, row);
         return folder.theme != nullptr && folder.theme->isVisible() && imageReady(folder.theme);
@@ -913,7 +910,7 @@ TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
       EXPECT_FALSE(rowIcons(list, row).fallback->isVisible()) << row;
       EXPECT_EQ(rowIcons(list, row).theme->property("source").toString(), "image://icon/folder/inode-directory") << row;
     }
-    for (const int row : {2, 3}) {
+    for (const int row : {1, 2}) {
       ASSERT_TRUE(QTest::qWaitFor([&] {
         const auto icons = rowIcons(list, row);
         return icons.fallback != nullptr && icons.fallback->isVisible() && imageReady(icons.fallback);
@@ -959,7 +956,6 @@ TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
     }
     window->requestActivate();
     ASSERT_TRUE(QTest::qWaitForWindowActive(window));
-    QTest::keyClick(window, Qt::Key_J);
     QTest::keyClick(window, Qt::Key_J);
     ASSERT_TRUE(QTest::qWaitFor([&] { return previewFallback->isVisible() && imageReady(previewFallback); }));
     EXPECT_FALSE(previewTheme->isVisible());
@@ -1066,20 +1062,19 @@ TEST(Files, NamedFolderFallsBackToTheFolderGlyphWhenTheThemeLacksItsIcon) {
   controller.open(home);
   auto* list = window->findChild<QQuickItem*>("directoryListView");
   ASSERT_NE(list, nullptr);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && list->property("count").toInt() == 3; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && list->property("count").toInt() == 2; }));
 
-  // Sorted folders first: 0 .., 1 Documents, 2 z-notes.txt.
+  // Sorted folders first: 0 Documents, 1 z-notes.txt.
   auto* previewFallback = window->findChild<QQuickItem*>("previewFallbackIcon");
   ASSERT_NE(previewFallback, nullptr);
   window->requestActivate();
   ASSERT_TRUE(QTest::qWaitForWindowActive(window));
-  QTest::keyClick(window, Qt::Key_J);
   ASSERT_TRUE(QTest::qWaitFor([&] {
-    const auto icons = rowIcons(list, 1);
+    const auto icons = rowIcons(list, 0);
     return icons.fallback != nullptr && icons.fallback->isVisible() && imageReady(icons.fallback) &&
            previewFallback->isVisible() && imageReady(previewFallback);
   }));
-  EXPECT_TRUE(rowIcons(list, 1).fallback->property("source").toString().endsWith("folder-fallback.svg"));
+  EXPECT_TRUE(rowIcons(list, 0).fallback->property("source").toString().endsWith("folder-fallback.svg"));
   EXPECT_TRUE(previewFallback->property("source").toString().endsWith("folder-fallback.svg"));
   auto* failedIcons = engine.singletonInstance<IconFallbacks*>("HolonightFiles", "IconFallbacks");
   ASSERT_NE(failedIcons, nullptr);
@@ -1231,9 +1226,9 @@ TEST(Files, QuickLookConsumesSpaceBeforeDelegateActivationAndRestoresFocus) {
   text->forceActiveFocus();
   // Quick Look is pinned: j/k move the viewer's current line (clamped on a one-line file), never the cursor.
   QTest::keyClick(window, Qt::Key_J);
-  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_EQ(controller.cursorRow(), 0);
   QTest::keyClick(window, Qt::Key_K);
-  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_EQ(controller.cursorRow(), 0);
   EXPECT_TRUE(controller.quickLookOpen());
   window->showFullScreen();
   QTest::qWait(100);
@@ -1372,7 +1367,6 @@ TEST(Files, InspectionImageSplitterAndPixelSizing) {
   ASSERT_TRUE(QTest::qWaitForWindowActive(window));
   controller.open(dir.path());
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
-  controller.handleKey("j");  // Move from ".." to "image.bmp"
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->hasImage() && !controller.preview()->busy(); }));
   auto* pane = window->findChild<QQuickItem*>("previewPane");
   auto* listing = window->findChild<QQuickItem*>("directoryListing");
@@ -2482,7 +2476,7 @@ TEST(Files, QuickLookViewerHighlightsAndScrollsToTheCurrentLine) {
   EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 5);
   QTest::keyClick(harness.window, Qt::Key_Up);
   EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 4);
-  EXPECT_EQ(harness.controller.cursorRow(), 1);
+  EXPECT_EQ(harness.controller.cursorRow(), 0);
 }
 
 // quick-look-text-viewer REQ-F-013. The wheel event is synthesized in-process and delivered straight to the window;
@@ -2538,7 +2532,7 @@ TEST(Files, QuickLookWheelScrollsTheViewportWithoutChangingTheCurrentLine) {
   }
   EXPECT_LT(settledContentY(), scrolledDown);
   EXPECT_EQ(harness.controller.preview()->currentLineIndex(), 30);
-  EXPECT_EQ(harness.controller.cursorRow(), 1);
+  EXPECT_EQ(harness.controller.cursorRow(), 0);
 }
 
 // quick-look-text-viewer REQ-F-004/017: one row per line, clipped at the right edge, no horizontal scrolling.
@@ -2971,7 +2965,7 @@ TEST(Files, ModeBadgeNoMouseOrFocus) {
   EXPECT_FALSE(harness.badge.item->hasActiveFocus());
   EXPECT_EQ(harness.controller.vim()->currentMode(), VimModeController::Mode::Normal);
   QTest::keyClick(window, Qt::Key_J);
-  EXPECT_EQ(harness.controller.cursorRow(), 2);
+  EXPECT_EQ(harness.controller.cursorRow(), 1);
 }
 
 TEST(Files, InlineEditorSynchronizesTextWithoutBindingLoops) {

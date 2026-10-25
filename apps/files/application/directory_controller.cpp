@@ -138,7 +138,6 @@ void DirectoryController::setIconView(bool icons) {
   }
   const QPersistentModelIndex source = listing()->mapToSource(listing()->index(cursorRow(), 0));
   icon_view_ = icons;
-  listing()->setParentVisible(!icons);
   const auto target = listing()->mapFromSource(source);
   navigation_.cursor_row_ = target.isValid() ? target.row() : 0;
   ++editing_.listing_revision_;
@@ -427,12 +426,8 @@ void DirectoryController::execute(const FileCommand& command) {
       break;
     case Kind::Visual:
       cancelPendingRestore();
-      if (listing()->rowCount() > 0 && listing()->data(listing()->index(0, 0), DirectoryModel::IsParentRole).toBool() &&
-          cursorRow() == 0) {
-        if (listing()->rowCount() == 1) {
-          break;
-        }
-        setCursorRow(1);
+      if (listing()->rowCount() == 0) {
+        break;
       }
       vim_.enterVisual(cursorRow());
       break;

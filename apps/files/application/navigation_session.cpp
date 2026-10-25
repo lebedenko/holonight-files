@@ -139,11 +139,10 @@ void NavigationSession::setCursorRow(qint64 row) {
   cancelPendingRestore();
   const int last = proxy_.rowCount() - 1;
   const bool visual = controller_.vim_.currentMode() == VimModeController::Mode::Visual;
-  const bool hasParent = last >= 0 && proxy_.data(proxy_.index(0, 0), DirectoryModel::IsParentRole).toBool();
-  if (visual && hasParent && last == 0) {
+  if (visual && last < 0) {
     controller_.vim_.exitVisual();
   }
-  const int first = visual && hasParent && last > 0 ? 1 : 0;
+  const int first = 0;
   cursor_row_ = static_cast<int>(qBound(qint64{first}, row, qint64{qMax(first, last)}));
   if (controller_.vim_.currentMode() == VimModeController::Mode::Visual) {
     controller_.vim_.extendVisual(cursor_row_);
@@ -154,11 +153,10 @@ void NavigationSession::setCursorRow(qint64 row) {
 void NavigationSession::clampCursorRow() {
   const int last = proxy_.rowCount() - 1;
   const bool visual = controller_.vim_.currentMode() == VimModeController::Mode::Visual;
-  const bool hasParent = last >= 0 && proxy_.data(proxy_.index(0, 0), DirectoryModel::IsParentRole).toBool();
-  if (visual && hasParent && last == 0) {
+  if (visual && last < 0) {
     controller_.vim_.exitVisual();
   }
-  const int first = visual && hasParent && last > 0 ? 1 : 0;
+  const int first = 0;
   cursor_row_ = qBound(first, cursor_row_, qMax(first, last));
 }
 QString NavigationSession::entryNameAt(int proxyRow) const {

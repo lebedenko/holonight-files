@@ -12,7 +12,8 @@ The compact List/Icons selector sits 8 px after the breadcrumb frame and changes
 for the current session. The selected view has a primary-colored icon and subtle background.
 Icons show 64 px image thumbnails or themed icons and two-line filenames, with 8 px between tiles
 and around the container edges, including selection and hover backgrounds.
-There are no line numbers or parent tile.
+Neither view contains a parent entry. Use the Up button or `h` in List to open the parent folder.
+Icons have no line numbers.
 
 Grid view shows supported raster images and SVGs as asynchronous thumbnails in the existing 64 × 64 px icon area. Thumbnails preserve aspect ratio, transparency and image orientation, use the first animation frame, and keep small raster originals at native size. Folders, extensionless and unsupported files retain their icons; icons also remain visible while thumbnails load or if decoding fails. Requests follow display scaling and refreshed file metadata, and only instantiated grid tiles request thumbnails.
 
@@ -200,7 +201,7 @@ glyphs are drawn in the palette colours instead. Files never changes the icon th
 or its search paths; an icon theme installed while Files is running is picked up
 after a restart. See the [icons verification record](docs/sdd/main-view-icons/VERIFICATION.md).
 Folders that are Places entries (Home and the XDG user directories) show the same icon in the
-listing, the `..` row and the preview as in the sidebar (for example `folder-documents`), falling
+listing and the preview as in the sidebar (for example `folder-documents`), falling
 back to the generic folder icon when the theme lacks it. Matching is by exact listed path, so a
 same-named folder elsewhere or a symlink to a place keeps the generic folder icon, and bookmarks
 never change a listing icon. The list is read once at startup. See the
@@ -208,7 +209,7 @@ never change a listing icon. The list is read once at startup. See the
 
 Entry names are also styled by type: folders render bold, symlinks render italic in the secondary
 text color regardless of what they point at (a symlinked folder is styled as a symlink, not a
-folder), and regular files are unchanged. This also applies to the `..` row. See the
+folder), and regular files are unchanged. See the
 [entry name styling spec](docs/sdd/entry-type-name-styling/SPEC.md).
 
 Navigation history works like Vim's jump list: `Ctrl+O` goes back and `Ctrl+I` goes forward
@@ -509,8 +510,7 @@ external C++/QML consumer examples. CI pins published providers in `scripts/ci/p
 use `task check -- --siblings /path/to/umbrella` to test current sibling sources explicitly.
 
 Drag files or folders from a listing row into another folder, another Files window, or another
-application. Dragging a selected row in Visual mode transfers the whole selection. The `..`
-row cannot be dragged, but accepts drops into the parent folder. Dropping on a file or blank
+application. Dragging a selected row in Visual mode transfers the whole selection. Dropping on a file or blank
 listing space targets the current directory. Drops copy by default; hold Shift to move or
 Ctrl to copy. Link requests (Ctrl+Shift) are unsupported. Hover near the listing's top or bottom
 edge to scroll; folders do not open automatically. Existing task conflict prompts apply.

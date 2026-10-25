@@ -70,12 +70,12 @@ TEST(FileDrop, PayloadSelectionDestinationsAndGuards) {
   const int file = rowNamed(controller, name);
   const int child = rowNamed(controller, "child");
   ASSERT_GE(file, 0);
-  EXPECT_TRUE(controller.dragUriList(0).isEmpty());
+  EXPECT_FALSE(controller.dragUriList(0).isEmpty());
   EXPECT_EQ(QUrl(controller.dragUriList(file).trimmed()).toLocalFile(), src.filePath(name));
   EXPECT_EQ(controller.dropDestination(file), src.path());
   EXPECT_EQ(controller.dropDestination(-1), src.path());
   EXPECT_EQ(controller.dropDestination(child), src.filePath("child"));
-  EXPECT_EQ(controller.dropDestination(0), QFileInfo(src.path()).absolutePath());
+  EXPECT_EQ(controller.dropDestination(0), src.filePath("child"));
   controller.vim()->enterVisual(0);
   controller.vim()->extendVisual(file);
   const auto payload = controller.dragUriList(file);

@@ -38,7 +38,7 @@ TEST(PreviewStress, RapidPagingThroughManyLargeImagesShowsOnlyTheFinalEntry) {
   DirectoryController controller;
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
-  ASSERT_EQ(controller.listing()->rowCount(), kEntryCount + 1);
+  ASSERT_EQ(controller.listing()->rowCount(), kEntryCount);
   ASSERT_TRUE(previewSettled(controller));
 
   QElapsedTimer elapsed;
@@ -53,7 +53,7 @@ TEST(PreviewStress, RapidPagingThroughManyLargeImagesShowsOnlyTheFinalEntry) {
   // No backlog: settling after the burst takes a bounded amount of time proportional to one
   // decode, not kEntryCount decodes queued up behind each other.
   EXPECT_LT(elapsed.elapsed(), 5000);
-  EXPECT_EQ(controller.cursorRow(), kEntryCount);
+  EXPECT_EQ(controller.cursorRow(), kEntryCount - 1);
   EXPECT_EQ(controller.preview()->name(), QStringLiteral("img-%1.png").arg(kEntryCount - 1, 3, 10, QLatin1Char('0')));
   EXPECT_TRUE(controller.preview()->hasImage());
 }
