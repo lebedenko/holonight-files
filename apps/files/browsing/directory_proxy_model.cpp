@@ -26,20 +26,10 @@ bool FilesDirectoryProxyModel::lessThan(const QModelIndex& left, const QModelInd
       (left.row() != placeholder_source_row_ && right.row() != placeholder_source_row_)) {
     return DirectoryProxyModel::lessThan(left, right);
   }
-  const bool leftIsParent = sourceModel()->data(left, DirectoryRoles::IsParentRole).toBool();
-  const bool rightIsParent = sourceModel()->data(right, DirectoryRoles::IsParentRole).toBool();
-  if (leftIsParent != rightIsParent) {
-    return leftIsParent ? !sortDescending() : sortDescending();
-  }
   // The placeholder row borrows its anchor's (isDir, name) sort key instead of its own (it has no
   // real name yet) — see setPlaceholder().
   const bool leftIsPlaceholder = placeholder_source_row_ >= 0 && left.row() == placeholder_source_row_;
   const bool rightIsPlaceholder = placeholder_source_row_ >= 0 && right.row() == placeholder_source_row_;
-  const bool leftIsAnchorParent = leftIsPlaceholder && placeholder_anchor_name_ == QStringLiteral("..");
-  const bool rightIsAnchorParent = rightIsPlaceholder && placeholder_anchor_name_ == QStringLiteral("..");
-  if (leftIsAnchorParent != rightIsAnchorParent) {
-    return leftIsAnchorParent ? !sortDescending() : sortDescending();
-  }
   const bool leftIsDir =
       leftIsPlaceholder ? placeholder_anchor_is_dir_ : sourceModel()->data(left, DirectoryRoles::IsDirRole).toBool();
   const bool rightIsDir =
@@ -60,9 +50,4 @@ bool FilesDirectoryProxyModel::lessThan(const QModelIndex& left, const QModelInd
     return leftIsPlaceholder ? !belowInAscending : belowInAscending;
   }
   return false;
-}
-
-bool FilesDirectoryProxyModel::filterAcceptsRow(int row, const QModelIndex& parent) const {
-  return !sourceModel()->index(row, 0, parent).data(DirectoryRoles::IsParentRole).toBool() &&
-         DirectoryProxyModel::filterAcceptsRow(row, parent);
 }

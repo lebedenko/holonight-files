@@ -137,7 +137,6 @@ TEST(PlacesWindow, GuardsBlockActivation) {
   PlacesWindow view;
   ASSERT_TRUE(view.start());
   view.target();
-  view.controller.handleKey("j");  // Move from ".." to "target/"
   for (const auto* key : {"v", "/", "a"}) {
     view.controller.handleKey(key);
     EXPECT_FALSE(view.places->isEnabled()) << key;

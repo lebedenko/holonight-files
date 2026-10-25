@@ -2,8 +2,6 @@
 
 #include "directory_controller.h"
 
-#include <QFileInfo>
-
 #include <sys/stat.h>
 
 void PreviewSelection::syncPreviewTarget() {
@@ -41,12 +39,8 @@ void PreviewSelection::syncPreviewTarget() {
     controller_.navigation_.watcher_.addPath(path);
     emit controller_.navigated();
   }
-  // ".." previews the parent folder it links to, under that folder's own name ("/" for the root).
-  auto entryName = controller_.navigation_.model_.data(sourceIndex, DirectoryModel::NameRole).toString();
-  if (controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
-    const auto parentName = QFileInfo(path).fileName();
-    entryName = parentName.isEmpty() ? path : parentName;
-  }
+  const auto entryName = controller_.navigation_.model_.data(sourceIndex, DirectoryModel::NameRole).toString();
+
   preview_target_path_ = path;
   controller_.preview_.setTarget(
       path, controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IsDirRole).toBool(),
@@ -65,9 +59,7 @@ bool PreviewSelection::canPreviewSelection() const {
   }
   const auto sourceIndex = controller_.navigation_.proxy_.mapToSource(
       controller_.navigation_.proxy_.index(controller_.navigation_.cursor_row_, 0));
-  if (controller_.navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
-    return false;
-  }
+
   return controller_.preview_.hasEntry() && controller_.preview_.quickLookEligible() &&
          !controller_.navigation_.model_.data(sourceIndex, DirectoryModel::StatFailedRole).toBool();
 }

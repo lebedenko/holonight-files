@@ -108,9 +108,8 @@ TEST(WindowCrossFilesystem, VisualDTrashesEntireSelectionOnForeignFilesystemInOn
   rendered.controller.open(foreign);
   ASSERT_TRUE(settled(rendered.controller));
 
-  // Move from ".." to the first real entry, then v + j + j selects all three entries;
+  // v + j + j selects all three entries from the first child;
   // D requests trash confirmation for the whole selection as a single TaskManager task (T-090).
-  QTest::keyClick(rendered.window, Qt::Key_J);
   QTest::keyClick(rendered.window, Qt::Key_V);
   QTest::keyClick(rendered.window, Qt::Key_J);
   QTest::keyClick(rendered.window, Qt::Key_J);
@@ -148,7 +147,6 @@ TEST(WindowCrossFilesystem, VisualDValidThenInvalidTrashLocationsFailPerItemWith
   ASSERT_FALSE(writeFile(valid + "/keep-b.txt").isEmpty());
   rendered.controller.open(valid);
   ASSERT_TRUE(settled(rendered.controller));
-  QTest::keyClick(rendered.window, Qt::Key_J);
   QTest::keyClick(rendered.window, Qt::Key_V);
   QTest::keyClick(rendered.window, Qt::Key_J);
   QTest::keyClick(rendered.window, 'D', Qt::ShiftModifier);
@@ -172,7 +170,6 @@ TEST(WindowCrossFilesystem, VisualDValidThenInvalidTrashLocationsFailPerItemWith
   ASSERT_FALSE(writeFile(invalid + "/stuck-b.txt").isEmpty());
   rendered.controller.open(invalid);
   ASSERT_TRUE(settled(rendered.controller));
-  QTest::keyClick(rendered.window, Qt::Key_J);
   QTest::keyClick(rendered.window, Qt::Key_V);
   QTest::keyClick(rendered.window, Qt::Key_J);
   QTest::keyClick(rendered.window, 'D', Qt::ShiftModifier);
@@ -232,7 +229,6 @@ TEST(WindowCrossFilesystem, VisualDMixedMetadataFailureHasOneConfirmationAndPres
       }
     }
   });
-  QTest::keyClick(rendered.window, Qt::Key_J);
   QTest::keyClick(rendered.window, Qt::Key_V);
   QTest::keyClick(rendered.window, Qt::Key_J);
   QTest::keyClick(rendered.window, 'D', Qt::ShiftModifier);

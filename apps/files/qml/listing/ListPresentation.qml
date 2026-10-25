@@ -234,7 +234,6 @@ Item {
                 required property bool statFailed
                 required property string statError
                 required property string iconName
-                required property bool isParent
                 required property bool isSymlink
 
                 readonly property bool editingThis: root.controller.vim.currentMode === VimModeController.Insert && root.controller.vim.editingRow === delegate.index
@@ -257,7 +256,7 @@ Item {
                 title: name
                 filename: name
                 sizeText: isDir ? "" : SizeFormat.formatSize(size)
-                modifiedText: statFailed ? statError : (isParent ? "" : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm"))
+                modifiedText: statFailed ? statError : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm")
 
                 // Numbers live in the strip left of the list view; the delegate's own selection fill
                 // therefore never covers the gutter.

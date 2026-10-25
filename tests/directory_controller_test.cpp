@@ -296,7 +296,7 @@ TEST(DirectoryController, WatcherObservesCreateRenameDeleteWithoutExplicitRefres
   ASSERT_TRUE(QFile::rename(dir.filePath("created"), dir.filePath("renamed")));
   ASSERT_TRUE(QTest::qWaitFor([&] { return names() == QStringList{"renamed"}; }));
   ASSERT_TRUE(QFile::remove(dir.filePath("renamed")));
-  ASSERT_TRUE(QTest::qWaitFor([&] { return names() == QStringList{}; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return names().isEmpty(); }));
 }
 
 TEST(DirectoryController, SpaceTogglesQuickLookWhenACursorIsOnAValidRow) {
@@ -2304,8 +2304,6 @@ TEST(DirectoryController, RootDirectoryHasNoParentRow) {
     const auto name =
         controller.listing()->data(controller.listing()->index(row, 0), DirectoryModel::NameRole).toString();
     EXPECT_NE(name, "..");
-    EXPECT_FALSE(
-        controller.listing()->data(controller.listing()->index(row, 0), DirectoryModel::IsParentRole).toBool());
   }
   // Navigating parent from root is a no-op
   EXPECT_TRUE(controller.handleKey("h"));

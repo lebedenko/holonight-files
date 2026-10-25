@@ -43,10 +43,6 @@ QString NavigationSession::outgoingCursorName() const {
   if (awaiting_initial_load_ || cursor_row_ < 0 || cursor_row_ >= proxy_.rowCount()) {
     return {};
   }
-  const auto srcIndex = proxy_.mapToSource(proxy_.index(cursor_row_, 0));
-  if (model_.data(srcIndex, DirectoryModel::IsParentRole).toBool()) {
-    return {};
-  }
   return entryNameAt(cursor_row_);
 }
 void NavigationSession::traverseHistory(int direction, int count) {
@@ -97,10 +93,6 @@ void NavigationSession::navigateInto(int proxyRow) {
     return;
   }
   const auto sourceIndex = proxy_.mapToSource(proxy_.index(proxyRow, 0));
-  if (model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
-    navigateParent();
-    return;
-  }
   const auto path = model_.data(sourceIndex, DirectoryModel::PathRole).toString();
   if (!path.isEmpty()) {
     controller_.open(path);
@@ -119,10 +111,6 @@ void NavigationSession::openEntry(int proxyRow) {
     return;
   }
   const auto sourceIndex = proxy_.mapToSource(proxy_.index(proxyRow, 0));
-  if (model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
-    navigateParent();
-    return;
-  }
   const auto path = model_.data(sourceIndex, DirectoryModel::PathRole).toString();
   if (path.isEmpty()) {
     return;

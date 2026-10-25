@@ -144,7 +144,7 @@ TEST(FilesDirectoryProxyModel, EmptyPlaceholderAndEditingLocks) {
   EXPECT_FALSE(proxy.hiddenVisible());
 }
 
-TEST(FilesDirectoryProxyModel, ParentFilteringComposesWithHiddenAndSortAndEmptyDirectories) {
+TEST(FilesDirectoryProxyModel, ChildOnlyListingComposesWithHiddenAndSortAndEmptyDirectories) {
   QTemporaryDir dir(fixturePattern("proxy-parent"));
   ASSERT_FALSE(writeFile(dir, ".hidden").isEmpty());
   ASSERT_FALSE(writeFile(dir, "a").isEmpty());

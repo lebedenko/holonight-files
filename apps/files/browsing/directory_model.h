@@ -53,7 +53,6 @@ class DirectoryModel : public QAbstractListModel, public DirectoryRoles {
   void shutdown();
   // The synthetic ".." row shown until the walker delivers the parent folder's stat'ed entry. `places` may be
   // null (generic chain).
-  static DirectoryEntry syntheticParentEntry(const QString& path, const PlaceList::IconMap* places = nullptr);
   // Installs the immutable place->icon map used by walks started after this call (load()/refresh()). Rows
   // already in the model are not re-resolved; callers refresh() to apply it. GUI thread only. C++-only on
   // purpose (no Q_INVOKABLE/Q_PROPERTY/role). A null pointer restores generic-only behaviour.
@@ -90,7 +89,6 @@ class DirectoryModel : public QAbstractListModel, public DirectoryRoles {
   void walkFinished(quint64 generation);
   void applyBatch(const Batch& batch);
   // Applies a load batch's leading ".." entry to row 0 in place and returns the remaining entries.
-  QList<DirectoryEntry> replaceParentRow(QList<DirectoryEntry> entries);
   void appendEntries(const QList<DirectoryEntry>& entries);
   void applyDiffEntries(const QList<DirectoryEntry>& entries);
   void finishDiff();

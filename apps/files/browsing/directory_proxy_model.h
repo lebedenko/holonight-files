@@ -24,7 +24,6 @@ class FilesDirectoryProxyModel : public DirectoryProxyModel {
   void setPlaceholder(int sourceRow, const QString& anchorName, bool anchorIsDir, bool below);
 
  protected:
-  [[nodiscard]] bool filterAcceptsRow(int row, const QModelIndex& parent) const override;
   [[nodiscard]] bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
 
  private:

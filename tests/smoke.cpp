@@ -2107,12 +2107,6 @@ void loadQuickLookHarness(QuickLookHarness& harness, const QString& path, QSize 
   harness.controller.open(path);
   ASSERT_TRUE(
       QTest::qWaitFor([&] { return !harness.controller.scanning() && harness.controller.preview()->hasEntry(); }));
-  if (harness.controller.cursorRow() == 0 && harness.controller.listing()->rowCount() > 1 &&
-      harness.controller.listing()
-          ->data(harness.controller.listing()->index(0, 0), DirectoryModel::IsParentRole)
-          .toBool()) {
-    harness.controller.handleKey(QStringLiteral("j"));
-  }
 }
 
 void openQuickLook(QuickLookHarness& harness) {
@@ -2810,10 +2804,6 @@ struct BadgeHarness {
     loaded = loadActiveWindow(controller, dir.path());
     if (loaded.window != nullptr) {
       badge = findModeBadge(loaded.window);
-      if (controller.cursorRow() == 0 && controller.listing()->rowCount() > 1 &&
-          controller.listing()->data(controller.listing()->index(0, 0), DirectoryModel::IsParentRole).toBool()) {
-        controller.handleKey(QStringLiteral("j"));
-      }
     }
   }
   [[nodiscard]] bool ready() const {

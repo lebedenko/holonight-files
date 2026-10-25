@@ -198,11 +198,9 @@ void DirectoryController::copyCursorPath() {
   const int row = navigation_.cursor_row_;
   if (directoryError().isEmpty() && row >= 0 && row < navigation_.proxy_.rowCount()) {
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(row, 0));
-    if (!navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
-      const auto rowPath = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
-      if (!rowPath.isEmpty()) {
-        path = rowPath;
-      }
+    const auto rowPath = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+    if (!rowPath.isEmpty()) {
+      path = rowPath;
     }
   }
   if (path.isEmpty()) {
@@ -219,12 +217,9 @@ QString DirectoryController::cursorPath() const {
   const int row = navigation_.cursor_row_;
   if (directoryError().isEmpty() && row >= 0 && row < navigation_.proxy_.rowCount()) {
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(row, 0));
-    // The ".." row keeps the current directory: its own path is the parent, which the breadcrumb doesn't show.
-    if (!navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
-      const auto rowPath = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
-      if (!rowPath.isEmpty()) {
-        path = rowPath;
-      }
+    const auto rowPath = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+    if (!rowPath.isEmpty()) {
+      path = rowPath;
     }
   }
   const QString home = QDir::cleanPath(QDir::homePath());
@@ -248,9 +243,6 @@ QStringList DirectoryController::collectVisualSelectionPaths() const {
       continue;
     }
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(row, 0));
-    if (navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
-      continue;
-    }
     const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
     if (!path.isEmpty()) {
       paths.append(path);
@@ -265,11 +257,9 @@ void DirectoryController::yankOrCut(bool cut, bool wholeVisualSelection) {
     vim_.exitVisual();  // REQ-F-002/004: exits VISUAL immediately, regardless of what was selected
   } else if (navigation_.cursor_row_ >= 0 && navigation_.cursor_row_ < navigation_.proxy_.rowCount()) {
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(navigation_.cursor_row_, 0));
-    if (!navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
-      const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
-      if (!path.isEmpty()) {
-        paths = {path};
-      }
+    const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+    if (!path.isEmpty()) {
+      paths = {path};
     }
   }
   if (paths.isEmpty()) {
@@ -298,11 +288,9 @@ void DirectoryController::requestTrash(bool wholeVisualSelection) {
     vim_.exitVisual();  // REQ-F-015: exits VISUAL immediately, prompt appears back in NORMAL
   } else if (navigation_.cursor_row_ >= 0 && navigation_.cursor_row_ < navigation_.proxy_.rowCount()) {
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(navigation_.cursor_row_, 0));
-    if (!navigation_.model_.data(sourceIndex, DirectoryModel::IsParentRole).toBool()) {
-      const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
-      if (!path.isEmpty()) {
-        paths = {path};
-      }
+    const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
+    if (!path.isEmpty()) {
+      paths = {path};
     }
   }
   if (paths.isEmpty()) {
@@ -500,8 +488,7 @@ QString DirectoryController::dragUriList(int row) const {
     return {};
   }
   const auto source = navigation_.proxy_.index(row, 0);
-  if (!source.isValid() || source.data(DirectoryModel::IsParentRole).toBool() ||
-      source.data(DirectoryModel::PathRole).toString().isEmpty()) {
+  if (!source.isValid() || source.data(DirectoryModel::PathRole).toString().isEmpty()) {
     return {};
   }
   QStringList paths;
