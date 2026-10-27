@@ -236,7 +236,7 @@ and pending native visual and accessibility acceptance.
 
 ### Configuration and remembered location
 
-Files reads an optional `config.toml` once at startup from
+Files reads an optional `config.toml` from
 `$XDG_CONFIG_HOME/holonight-files/config.toml`, or `~/.config/holonight-files/config.toml`
 when `XDG_CONFIG_HOME` is unset, empty or not an absolute path. Files never creates or
 changes configuration files; edit them yourself and restart to apply general settings:
@@ -244,6 +244,9 @@ changes configuration files; edit them yourself and restart to apply general set
 ```toml
 [general]
 restore_last_location = true   # default: false
+
+[header]
+show_close_button = false      # default: true; reloads live
 ```
 
 With it enabled and no folder argument, Files reopens the last folder you had open when it
@@ -269,8 +272,9 @@ Invalid values retain inherited values. A malformed or unreadable selected profi
 is diagnosed and ignored without trying later candidates. Setting provenance records
 default, base file or session override; Files never saves flattened effective settings.
 The finder reloads the base and the selected profile when opened, retaining its last
-valid policy on parse/read errors. Profile selection stays fixed for the process;
-removing the selected file restores base inheritance until restart.
+valid policy on parse/read errors. For the finder, profile selection stays fixed for the process;
+removing the selected file restores base inheritance until restart. The live header
+preference reselects the first existing profile on each reload.
 
 A missing config file means defaults with no messages. An unparseable file is ignored as a
 whole with a single warning on stderr giving the path and line. A value of the wrong type
@@ -479,7 +483,10 @@ Search settings reload whenever the finder opens; changed rules rebuild both hid
 while unchanged effective rules reuse completed scans. Files reads configuration without creating or rewriting it.
 Missing config means built-ins only. Invalid rules are diagnosed and ignored. Unreadable or malformed config retains
 the last successfully loaded search policy (initially built-ins) and displays errors in the finder and diagnostics.
-Other settings retain startup loading. A Settings page is deferred to the configuration interoperability initiative.
+Header `show_close_button` reloads live after edits, atomic saves, creation or deletion of
+the base configuration or session profiles (including `config-labwc.toml`). The first
+existing profile wins even if it is invalid; invalid values inherit from the base file
+or defaults. General settings retain startup loading. A Settings page is deferred to the configuration interoperability initiative.
 
 The finder persistence benchmark can be run with
 `build/dev/tests/files-finder-benchmark --persist /path/to/tree`. It uses temporary

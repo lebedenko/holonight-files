@@ -6,6 +6,8 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
 #include "icon_theme_fixtures.h"
+#include "settings/files_preferences.h"
+#include "settings_fixtures.h"
 #include "sidebar_navigator.h"
 
 #include <QDir>
@@ -42,7 +44,7 @@ struct HistoryWindow {
   QQuickItem* forward = nullptr;
   QQuickItem* list = nullptr;
 
-  HistoryWindow() {
+  explicit HistoryWindow(FilesPreferences* preferences = nullptr) {
     initializeFilesEngine(engine);
     for (const auto& path : {a, b, c}) {
       QDir().mkpath(path);
@@ -51,6 +53,10 @@ struct HistoryWindow {
       }
     }
     engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+    if (preferences != nullptr) {
+      engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)},
+                                   {QStringLiteral("preferences"), QVariant::fromValue(preferences)}});
+    }
     engine.loadFromModule("HolonightFiles", "Main");
   }
 
@@ -844,4 +850,55 @@ TEST(WindowHistoryNavigation, IconInlineCreateAndRenameReturnFocus) {
     ASSERT_TRUE(QTest::qWaitFor([&] { return grid->hasActiveFocus(); }));
   }
   EXPECT_FALSE(QFile::exists(QDir(rendered.c).filePath("created.txt")));
+}
+
+TEST(HistoryWindow, HeaderPreferencesReloadWithoutMovingFocusOrReservingCloseSpace) {
+  QTemporaryDir config(files_test::fixturePattern("header-window"));
+  const auto path = config.filePath("config.toml");
+  const auto write = [&](bool visible) {
+    QFile file(path);
+    EXPECT_TRUE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write(visible ? "[header]\nshow_close_button = true\n" : "[header]\nshow_close_button = false\n");
+  };
+  write(false);
+  files_test::RecordingWarningSink warnings;
+  FilesPreferences preferences(path, "labwc", warnings);
+  HistoryWindow rendered(&preferences);
+  ASSERT_TRUE(rendered.start());
+  auto* close = rendered.window->findChild<QQuickItem*>("closeButton");
+  auto* breadcrumb = rendered.window->findChild<QQuickItem*>("breadcrumbContainer");
+  auto* selector = rendered.window->findChild<QQuickItem*>("viewSelector");
+  ASSERT_NE(close, nullptr);
+  ASSERT_NE(breadcrumb, nullptr);
+  ASSERT_NE(selector, nullptr);
+  EXPECT_FALSE(close->isVisible());
+  // Fill the listing region so the right header bound, rather than the listing-width cap,
+  // determines breadcrumb width. The normal preview layout is covered above.
+  auto* preview = rendered.window->findChild<QQuickItem*>("previewContainer");
+  ASSERT_NE(preview, nullptr);
+  preview->setVisible(false);
+  for (const auto width : {420, 1000}) {
+    rendered.window->setWidth(width);
+    for (const bool fullscreen : {false, true}) {
+      rendered.window->setVisibility(fullscreen ? QWindow::FullScreen : QWindow::Windowed);
+      QTest::qWait(20);
+      write(false);
+      ASSERT_TRUE(QTest::qWaitFor([&] { return !close->isVisible(); }));
+      ASSERT_TRUE(QTest::qWaitFor([&] {
+        return selector->mapToScene(QPointF(selector->width(), 0)).x() <= rendered.window->width() - 12 + 1;
+      }));
+      const auto hiddenWidth = breadcrumb->width();
+      auto* focus = rendered.window->activeFocusItem();
+      EXPECT_FALSE(close->isEnabled());
+      EXPECT_LE(selector->mapToScene(QPointF(selector->width(), 0)).x(), rendered.window->width() - 12 + 1);
+      write(true);
+      ASSERT_TRUE(QTest::qWaitFor([&] { return close->isVisible(); }));
+      ASSERT_TRUE(QTest::qWaitFor([&] {
+        return selector->mapToScene(QPointF(selector->width(), 0)).x() <= close->mapToScene(QPointF()).x() - 8 + 1;
+      }));
+      EXPECT_GT(hiddenWidth, breadcrumb->width());
+      EXPECT_EQ(rendered.window->activeFocusItem(), focus);
+      EXPECT_EQ(close->property("focusPolicy").toInt(), Qt::NoFocus);
+    }
+  }
 }

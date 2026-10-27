@@ -4,6 +4,7 @@
 #include "directory_proxy_model.h"
 #include "path_finder_model.h"
 #include "places_model.h"
+#include "settings/files_preferences.h"
 #include "sidebar_navigator.h"
 #include "task_manager.h"
 #include "vim_mode_controller.h"
@@ -81,4 +82,11 @@ struct PreviewImageItemRegistration {
   Q_GADGET
   QML_FOREIGN(PreviewImageItem)
   QML_NAMED_ELEMENT(PreviewImageItem)
+};
+
+struct FilesPreferencesRegistration {
+  Q_GADGET
+  QML_FOREIGN(FilesPreferences)
+  QML_NAMED_ELEMENT(FilesPreferences)
+  QML_UNCREATABLE("Created by the application")
 };

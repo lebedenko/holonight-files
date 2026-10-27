@@ -11,6 +11,7 @@ HnHeaderBar {
 
     required property DirectoryController controller
     required property Item listingPanel
+    property bool showCloseButton: true
     signal closeRequested
 
     function focusCurrentSegment(): bool {
@@ -133,6 +134,9 @@ HnHeaderBar {
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             focusPolicy: Qt.NoFocus
+            visible: root.showCloseButton
+            enabled: visible
+            Accessible.ignored: !visible
             onClicked: root.closeRequested()
         }
 
@@ -141,7 +145,7 @@ HnHeaderBar {
             objectName: "breadcrumbContainer"
             x: root.breadcrumbLeftInset
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(0, Math.min(root.listingPanel.width, closeButton.x - x - viewSelector.width - 16))
+            width: Math.max(0, Math.min(root.listingPanel.width, (root.showCloseButton ? closeButton.x - 8 : parent.width - 12) - x - viewSelector.width - 8))
             height: HnMetrics.controlHeight(HnControlSize.Normal)
 
             HnBreadcrumbBar {

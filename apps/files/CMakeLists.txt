@@ -45,6 +45,9 @@ add_library(files-private STATIC
   places/bookmark_store.h
   preview/preview_selection.cpp
   preview/preview_selection.h
+  settings/files_preferences.cpp
+  settings/files_preferences.h
+  settings/header_settings.h
   settings/app_settings.cpp
   settings/app_settings.h
   settings/general_settings.cpp

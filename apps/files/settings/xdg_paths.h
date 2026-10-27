@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 
 // XDG Base Directory resolution for this application's own files (SPEC.md REQ-C-001). An unset,
 // empty or relative XDG_CONFIG_HOME/XDG_STATE_HOME is ignored in favour of the $HOME fallback, as
@@ -8,7 +9,8 @@
 class WarningSink;
 
 namespace XdgPaths {
-// Select once at startup; names are validated filename components, never paths.
+// Desktop names are validated filename components, never paths.
+QStringList sessionOverrideCandidates(const QString& configPath, const QString& desktop, WarningSink& warnings);
 QString sessionOverridePath(const QString& configPath, WarningSink& warnings);
 QString configFilePath();    // $XDG_CONFIG_HOME/holonight-files/config.toml
 QString stateDirPath();      // $XDG_STATE_HOME/holonight-files

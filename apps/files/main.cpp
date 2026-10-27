@@ -1,7 +1,7 @@
 #include "directory_controller.h"
 #include "engine_setup.h"
 #include "initial_directory.h"
-#include "settings/app_settings.h"
+#include "settings/files_preferences.h"
 #include "settings/xdg_paths.h"
 #include "state/state_store.h"
 #include "warning_sink.h"
@@ -47,9 +47,10 @@ int main(int argc, char* argv[]) {
     QTextStream(stderr) << QCoreApplication::translate("main", "Open at most one folder.") << '\n';
     return EXIT_FAILURE;
   }
-  // Read once, before any folder opens (SPEC.md REQ-C-005); both files are local and small.
+  // Capture startup settings before any folder opens. Header preferences reload independently.
   StderrWarningSink warnings;
-  const auto settings = AppSettings::load(XdgPaths::configFilePath(), warnings);
+  FilesPreferences preferences;
+  const auto settings = preferences.settings();
   const bool restoreEnabled = settings.general().restoreLastLocation();
   // State is only consulted when it can matter, so a disabled restore never warns about it.
   const auto stored = restoreEnabled && arguments.isEmpty()
@@ -69,7 +70,8 @@ int main(int argc, char* argv[]) {
   QObject::connect(
       &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(EXIT_FAILURE); },
       Qt::QueuedConnection);
-  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
+  engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)},
+                               {QStringLiteral("preferences"), QVariant::fromValue(&preferences)}});
   engine.loadFromModule("HolonightFiles", "Main");
   if (engine.rootObjects().isEmpty()) {
     return EXIT_FAILURE;

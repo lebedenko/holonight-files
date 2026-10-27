@@ -672,7 +672,7 @@ TEST(Files, LineNumberGutterHeaderStaysForEmptyAndUnreadableDirectories) {
   // REQ-F-013: an empty directory has no rows and keeps the header spacer.
   controller.open(dir.filePath("empty"));
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
-  EXPECT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).size() == 0; }));
+  EXPECT_TRUE(QTest::qWaitFor([&] { return gutterLabels(list).empty(); }));
   EXPECT_EQ(list->property("count").toInt(), 0);
   EXPECT_TRUE(header->isVisible());
   EXPECT_EQ(header->width(), loaded.listing->property("lineNumberGutterWidth").toReal());

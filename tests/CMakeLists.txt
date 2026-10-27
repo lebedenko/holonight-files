@@ -7,7 +7,7 @@ add_files_application(files-smoke file_drop_test.cpp smoke.cpp separator_window_
   clipboard_register_test.cpp file_operation_service_test.cpp trash_service_test.cpp
   task_manager_test.cpp directory_controller_file_ops_test.cpp icon_name_resolver_test.cpp icon_image_provider_test.cpp
   jump_list_test.cpp history_navigation_window_test.cpp places_model_test.cpp places_window_test.cpp
-  warning_sink_test.cpp xdg_paths_test.cpp toml_document_test.cpp settings_registry_test.cpp app_settings_test.cpp
+  warning_sink_test.cpp xdg_paths_test.cpp toml_document_test.cpp settings_registry_test.cpp app_settings_test.cpp files_preferences_test.cpp
   location_classifier_test.cpp state_store_test.cpp last_location_tracker_test.cpp user_dirs_parser_test.cpp
   bookmark_store_test.cpp place_availability_checker_test.cpp place_list_test.cpp)
 find_package(Qt6 REQUIRED COMPONENTS OpenGL)

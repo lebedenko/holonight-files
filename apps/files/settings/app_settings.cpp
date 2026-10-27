@@ -16,10 +16,12 @@ SettingsRegistry AppSettings::declareAll() {
   SettingsRegistry registry;
   GeneralSettings::declare(registry);
   SearchSettings::declare(registry);
+  HeaderSettings::declare(registry);
   return registry;
 }
 
 void AppSettings::readAll(const SettingsRegistry& registry) {
+  header_ = HeaderSettings::read(registry);
   general_ = GeneralSettings::read(registry);
   search_ = SearchSettings::read(registry);
   info_ = registry.settings();
@@ -32,8 +34,11 @@ AppSettings AppSettings::defaults() {
 }
 
 AppSettings AppSettings::load(const QString& configPath, WarningSink& warnings) {
+  return load(configPath, XdgPaths::sessionOverridePath(configPath, warnings), warnings);
+}
+
+AppSettings AppSettings::load(const QString& configPath, const QString& overridePath, WarningSink& warnings) {
   auto registry = declareAll();
-  const auto overridePath = XdgPaths::sessionOverridePath(configPath, warnings);
   for (const auto& path : {configPath, overridePath}) {
     if (path.isEmpty()) {
       continue;

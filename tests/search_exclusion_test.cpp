@@ -315,3 +315,18 @@ TEST(SearchExclusions, ReloadsSelectedSessionWithoutReselectingProfile) {
   EXPECT_EQ(model.indexedCount(), 0);
   EXPECT_TRUE(model.error().isEmpty());
 }
+
+TEST(SearchExclusions, HeaderPreferenceIsAcceptedWithoutChangingResults) {
+  QTemporaryDir config;
+  QTemporaryDir directory;
+  const ScopedXdgConfigHome configHome(config.path());
+  const ScopedEnvironmentVariable desktop("XDG_CURRENT_DESKTOP", QString{});
+  ASSERT_FALSE(files_test::writeFile(directory, "needle.txt").isEmpty());
+  writeConfig(config.filePath("holonight-files/config.toml"), "[header]\nshow_close_button = false\n");
+  PathFinderModel model;
+  model.start(directory.path(), false);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !model.scanning(); }));
+  EXPECT_TRUE(model.error().isEmpty());
+  model.setQuery("needle");
+  ASSERT_TRUE(QTest::qWaitFor([&] { return model.rowCount() == 1; }));
+}

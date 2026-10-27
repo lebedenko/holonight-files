@@ -19,9 +19,10 @@ QString baseDirectory(const char* variable, const QString& homeRelativeFallback)
 }  // namespace
 
 namespace XdgPaths {
-QString sessionOverridePath(const QString& configPath, WarningSink& warnings) {
+QStringList sessionOverrideCandidates(const QString& configPath, const QString& desktop, WarningSink& warnings) {
+  QStringList candidates;
   const QDir directory(QFileInfo(configPath).absolutePath());
-  for (auto name : qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(':', Qt::SkipEmptyParts)) {
+  for (auto name : desktop.split(':', Qt::SkipEmptyParts)) {
     bool valid = true;
     for (auto& character : name) {
       const auto code = character.unicode();
@@ -37,6 +38,14 @@ QString sessionOverridePath(const QString& configPath, WarningSink& warnings) {
       continue;
     }
     const auto path = directory.filePath(QStringLiteral("config-%1.toml").arg(name));
+    candidates.append(path);
+  }
+  return candidates;
+}
+
+QString sessionOverridePath(const QString& configPath, WarningSink& warnings) {
+  for (const auto& path :
+       sessionOverrideCandidates(configPath, qEnvironmentVariable("XDG_CURRENT_DESKTOP"), warnings)) {
     if (QFileInfo::exists(path)) {
       return path;
     }

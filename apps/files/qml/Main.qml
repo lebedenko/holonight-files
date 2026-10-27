@@ -13,6 +13,7 @@ HnApplicationWindow {
     id: window
     objectName: "filesWindow"
     required property DirectoryController controller
+    property FilesPreferences preferences: null
     property real sidebarWidth: 220
     width: 1000
     height: 700
@@ -126,6 +127,7 @@ HnApplicationWindow {
 
         AppHeaderBar {
             id: headerBar
+            showCloseButton: window.preferences ? window.preferences.showCloseButton : true
             // Paint the owned bottom boundary above adjacent content backgrounds.
             z: 1
             objectName: "appHeaderBar"

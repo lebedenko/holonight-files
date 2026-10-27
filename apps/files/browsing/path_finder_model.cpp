@@ -2,6 +2,7 @@
 
 #include "path_index_store.h"
 #include "settings/general_settings.h"
+#include "settings/header_settings.h"
 #include "settings/search_settings.h"
 #include "settings/warning_sink.h"
 #include "settings/xdg_paths.h"
@@ -21,6 +22,7 @@ void PathFinderModel::configure() {
     result.valid = true;
     SettingsRegistry registry;
     GeneralSettings::declare(registry);
+    HeaderSettings::declare(registry);
     SearchSettings::declare(registry);
     for (const auto& path : {basePath, overridePath}) {
       if (path.isEmpty()) {
