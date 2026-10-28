@@ -2,6 +2,7 @@
 
 Use `task build` and `task test` for incremental native CMake/CTest work. Native builds
 consume installed packages; use `CMAKE_PREFIX_PATH` for an explicit development prefix.
+Files requires installed shared QMarkdown 1.18 or newer, including its QML metadata.
 Use `task format` for the pinned formatter and `task check` for container acceptance.
 Run `task check:integration` for installation/runtime changes. Container builds use
 fresh build/prefix directories, separate from `build/dev` and `build/release`.
