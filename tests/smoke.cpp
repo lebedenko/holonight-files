@@ -1163,7 +1163,9 @@ int main(int argc, char* argv[]) {
   const QString inputDirectory = QString::fromUtf8(FILES_FIXTURE_DIR) + "/input-config/holonight";
   QDir().mkpath(inputDirectory);
   QFile inputFile(inputDirectory + "/input.toml");
-  if (!inputFile.open(QIODevice::WriteOnly)) return 1;
+  if (!inputFile.open(QIODevice::WriteOnly)) {
+    return 1;
+  }
   inputFile.write("version = 1\nprofile = 'vim-navigation'\n");
   inputFile.close();
   qputenv("XDG_CONFIG_HOME", QFile::encodeName(QFileInfo(inputDirectory).absolutePath()));

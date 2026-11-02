@@ -938,13 +938,13 @@ TEST(WindowPanelFocus, LocationEditorUsesConventionalTextInputInBothProfiles) {
 TEST(WindowPanelFocus, TabFollowsHeaderVisualOrder) {
   HistoryWindow rendered;
   ASSERT_TRUE(rendered.start());
-  auto* up = rendered.window->findChild<QQuickItem*>("parentUpButton");
+  auto* parentButton = rendered.window->findChild<QQuickItem*>("parentUpButton");
   auto* breadcrumb = rendered.window->findChild<QQuickItem*>("breadcrumbLabel");
   auto* edit = rendered.window->findChild<QQuickItem*>("hnBreadcrumbEdit");
   auto* list = rendered.window->findChild<QQuickItem*>("listViewButton");
   auto* grid = rendered.window->findChild<QQuickItem*>("iconViewButton");
-  ASSERT_TRUE(up && breadcrumb && edit && list && grid);
-  up->forceActiveFocus(Qt::TabFocusReason);
+  ASSERT_TRUE(parentButton && breadcrumb && edit && list && grid);
+  parentButton->forceActiveFocus(Qt::TabFocusReason);
   QTest::keyClick(rendered.window, Qt::Key_Tab);
   auto* focused = rendered.window->activeFocusItem();
   ASSERT_NE(focused, nullptr);
@@ -981,7 +981,7 @@ TEST(WindowPanelFocus, CollectionsHaveOneTabStopAndOneCursor) {
     }));
     for (auto* entry : entries) {
       EXPECT_FALSE(entry->activeFocusOnTab());
-      cursors += entry->property("keyboardCursor").toBool();
+      cursors += entry->property("keyboardCursor").toBool() ? 1 : 0;
     }
     EXPECT_EQ(cursors, 1);
     QTest::keyClick(rendered.window, Qt::Key_Tab);
