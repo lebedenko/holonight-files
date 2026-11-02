@@ -259,7 +259,7 @@ Item {
                     }
                 }
 
-                onClicked: if (!rowDrag.active) {
+                onClicked: if (!rowDrag.active && root.controller.transfersEnabled) {
                     listView.forceActiveFocus(Qt.MouseFocusReason);
                     root.controller.selectEntry(index);
                 }
