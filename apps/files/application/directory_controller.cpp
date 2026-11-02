@@ -11,6 +11,27 @@
 
 #include <HolonightFileBrowser/grid_navigation.h>
 
+namespace {
+Holonight::NavigationCommand navigationMotion(const FileCommand& command) {
+  using Kind = FileCommand::Kind;
+  using N = Holonight::NavigationCommand;
+  switch (command.kind) {
+    case Kind::Move:
+      return command.count < 0 ? N::Previous : N::Next;
+    case Kind::MoveHorizontal:
+      return command.count < 0 ? N::Left : N::Right;
+    case Kind::First:
+      return N::First;
+    case Kind::Last:
+      return N::Last;
+    case Kind::Page:
+      return command.count < 0 ? N::PageUp : N::PageDown;
+    default:
+      return command.count < 0 ? N::HalfPageUp : N::HalfPageDown;
+  }
+}
+}  // namespace
+
 DirectoryController::DirectoryController(QObject* parent) : DirectoryController(nullptr, parent) {}
 DirectoryController::DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
                                          std::shared_ptr<const CapacityProbe> capacity)
@@ -49,7 +70,9 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
   connect(&preview_, &PreviewService::shutdownFinished, this, [this] { lifecycle_.workerFinished(&preview_); });
   connect(&vim_, &VimModeController::changed, this, &DirectoryController::changed);
   connect(&tasks_, &TaskManager::changed, this, [this] {
-    if (tasks_.hasPrompt()) commands_.reset();
+    if (tasks_.hasPrompt()) {
+      commands_.reset();
+    }
     if (tasks_.hasPrompt() && preview_selection_.quick_look_open_) {
       preview_selection_.quick_look_open_ = false;
       preview_.setQuickLookActive(false);
@@ -358,23 +381,12 @@ void DirectoryController::execute(const FileCommand& command) {
     case Kind::Last:
     case Kind::Page:
     case Kind::HalfPage: {
-      using N = Holonight::NavigationCommand;
-      N motion = N::Next;
-      if (command.kind == Kind::Move)
-        motion = command.count < 0 ? N::Previous : N::Next;
-      else if (command.kind == Kind::MoveHorizontal)
-        motion = command.count < 0 ? N::Left : N::Right;
-      else if (command.kind == Kind::First)
-        motion = N::First;
-      else if (command.kind == Kind::Last)
-        motion = N::Last;
-      else if (command.kind == Kind::Page)
-        motion = command.count < 0 ? N::PageUp : N::PageDown;
-      else
-        motion = command.count < 0 ? N::HalfPageUp : N::HalfPageDown;
-      setCursorRow(Holonight::navigationTarget(
-          cursorRow(), {motion, qAbs(command.count)},
-          {listing()->rowCount(), icon_view_ ? grid_columns_ : 1, qreal(viewport_rows_), {}}));
+      setCursorRow(Holonight::navigationTarget(cursorRow(),
+                                               {.command = navigationMotion(command), .count = qAbs(command.count)},
+                                               {.count = listing()->rowCount(),
+                                                .columns = icon_view_ ? grid_columns_ : 1,
+                                                .viewportHeight = static_cast<qreal>(viewport_rows_),
+                                                .rect = {}}));
       break;
     }
     case Kind::ToggleHidden:

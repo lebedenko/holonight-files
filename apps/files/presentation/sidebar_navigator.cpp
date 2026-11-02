@@ -60,24 +60,28 @@ void SidebarNavigator::clear() { assign(None, -1); }
 // Keeps the cursor on a real row as either model changes beneath it; the first row once one exists.
 void SidebarNavigator::clamp() {
   QVector<QByteArray> ids;
-  for (int row = 0; row < placesCount(); ++row)
+  for (int row = 0; row < placesCount(); ++row) {
     ids.append("place:" + QFile::encodeName(places_->index(row).data(PlacesModel::PathRole).toString()));
-  for (int row = 0; row < devicesCount(); ++row)
+  }
+  for (int row = 0; row < devicesCount(); ++row) {
     ids.append("device:" + devices_->index(row).data(DevicesModel::TargetId).toString().toUtf8());
+  }
   cursor_.reconcile(std::move(ids));
   emit cursorChanged();
 }
 void SidebarNavigator::assign(int section, int index) {
-  if (section == None)
+  if (section == None) {
     cursor_.clear();
-  else
+  } else {
     cursor_.setIndex(section == Devices ? placesCount() + index : index);
+  }
   emit cursorChanged();
 }
 void SidebarNavigator::navigate(int command, int count, qreal viewportHeight, const QVariantList& tops) {
-  cursor_.move({Holonight::NavigationCommand(command), count},
-               {flatCount(), 1, viewportHeight,
-                [&](int row) { return QRectF(0, row < tops.size() ? tops[row].toReal() : row * 32, 1, 32); }});
+  cursor_.move({.command = static_cast<Holonight::NavigationCommand>(command), .count = count},
+               {.count = flatCount(), .columns = 1, .viewportHeight = viewportHeight, .rect = [&](int row) {
+                  return QRectF(0, row < tops.size() ? tops[row].toReal() : row * 32, 1, 32);
+                }});
   emit cursorChanged();
   emit revealRequested(section(), index());
 }

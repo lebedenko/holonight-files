@@ -1,6 +1,13 @@
 #include "inspection_keys.h"
 
 namespace {
+bool acceptsModifiers(int modifiers, const QString& text) {
+  if (modifiers == Qt::NoModifier) {
+    return true;
+  }
+  return modifiers == Qt::ShiftModifier && text.size() == 1 && (text.at(0).isUpper() || text == u":");
+}
+
 QString normalized(int key, const QString& text, bool popup, const DirectoryController* controller) {
   const bool arrows = true;
   Q_UNUSED(popup)
@@ -61,8 +68,9 @@ bool InspectionKeys::press(int key, const QString& text, int modifiers, bool aut
     return controller != nullptr &&
            controller->handleKey(key == Qt::Key_U ? QStringLiteral("Ctrl+U") : QStringLiteral("Ctrl+D"));
   }
-  if (modifiers != Qt::NoModifier && modifiers != Qt::ShiftModifier) return false;
-  if (modifiers == Qt::ShiftModifier && !(text.size() == 1 && (text.at(0).isUpper() || text == u":"))) return false;
+  if (!acceptsModifiers(modifiers, text)) {
+    return false;
+  }
   const auto input = normalized(key, text, popup, controller);
   if (popup && input != " " && input != "Escape" && input != "j" && input != "k" && input != "ArrowUp" &&
       input != "ArrowDown") {

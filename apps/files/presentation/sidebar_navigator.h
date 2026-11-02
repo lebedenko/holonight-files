@@ -24,13 +24,16 @@ class SidebarNavigator : public QObject {
   Q_ENUM(Section)
   SidebarNavigator(PlacesModel* places, DevicesModel* devices, QObject* parent = nullptr);
   [[nodiscard]] int section() const {
-    return cursor_.index() < 0 ? None : cursor_.index() < placesCount() ? Places : Devices;
+    if (cursor_.index() < 0) {
+      return None;
+    }
+    return cursor_.index() < placesCount() ? Places : Devices;
   }
   [[nodiscard]] int index() const { return section() == Devices ? cursor_.index() - placesCount() : cursor_.index(); }
   // Step through [Places rows...][Devices rows...]; false, and no change, when there is nowhere to go.
   Q_INVOKABLE bool moveDown();
-  Q_INVOKABLE bool startsBookmarks(int row) const;
-  Q_INVOKABLE bool startsDeviceGroup(int row) const;
+  Q_INVOKABLE [[nodiscard]] bool startsBookmarks(int row) const;
+  Q_INVOKABLE [[nodiscard]] bool startsDeviceGroup(int row) const;
   Q_INVOKABLE void navigate(int command, int count, qreal viewportHeight, const QVariantList& tops);
   Q_INVOKABLE bool moveUp();
   // Pointer focus and delegate clicks; out-of-range positions are clamped.

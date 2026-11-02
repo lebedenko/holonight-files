@@ -145,8 +145,9 @@ void NavigationSession::clampCursorRow() {
   }
   QVector<QByteArray> ids;
   ids.reserve(proxy_.rowCount());
-  for (int row = 0; row < proxy_.rowCount(); ++row)
+  for (int row = 0; row < proxy_.rowCount(); ++row) {
     ids.append(proxy_.index(row, 0).data(DirectoryModel::NativePathRole).toByteArray());
+  }
   cursor_.reconcile(std::move(ids));
 }
 QString NavigationSession::entryNameAt(int proxyRow) const {

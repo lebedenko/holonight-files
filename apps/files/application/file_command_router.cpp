@@ -156,7 +156,9 @@ bool FileCommandRouter::handleKey(const QString& key) {
   using N = Holonight::NavigationCommand;
   if (movement.consumed()) {
     // Visual mode permits movement, while browsing actions remain Normal-only.
-    if (isVisual && movement.command >= N::Parent) return true;
+    if (isVisual && movement.command >= N::Parent) {
+      return true;
+    }
     command_.count = movement.count;
     switch (movement.command) {
       case N::Previous:
