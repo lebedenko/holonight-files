@@ -1,7 +1,7 @@
 [
   {
     "name": "holonight-config",
-    "revision": "b76a5c3acb6c6717f51f7e131ce42a687566cee2"
+    "revision": "af669048de06bf449c07f66277ddf8dd14a7d56a"
   },
   {
     "name": "holonight-system-services",
@@ -13,7 +13,7 @@
   },
   {
     "name": "holonight-qt",
-    "revision": "96f62f82785f05c7f66e5522a5c240779b233377"
+    "revision": "21aebdda3d9de71c374f5f1f5e61df8a056c1b32"
   },
   {
     "name": "holonight-images",
@@ -29,7 +29,7 @@
   },
   {
     "name": "holonight-file-browser",
-    "revision": "24eb8e7211339d70c507a23497a0e3624a6e2d7d",
+    "revision": "520662b874e7bcb14d419c91c229eea856770000",
     "options": []
   }
 ]
