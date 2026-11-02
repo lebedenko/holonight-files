@@ -2,7 +2,10 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QVariantList>
 #include <QtTypes>
+
+#include <holonight/navigation.h>
 
 class DevicesModel;
 class PlacesModel;
@@ -20,10 +23,15 @@ class SidebarNavigator : public QObject {
   enum Section : qint8 { None = -1, Places = 0, Devices = 1 };
   Q_ENUM(Section)
   SidebarNavigator(PlacesModel* places, DevicesModel* devices, QObject* parent = nullptr);
-  [[nodiscard]] int section() const { return section_; }
-  [[nodiscard]] int index() const { return index_; }
+  [[nodiscard]] int section() const {
+    return cursor_.index() < 0 ? None : cursor_.index() < placesCount() ? Places : Devices;
+  }
+  [[nodiscard]] int index() const { return section() == Devices ? cursor_.index() - placesCount() : cursor_.index(); }
   // Step through [Places rows...][Devices rows...]; false, and no change, when there is nowhere to go.
   Q_INVOKABLE bool moveDown();
+  Q_INVOKABLE bool startsBookmarks(int row) const;
+  Q_INVOKABLE bool startsDeviceGroup(int row) const;
+  Q_INVOKABLE void navigate(int command, int count, qreal viewportHeight, const QVariantList& tops);
   Q_INVOKABLE bool moveUp();
   // Pointer focus and delegate clicks; out-of-range positions are clamped.
   Q_INVOKABLE void setCursor(int section, int index);
@@ -42,6 +50,5 @@ class SidebarNavigator : public QObject {
   void assign(int section, int index);
   QPointer<PlacesModel> places_;
   QPointer<DevicesModel> devices_;
-  int section_ = None;
-  int index_ = -1;
+  Holonight::NavigationCursor cursor_;
 };

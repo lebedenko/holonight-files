@@ -77,7 +77,7 @@ target_include_directories(files-private PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/state"
   "${CMAKE_CURRENT_SOURCE_DIR}/places"
 )
-target_link_libraries(files-private PUBLIC HolonightFileBrowser::Search HolonightFileBrowser::Storage HolonightFileBrowser::Preview HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images HolonightThumbnails::Thumbnails HolonightSearch::Search PRIVATE tomlplusplus::tomlplusplus)
+target_link_libraries(files-private PUBLIC HolonightQt::Appearance HolonightFileBrowser::Search HolonightFileBrowser::Storage HolonightFileBrowser::Preview HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images HolonightThumbnails::Thumbnails HolonightSearch::Search PRIVATE tomlplusplus::tomlplusplus)
 
 qt_extract_metatypes(files-private)
 

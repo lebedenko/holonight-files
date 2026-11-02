@@ -107,16 +107,16 @@ TEST(InspectionKeys, NormalizationPopupAllowlistRepeatsAndHistory) {
   EXPECT_FALSE(controller.quickLookOpen());
   controller.navigateInto(0);
   ASSERT_TRUE(settle());
-  EXPECT_TRUE(keys.press(Qt::Key_J, "j", Qt::AltModifier | Qt::ShiftModifier, true, &controller, true));
-  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_FALSE(keys.press(Qt::Key_J, "j", Qt::AltModifier | Qt::ShiftModifier, true, &controller, true));
+  EXPECT_EQ(controller.cursorRow(), 0);
   EXPECT_TRUE(keys.press(Qt::Key_K, "k", 0, false, &controller, true));
   EXPECT_EQ(controller.cursorRow(), 0);
   EXPECT_FALSE(keys.press(Qt::Key_O, "o", Qt::AltModifier, false, &controller, true));
   EXPECT_FALSE(keys.press(Qt::Key_O, "", Qt::ControlModifier, false, &controller, false));
-  EXPECT_TRUE(keys.press(Qt::Key_O, "v", Qt::ControlModifier | Qt::ShiftModifier, true, &controller, true));
+  EXPECT_TRUE(keys.press(Qt::Key_O, "v", Qt::ControlModifier, true, &controller, true));
   ASSERT_TRUE(settle());
   EXPECT_EQ(controller.currentPath(), dir.path());
-  EXPECT_TRUE(keys.press(Qt::Key_I, "", Qt::ControlModifier | Qt::AltModifier, false, &controller, true));
+  EXPECT_TRUE(keys.press(Qt::Key_I, "", Qt::ControlModifier, false, &controller, true));
   ASSERT_TRUE(settle());
   EXPECT_EQ(controller.currentPath(), dir.filePath("child"));
   EXPECT_TRUE(controller.handleKey("v"));
@@ -136,7 +136,7 @@ TEST(IconFallbacks, EngineInitializationIsIdempotentAndProvidersAreIndependent) 
   EXPECT_EQ(provider, first.imageProvider(QStringLiteral("icon")));
 }
 
-TEST(InspectionKeys, ArrowKeysReachTheQuickLookLineMoverOnlyInPopups) {
+TEST(InspectionKeys, ArrowKeysReachListingAndQuickLookScopes) {
   QTemporaryDir dir(files_test::fixturePattern("inspection-arrows"));
   ASSERT_TRUE(dir.isValid());
   files_test::writeFile(dir, "a.txt", "one\ntwo\nthree\n");
@@ -146,7 +146,9 @@ TEST(InspectionKeys, ArrowKeysReachTheQuickLookLineMoverOnlyInPopups) {
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning(); }));
   ASSERT_TRUE(controller.handleKey("j"));
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }, 5000));
-  EXPECT_FALSE(keys.press(Qt::Key_Down, "", 0, false, &controller, false));  // listing: not a bound key
+  EXPECT_TRUE(keys.press(Qt::Key_Down, "", 0, false, &controller, false));  // listing movement clamps
+  EXPECT_FALSE(keys.press(Qt::Key_Down, "", Qt::ShiftModifier, false, &controller, false));
+  EXPECT_FALSE(keys.press(Qt::Key_D, "d", Qt::ControlModifier | Qt::AltModifier, false, &controller, false));
   ASSERT_TRUE(keys.press(Qt::Key_Space, " ", 0, false, &controller, false));
   ASSERT_TRUE(controller.quickLookOpen());
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->currentLineIndex() == 0; }, 5000));

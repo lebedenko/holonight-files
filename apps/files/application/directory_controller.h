@@ -29,6 +29,7 @@
 #include <HolonightFileBrowser/breadcrumb_adapter.h>
 #include <HolonightFileBrowser/preview/preview_service.h>
 #include <HolonightFileBrowser/storage/devices_model.h>
+#include <holonight/input.h>
 #include <memory>
 
 // QML-facing application coordinator. Private sessions own navigation, editing, preview
@@ -73,7 +74,7 @@ class DirectoryController : public QObject {
   [[nodiscard]] QString statusMessage() const { return status_message_; }
   [[nodiscard]] QString directoryError() const { return navigation_.model_.directoryError(); }
   [[nodiscard]] bool scanning() const { return navigation_.model_.scanning(); }
-  [[nodiscard]] int cursorRow() const { return navigation_.cursor_row_; }
+  [[nodiscard]] int cursorRow() const { return qMax(0, navigation_.cursor_.index()); }
   FilesDirectoryProxyModel* listing() { return &navigation_.proxy_; }
   PlacesModel* places() { return &places_; }
   PathFinderModel* finder() { return &finder_; }
@@ -123,6 +124,7 @@ class DirectoryController : public QObject {
   // false while INSERT/SEARCH hold keyboard focus on their own text field (REQ-C-001) — QML never
   // routes those fields' key events through here in the first place, but handleKey() still needs
   // to be a safe no-op if it were called (e.g. from a stale connection).
+  Q_INVOKABLE void resetNavigationInput() { commands_.reset(); }
   Q_INVOKABLE bool handleKey(const QString& key);
   // INSERT — bound to the inline editor's text field (DirectoryListing.qml).
   Q_INVOKABLE void updateInsertText(const QString& text);
@@ -208,6 +210,7 @@ class DirectoryController : public QObject {
   EditingSession editing_{*this};
   PreviewSelection preview_selection_{*this};
   SessionLifecycle lifecycle_{*this};
+  Holonight::InputPreferences input_preferences_;
   FileCommandRouter commands_;
   WindowEventFilter window_events_{*this};
   void execute(const FileCommand& command);

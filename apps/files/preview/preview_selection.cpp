@@ -5,8 +5,8 @@
 #include <sys/stat.h>
 
 void PreviewSelection::syncPreviewTarget() {
-  if (controller_.navigation_.cursor_row_ < 0 ||
-      controller_.navigation_.cursor_row_ >= controller_.navigation_.proxy_.rowCount()) {
+  if (controller_.navigation_.cursor_.index() < 0 ||
+      controller_.navigation_.cursor_.index() >= controller_.navigation_.proxy_.rowCount()) {
     if (quick_look_open_) {
       quick_look_open_ = false;
       controller_.preview_.setQuickLookActive(false);
@@ -19,7 +19,7 @@ void PreviewSelection::syncPreviewTarget() {
     return;
   }
   const auto sourceIndex = controller_.navigation_.proxy_.mapToSource(
-      controller_.navigation_.proxy_.index(controller_.navigation_.cursor_row_, 0));
+      controller_.navigation_.proxy_.index(controller_.navigation_.cursor_.index(), 0));
   const auto path = controller_.navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
   if (quick_look_open_ && path != preview_target_path_) {
     // Quick Look is pinned to one file. Keys can no longer move the cursor while it is open, so a different
@@ -53,12 +53,12 @@ void PreviewSelection::syncPreviewTarget() {
       entryName, controller_.navigation_.model_.data(sourceIndex, DirectoryModel::NativePathRole).toByteArray());
 }
 bool PreviewSelection::canPreviewSelection() const {
-  if (controller_.navigation_.cursor_row_ < 0 ||
-      controller_.navigation_.cursor_row_ >= controller_.navigation_.proxy_.rowCount()) {
+  if (controller_.navigation_.cursor_.index() < 0 ||
+      controller_.navigation_.cursor_.index() >= controller_.navigation_.proxy_.rowCount()) {
     return false;
   }
   const auto sourceIndex = controller_.navigation_.proxy_.mapToSource(
-      controller_.navigation_.proxy_.index(controller_.navigation_.cursor_row_, 0));
+      controller_.navigation_.proxy_.index(controller_.navigation_.cursor_.index(), 0));
 
   return controller_.preview_.hasEntry() && controller_.preview_.quickLookEligible() &&
          !controller_.navigation_.model_.data(sourceIndex, DirectoryModel::StatFailedRole).toBool();

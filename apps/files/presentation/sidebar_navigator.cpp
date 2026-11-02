@@ -2,6 +2,8 @@
 
 #include "places_model.h"
 
+#include <QFile>
+
 #include <HolonightFileBrowser/storage/devices_model.h>
 #include <algorithm>
 
@@ -11,21 +13,14 @@ SidebarNavigator::SidebarNavigator(PlacesModel* places, DevicesModel* devices, Q
     connect(model, &QAbstractItemModel::rowsRemoved, this, &SidebarNavigator::clamp);
     connect(model, &QAbstractItemModel::rowsInserted, this, &SidebarNavigator::clamp);
     connect(model, &QAbstractItemModel::modelReset, this, &SidebarNavigator::clamp);
+    connect(model, &QAbstractItemModel::layoutChanged, this, &SidebarNavigator::clamp);
+    connect(model, &QAbstractItemModel::rowsMoved, this, &SidebarNavigator::clamp);
   }
   clamp();
 }
 int SidebarNavigator::placesCount() const { return places_ ? places_->rowCount() : 0; }
 int SidebarNavigator::devicesCount() const { return devices_ ? devices_->rowCount() : 0; }
-int SidebarNavigator::flatPosition() const {
-  switch (section_) {
-    case Places:
-      return index_;
-    case Devices:
-      return placesCount() + index_;
-    default:
-      return -1;
-  }
-}
+int SidebarNavigator::flatPosition() const { return cursor_.index(); }
 bool SidebarNavigator::moveDown() {
   const auto position = flatPosition();
   if (position + 1 >= flatCount()) {
@@ -52,7 +47,7 @@ void SidebarNavigator::moveTo(int position) {
   } else {
     assign(Devices, position - places);
   }
-  emit revealRequested(section_, index_);
+  emit revealRequested(section(), index());
 }
 void SidebarNavigator::setCursor(int section, int index) {
   if (section == Places && placesCount() > 0) {
@@ -64,32 +59,32 @@ void SidebarNavigator::setCursor(int section, int index) {
 void SidebarNavigator::clear() { assign(None, -1); }
 // Keeps the cursor on a real row as either model changes beneath it; the first row once one exists.
 void SidebarNavigator::clamp() {
-  auto section = section_;
-  auto index = index_;
-  if (section == Devices && devicesCount() == 0) {
-    section = Places;
-    index = placesCount() - 1;
-  }
-  if (section == Places && placesCount() == 0) {
-    section = None;
-  }
-  if (section == None) {
-    if (placesCount() > 0) {
-      section = Places;
-    } else if (devicesCount() > 0) {
-      section = Devices;
-    }
-    index = section == None ? -1 : 0;
-  } else {
-    index = std::clamp(index, 0, (section == Places ? placesCount() : devicesCount()) - 1);
-  }
-  assign(section, index);
+  QVector<QByteArray> ids;
+  for (int row = 0; row < placesCount(); ++row)
+    ids.append("place:" + QFile::encodeName(places_->index(row).data(PlacesModel::PathRole).toString()));
+  for (int row = 0; row < devicesCount(); ++row)
+    ids.append("device:" + devices_->index(row).data(DevicesModel::TargetId).toString().toUtf8());
+  cursor_.reconcile(std::move(ids));
+  emit cursorChanged();
 }
 void SidebarNavigator::assign(int section, int index) {
-  if (section == section_ && index == index_) {
-    return;
-  }
-  section_ = section;
-  index_ = index;
+  if (section == None)
+    cursor_.clear();
+  else
+    cursor_.setIndex(section == Devices ? placesCount() + index : index);
   emit cursorChanged();
+}
+void SidebarNavigator::navigate(int command, int count, qreal viewportHeight, const QVariantList& tops) {
+  cursor_.move({Holonight::NavigationCommand(command), count},
+               {flatCount(), 1, viewportHeight,
+                [&](int row) { return QRectF(0, row < tops.size() ? tops[row].toReal() : row * 32, 1, 32); }});
+  emit cursorChanged();
+  emit revealRequested(section(), index());
+}
+
+bool SidebarNavigator::startsBookmarks(int row) const {
+  return places_ && places_->index(row).data(PlacesModel::StartsBookmarksRole).toBool();
+}
+bool SidebarNavigator::startsDeviceGroup(int row) const {
+  return devices_ && devices_->index(row).data(DevicesModel::GroupStart).toBool();
 }

@@ -36,15 +36,16 @@ Flickable {
     // Scrolls just far enough to show the cursor row, whose height varies with capacity and group
     // labels (REQ-F-053).
     function reveal(section: int, index: int): void {
-        const list = section === SidebarNavigator.Places ? places.list : devices.list;
-        const item = list.itemAtIndex(index);
-        if (!item)
+        const tops = root.targetTops();
+        const flat = section === SidebarNavigator.Places ? index : places.list.count + index;
+        if (flat < 0 || flat >= tops.length)
             return;
-        const top = item.mapToItem(column, 0, 0).y;
+        const top = tops[flat];
+        const bottom = flat + 1 < tops.length ? tops[flat + 1] : root.contentHeight - places.inset;
         if (top < root.contentY)
             root.contentY = top;
-        else if (top + item.height > root.contentY + root.height)
-            root.contentY = Math.min(top + item.height - root.height, Math.max(0, root.contentHeight - root.height));
+        else if (bottom > root.contentY + root.height)
+            root.contentY = Math.min(bottom - root.height, Math.max(0, root.contentHeight - root.height));
     }
 
     Connections {
@@ -54,18 +55,63 @@ Flickable {
         }
     }
 
+    HnNavigation {
+        id: navigation
+        active: root.activeFocus && root.controller.sidebarActivationEnabled
+        vimNavigation: HnInputPreferences.vimNavigation
+    }
+
+    // Measure typography/control metrics once, independently of virtualized rows.
+    HnListDelegate {
+        id: placeMetrics
+        visible: false
+        title: "M"
+        sizeRole: HnControlSize.Xs
+    }
+    HnLabel {
+        id: nameMetrics
+        visible: false
+        rawText: "M"
+    }
+    HnLabel {
+        id: captionMetrics
+        visible: false
+        rawText: "M"
+        role: HnTypographyRole.Caption
+    }
+    function targetTops(): list<real> {
+        let tops = [];
+        const gap = HnMetrics.internalSpacing(HnControlSize.Compact);
+        let top = places.y + places.list.y;
+        for (let i = 0; i < places.list.count; ++i) {
+            tops.push(top);
+            top += placeMetrics.implicitHeight + (root.navigator.startsBookmarks(i) ? gap : 0);
+        }
+        top = devices.y + devices.list.y;
+        const bodyHeight = Math.max(nameMetrics.implicitHeight + captionMetrics.implicitHeight + 4 + gap, HnMetrics.controlHeight(HnControlSize.Compact)) + gap;
+        for (let i = 0; i < devices.list.count; ++i) {
+            tops.push(top);
+            top += bodyHeight + (root.navigator.startsDeviceGroup(i) ? captionMetrics.implicitHeight + gap : 0) + gap;
+        }
+        return tops;
+    }
+
     Keys.onPressed: event => {
-        if (!root.controller.sidebarActivationEnabled)
+        if (!root.controller.sidebarActivationEnabled || !root.activeFocus)
             return;
-        if (event.key === Qt.Key_Down || event.text === "j") {
-            event.accepted = root.navigator.moveDown();
-        } else if (event.key === Qt.Key_Up || event.text === "k") {
-            event.accepted = root.navigator.moveUp();
-        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space || (event.modifiers === Qt.NoModifier && event.text === "l")) {
+        const intent = navigation.interpret(event.key, event.text, event.modifiers, false, true);
+        if (intent.consumed) {
+            if (intent.command === HnNavigation.ToggleHidden)
+                root.controller.toggleHidden();
+            else if (intent.command === HnNavigation.Open)
+                root.activateCursor();
+            else
+                root.navigator.navigate(intent.command, intent.count, root.height, targetTops());
+            event.accepted = true;
+        } else if (event.modifiers === Qt.NoModifier && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space)) {
             root.activateCursor();
             event.accepted = true;
-        } else if (event.text === "x") {
-            // Plain x, as in Vim; Shift+X stays unbound (REQ-F-021, REQ-F-024).
+        } else if (event.modifiers === Qt.NoModifier && event.text === "x") {
             if (root.navigator.section === SidebarNavigator.Devices)
                 devices.removeRow(root.navigator.index);
             event.accepted = true;

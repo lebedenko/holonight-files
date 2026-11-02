@@ -2,8 +2,18 @@
 
 namespace {
 QString normalized(int key, const QString& text, bool popup, const DirectoryController* controller) {
-  const bool arrows = popup || (controller != nullptr && controller->iconView());
+  const bool arrows = true;
+  Q_UNUSED(popup)
+  Q_UNUSED(controller)
   switch (key) {
+    case Qt::Key_Home:
+      return QStringLiteral("Home");
+    case Qt::Key_End:
+      return QStringLiteral("End");
+    case Qt::Key_PageUp:
+      return QStringLiteral("PageUp");
+    case Qt::Key_PageDown:
+      return QStringLiteral("PageDown");
     case Qt::Key_Space:
       return QStringLiteral(" ");
     case Qt::Key_Escape:
@@ -30,7 +40,7 @@ QString normalized(int key, const QString& text, bool popup, const DirectoryCont
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 bool InspectionKeys::press(int key, const QString& text, int modifiers, bool autoRepeat,
                            DirectoryController* controller, bool popup) const {
-  const bool control = (modifiers & Qt::ControlModifier) != 0;
+  const bool control = modifiers == Qt::ControlModifier;
   // Reserved panel-focus chords must never fall through as plain Vim movement when
   // the window shortcuts are disabled by a mode or overlay.
   if (control && (key == Qt::Key_H || key == Qt::Key_J || key == Qt::Key_K || key == Qt::Key_L)) {
@@ -51,6 +61,8 @@ bool InspectionKeys::press(int key, const QString& text, int modifiers, bool aut
     return controller != nullptr &&
            controller->handleKey(key == Qt::Key_U ? QStringLiteral("Ctrl+U") : QStringLiteral("Ctrl+D"));
   }
+  if (modifiers != Qt::NoModifier && modifiers != Qt::ShiftModifier) return false;
+  if (modifiers == Qt::ShiftModifier && !(text.size() == 1 && (text.at(0).isUpper() || text == u":"))) return false;
   const auto input = normalized(key, text, popup, controller);
   if (popup && input != " " && input != "Escape" && input != "j" && input != "k" && input != "ArrowUp" &&
       input != "ArrowDown") {

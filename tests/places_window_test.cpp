@@ -49,6 +49,8 @@ struct SeededUserDirs {
       contents += "XDG_" + QByteArray(kKeys.at(i)) + "_DIR=\"" + path.toUtf8() + "\"\n";
     }
     files_test::writeFile(config_home, "user-dirs.dirs", contents);
+    QDir().mkpath(config_home.filePath("holonight"));
+    files_test::writeFile(config_home, "holonight/input.toml", "version = 1\nprofile = 'vim-navigation'\n");
     return config_home.path();
   }
 };
@@ -681,11 +683,11 @@ TEST(PlacesWindow, SidebarKeysCrossActivateAndRemove) {
   EXPECT_TRUE(view.press(Qt::Key_Up));
   EXPECT_EQ(navigator->index(), lastPlace);
   navigator->setCursor(SidebarNavigator::Places, 0);
-  EXPECT_FALSE(view.press(Qt::Key_Up));
-  EXPECT_FALSE(view.press(Qt::Key_K, "k"));
+  EXPECT_TRUE(view.press(Qt::Key_Up));
+  EXPECT_TRUE(view.press(Qt::Key_K, "k"));
   navigator->setCursor(SidebarNavigator::Devices, lastDevice);
-  EXPECT_FALSE(view.press(Qt::Key_Down));
-  EXPECT_FALSE(view.press(Qt::Key_J, "j"));
+  EXPECT_TRUE(view.press(Qt::Key_Down));
+  EXPECT_TRUE(view.press(Qt::Key_J, "j"));
   EXPECT_EQ(navigator->index(), lastDevice);
 
   // Activation keys follow the cursor: a place navigates, a device mounts (REQ-F-054).
@@ -808,5 +810,39 @@ TEST(PlacesWindow, DeviceErrorsReachTheStatusBarNotTheSidebar) {
     if (rawText.isValid() && child->isVisible()) {
       EXPECT_NE(rawText.toString(), view.controller.statusMessage());
     }
+  }
+}
+
+TEST(PlacesWindow, SharedNavigationProfilesAndSectionPaging) {
+  for (const bool vim : {false, true}) {
+    SCOPED_TRACE(vim);
+    const SeededUserDirs seeded(9);
+    files_test::writeFile(seeded.config_home, "holonight/input.toml",
+                          vim ? "version = 1\nprofile = 'vim-navigation'\n" : "version = 1\nprofile = 'standard'\n");
+    DevicesWindow view;
+    ASSERT_TRUE(view.startWith({files_test::storageDrive("stick")}, {files_test::storageVolume("usb", "stick")}));
+    auto* navigator = view.controller.sidebarNavigator();
+    view.sidebar->forceActiveFocus();
+    navigator->setCursor(SidebarNavigator::Places, 0);
+    EXPECT_FALSE(view.press(Qt::Key_J, "j", Qt::AltModifier));
+    EXPECT_EQ(navigator->index(), 0);
+    EXPECT_EQ(view.press(Qt::Key_J, "j"), vim);
+    EXPECT_EQ(navigator->index(), vim ? 1 : 0);
+    EXPECT_TRUE(view.press(Qt::Key_End));
+    EXPECT_EQ(navigator->section(), SidebarNavigator::Devices);
+    EXPECT_TRUE(view.press(Qt::Key_Home));
+    EXPECT_EQ(navigator->section(), SidebarNavigator::Places);
+    EXPECT_EQ(navigator->index(), 0);
+    if (vim) {
+      EXPECT_TRUE(view.press(Qt::Key_2, "2"));
+      EXPECT_TRUE(view.press(Qt::Key_J, "j"));
+      EXPECT_EQ(navigator->index(), 2);
+      EXPECT_TRUE(view.press(Qt::Key_G, "g"));
+      EXPECT_TRUE(view.press(Qt::Key_G, "g"));
+      EXPECT_EQ(navigator->index(), 0);
+      EXPECT_TRUE(view.press(Qt::Key_D, "d", Qt::ControlModifier));
+      EXPECT_TRUE(navigator->section() == SidebarNavigator::Devices || navigator->index() > 0);
+    }
+    EXPECT_TRUE(view.storage_backend.calls.isEmpty());
   }
 }

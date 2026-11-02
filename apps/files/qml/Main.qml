@@ -37,27 +37,40 @@ HnApplicationWindow {
     Shortcut {
         sequence: "Ctrl+H"
         context: Qt.WindowShortcut
-        enabled: window.controller.historyNavigationEnabled
+        enabled: !headerBar.editingLocation && HnInputPreferences.vimNavigation && window.controller.historyNavigationEnabled && !pathFinder.visible && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.routePanelFocus("left")
     }
     Shortcut {
         sequence: "Ctrl+J"
         context: Qt.WindowShortcut
-        enabled: window.controller.historyNavigationEnabled
+        enabled: !headerBar.editingLocation && HnInputPreferences.vimNavigation && window.controller.historyNavigationEnabled && !pathFinder.visible && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.routePanelFocus("down")
     }
     Shortcut {
         sequence: "Ctrl+K"
         context: Qt.WindowShortcut
-        enabled: window.controller.historyNavigationEnabled
+        enabled: !headerBar.editingLocation && HnInputPreferences.vimNavigation && window.controller.historyNavigationEnabled && !pathFinder.visible && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.routePanelFocus("up")
     }
     Shortcut {
         sequence: "Ctrl+L"
         context: Qt.WindowShortcut
-        enabled: window.controller.historyNavigationEnabled
+        enabled: !headerBar.editingLocation && HnInputPreferences.vimNavigation && window.controller.historyNavigationEnabled && !pathFinder.visible && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.routePanelFocus("right")
     }
+
+    Shortcut {
+        sequences: HnInputPreferences.vimNavigation ? ["Alt+D"] : ["Ctrl+L", "Alt+D"]
+        enabled: !headerBar.editingLocation && !pathFinder.visible && window.controller.historyNavigationEnabled && window.controller.vim.currentMode === VimModeController.Normal
+        onActivated: headerBar.editLocation()
+    }
+    Shortcut {
+        sequence: "Ctrl+H"
+        enabled: !headerBar.editingLocation && !HnInputPreferences.vimNavigation && !pathFinder.visible && window.controller.historyNavigationEnabled && window.controller.vim.currentMode === VimModeController.Normal
+        onActivated: window.controller.toggleHidden()
+    }
+
+    onActiveFocusItemChanged: controller.resetNavigationInput()
 
     function toggleFullscreen(): void {
         WindowState.setFullscreen(window, window.visibility !== Window.FullScreen);
@@ -71,29 +84,29 @@ HnApplicationWindow {
     Shortcut {
         // Plain f is the first key of the `ff` file finder, so fullscreen lives on Ctrl+F.
         sequence: "Ctrl+F"
-        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
+        enabled: !headerBar.editingLocation && !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.toggleFullscreen()
     }
     Shortcut {
         sequence: "Escape"
-        enabled: !window.controller.tasks.hasPrompt && !pathFinder.visible
+        enabled: !headerBar.editingLocation && !window.controller.tasks.hasPrompt && !pathFinder.visible
         onActivated: window.leaveFullscreen()
     }
     Shortcut {
         sequence: "Q"
-        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
+        enabled: !headerBar.editingLocation && !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.close()
     }
     Shortcut {
         // navigation-history REQ-F-020: matched by key code, so Ctrl+I is never mistaken for Tab.
         // Window context reaches it from the listing, a delegate editor or Quick Look alike.
         sequence: "Ctrl+O"
-        enabled: window.controller.historyNavigationEnabled
+        enabled: !headerBar.editingLocation && window.controller.historyNavigationEnabled
         onActivated: window.controller.navigateHistoryBack()
     }
     Shortcut {
         sequence: "Ctrl+I"
-        enabled: window.controller.historyNavigationEnabled
+        enabled: !headerBar.editingLocation && window.controller.historyNavigationEnabled
         onActivated: window.controller.navigateHistoryForward()
     }
     Shortcut {
@@ -105,7 +118,7 @@ HnApplicationWindow {
     }
     Shortcut {
         sequence: "Ctrl+Shift+C"
-        enabled: !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode !== VimModeController.Insert && window.controller.vim.currentMode !== VimModeController.Search
+        enabled: !headerBar.editingLocation && !pathFinder.visible && !window.controller.tasks.hasPrompt && window.controller.vim.currentMode !== VimModeController.Insert && window.controller.vim.currentMode !== VimModeController.Search
         onActivated: window.controller.copyCursorPath()
     }
     Connections {
@@ -127,6 +140,7 @@ HnApplicationWindow {
 
         AppHeaderBar {
             id: headerBar
+            onLocationEditFinished: directoryListing.focusListing()
             showCloseButton: window.preferences ? window.preferences.showCloseButton : true
             // Paint the owned bottom boundary above adjacent content backgrounds.
             z: 1

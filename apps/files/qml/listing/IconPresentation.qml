@@ -23,6 +23,7 @@ Item {
     Browser.DirectoryGrid {
         id: listView
         objectName: "directoryGridView"
+        activeFocusOnTab: true
         anchors.fill: parent
         anchors.margins: 4
         visible: root.controller.directoryError.length === 0
@@ -105,7 +106,7 @@ Item {
                 readonly property bool statFailed: cell.statFailed
                 readonly property bool editingThis: root.controller.vim.currentMode === VimModeController.Insert && root.controller.vim.editingRow === index
                 objectName: "directoryIconDelegate"
-                focusPolicy: root.controller.transfersEnabled ? Qt.StrongFocus : Qt.NoFocus
+                focusPolicy: Qt.NoFocus
                 Accessible.name: name
                 x: 4
                 y: 4
@@ -115,7 +116,9 @@ Item {
                 rightPadding: 4
                 topPadding: 0
                 bottomPadding: 0
-                highlighted: cell.GridView.isCurrentItem || (root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(index))
+                currentItemSelects: false
+                keyboardCursor: cell.GridView.isCurrentItem && (activeFocus || cell.GridView.view.activeFocus)
+                highlighted: root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(index)
                 contentItem: Item {
                     Item {
                         id: iconCell
@@ -256,8 +259,10 @@ Item {
                     }
                 }
 
-                onClicked: if (!rowDrag.active)
-                    root.controller.selectEntry(index)
+                onClicked: if (!rowDrag.active) {
+                    listView.forceActiveFocus(Qt.MouseFocusReason);
+                    root.controller.selectEntry(index);
+                }
                 onDoubleClicked: root.controller.activateEntry(index)
                 Controls.TextField {
                     id: inlineEditor

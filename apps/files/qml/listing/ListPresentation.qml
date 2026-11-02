@@ -154,6 +154,7 @@ Item {
         Browser.DirectoryListing {
             id: listView
             objectName: "directoryListView"
+            activeFocusOnTab: true
 
             anchors {
                 top: parent.top
@@ -245,13 +246,15 @@ Item {
                 readonly property color typeColor: delegate.isSymlink ? HoloniightPalette.textSecondary : HoloniightPalette.textPrimary
 
                 objectName: "directoryEntryDelegate"
-                focusPolicy: root.controller.transfersEnabled ? Qt.StrongFocus : Qt.NoFocus
+                focusPolicy: Qt.NoFocus
                 width: listView.width
                 // The gutter sits flush at the row's left edge; the selection background spans the whole
                 // delegate regardless of padding, so it still covers the gutter (REQ-F-005).
                 leftPadding: 0
                 rightPadding: 0
-                highlighted: ListView.isCurrentItem || (root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(delegate.index))
+                currentItemSelects: false
+                keyboardCursor: ListView.isCurrentItem && (delegate.activeFocus || delegate.ListView.view.activeFocus)
+                highlighted: root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(delegate.index)
                 columns: detailColumns
                 title: name
                 filename: name

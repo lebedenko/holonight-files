@@ -482,7 +482,7 @@ TEST(DirectoryController, QuickLookSwallowsEveryOtherKeyWithoutMovingAnything) {
   EXPECT_EQ(controller.preview()->currentLineIndex(), 1);  // the discarded/ignored counts did not multiply j
 }
 
-TEST(DirectoryController, ArrowKeysAreIgnoredOutsideQuickLook) {
+TEST(DirectoryController, ArrowKeysMoveOutsideQuickLook) {
   QTemporaryDir dir(fixturePattern("ctrl-arrows-closed"));
   ASSERT_TRUE(dir.isValid());
   writeFile(dir, "a.txt");
@@ -490,8 +490,8 @@ TEST(DirectoryController, ArrowKeysAreIgnoredOutsideQuickLook) {
   DirectoryController controller;
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
-  EXPECT_FALSE(controller.handleKey("ArrowDown"));
-  EXPECT_EQ(controller.cursorRow(), 0);
+  EXPECT_TRUE(controller.handleKey("ArrowDown"));
+  EXPECT_EQ(controller.cursorRow(), 1);
 }
 
 TEST(DirectoryController, SpaceOpensQuickLookForImagesPlainTextAndMarkdown) {
@@ -1377,7 +1377,8 @@ TEST(DirectoryController, WatcherRefreshAfterRestoreDoesNotMoveCursor) {
   ASSERT_EQ(controller.cursorRow(), 1);
   ASSERT_TRUE(QDir(dir.path()).mkdir("0-first"));  // sorts before "mid", shifting it down a row
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 5 && !controller.scanning(); }));
-  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_EQ(cursorName(controller), "mid");
+  EXPECT_EQ(controller.cursorRow(), 2);
 }
 
 namespace {
@@ -2529,4 +2530,41 @@ TEST(DirectoryController, EmptyListingCreationAndCancellationWorkInBothViews) {
     ASSERT_TRUE(QFile::remove(dir.filePath("created.txt")));
     ASSERT_TRUE(QTest::qWaitFor([&] { return controller.listing()->rowCount() == 0; }));
   }
+}
+
+TEST(DirectoryController, StandardProfileKeepsVimNavigationDisabled) {
+  QTemporaryDir config;
+  files_test::ScopedXdgConfigHome environment(config.path());
+  QTemporaryDir dir(fixturePattern("standard-navigation"));
+  writeFile(dir, "a.txt");
+  writeFile(dir, "b.txt");
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  EXPECT_FALSE(controller.handleKey("j"));
+  EXPECT_EQ(controller.cursorRow(), 0);
+  EXPECT_FALSE(controller.handleKey("g"));
+  EXPECT_TRUE(controller.handleKey("End"));
+  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_TRUE(controller.handleKey("ArrowUp"));
+  EXPECT_EQ(controller.cursorRow(), 0);
+}
+
+TEST(DirectoryController, SharedNavigationPreservesVisualBrowsingPolicy) {
+  QTemporaryDir dir(fixturePattern("visual-navigation-policy"));
+  writeFile(dir, "a.txt");
+  writeFile(dir, "b.txt");
+  DirectoryController controller;
+  controller.open(dir.path());
+  ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("v"));
+  for (const auto* key : {"h", "l", ".", "ArrowLeft", "ArrowRight"}) {
+    EXPECT_TRUE(controller.handleKey(key));
+    EXPECT_EQ(controller.currentPath(), dir.path());
+    EXPECT_FALSE(controller.listing()->hiddenVisible());
+    EXPECT_EQ(controller.cursorRow(), 0);
+  }
+  EXPECT_TRUE(controller.handleKey("End"));
+  EXPECT_EQ(controller.cursorRow(), 1);
+  EXPECT_EQ(controller.vim()->selectedCount(), 2);
 }

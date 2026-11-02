@@ -16,6 +16,8 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
                                          std::shared_ptr<const CapacityProbe> capacity)
     : QObject(parent),
       devices_(storage != nullptr ? new DevicesModel(storage, this, std::move(capacity)) : new DevicesModel(this)) {
+  connect(&input_preferences_, &Holonight::InputPreferences::profileChanged, this,
+          &DirectoryController::resetNavigationInput);
   connect(this, &DirectoryController::navigated, this,
           [this] { breadcrumbs_.setPath(QFile::encodeName(currentPath())); });
   connect(devices_, &DevicesModel::openRequested, this, [this](const QString& path) { open(path); });
@@ -47,6 +49,7 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
   connect(&preview_, &PreviewService::shutdownFinished, this, [this] { lifecycle_.workerFinished(&preview_); });
   connect(&vim_, &VimModeController::changed, this, &DirectoryController::changed);
   connect(&tasks_, &TaskManager::changed, this, [this] {
+    if (tasks_.hasPrompt()) commands_.reset();
     if (tasks_.hasPrompt() && preview_selection_.quick_look_open_) {
       preview_selection_.quick_look_open_ = false;
       preview_.setQuickLookActive(false);
@@ -139,7 +142,7 @@ void DirectoryController::setIconView(bool icons) {
   const QPersistentModelIndex source = listing()->mapToSource(listing()->index(cursorRow(), 0));
   icon_view_ = icons;
   const auto target = listing()->mapFromSource(source);
-  navigation_.cursor_row_ = target.isValid() ? target.row() : 0;
+  navigation_.cursor_.setIndex(target.isValid() ? target.row() : 0);
   ++editing_.listing_revision_;
   vim_.updateSearchPositions(entryNameAt(cursorRow()));
   emit iconViewChanged();
@@ -195,7 +198,7 @@ void DirectoryController::clampCursorRow() { navigation_.clampCursorRow(); }
 bool DirectoryController::canPreviewSelection() const { return preview_selection_.canPreviewSelection(); }
 void DirectoryController::copyCursorPath() {
   QString path = navigation_.current_path_;
-  const int row = navigation_.cursor_row_;
+  const int row = navigation_.cursor_.index();
   if (directoryError().isEmpty() && row >= 0 && row < navigation_.proxy_.rowCount()) {
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(row, 0));
     const auto rowPath = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
@@ -214,7 +217,7 @@ void DirectoryController::copyCursorPath() {
 }
 QString DirectoryController::cursorPath() const {
   QString path = navigation_.current_path_;
-  const int row = navigation_.cursor_row_;
+  const int row = navigation_.cursor_.index();
   if (directoryError().isEmpty() && row >= 0 && row < navigation_.proxy_.rowCount()) {
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(row, 0));
     const auto rowPath = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
@@ -255,8 +258,8 @@ void DirectoryController::yankOrCut(bool cut, bool wholeVisualSelection) {
   if (wholeVisualSelection) {
     paths = collectVisualSelectionPaths();
     vim_.exitVisual();  // REQ-F-002/004: exits VISUAL immediately, regardless of what was selected
-  } else if (navigation_.cursor_row_ >= 0 && navigation_.cursor_row_ < navigation_.proxy_.rowCount()) {
-    const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(navigation_.cursor_row_, 0));
+  } else if (navigation_.cursor_.index() >= 0 && navigation_.cursor_.index() < navigation_.proxy_.rowCount()) {
+    const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(navigation_.cursor_.index(), 0));
     const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
     if (!path.isEmpty()) {
       paths = {path};
@@ -286,8 +289,8 @@ void DirectoryController::requestTrash(bool wholeVisualSelection) {
   if (wholeVisualSelection) {
     paths = collectVisualSelectionPaths();
     vim_.exitVisual();  // REQ-F-015: exits VISUAL immediately, prompt appears back in NORMAL
-  } else if (navigation_.cursor_row_ >= 0 && navigation_.cursor_row_ < navigation_.proxy_.rowCount()) {
-    const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(navigation_.cursor_row_, 0));
+  } else if (navigation_.cursor_.index() >= 0 && navigation_.cursor_.index() < navigation_.proxy_.rowCount()) {
+    const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(navigation_.cursor_.index(), 0));
     const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
     if (!path.isEmpty()) {
       paths = {path};
@@ -339,6 +342,7 @@ bool DirectoryController::handleKey(const QString& key) {
                                                 .quick_look_open = quickLookOpen(),
                                                 .can_preview = canPreviewSelection(),
                                                 .icon_view = icon_view_,
+                                                .vim_navigation = input_preferences_.vimNavigation(),
                                             });
   execute(command);
   return command.consumed;
@@ -349,31 +353,30 @@ void DirectoryController::execute(const FileCommand& command) {
     case Kind::None:
       break;
     case Kind::Move:
-      if (icon_view_) {
-        using namespace HolonightFileBrowser;
-        const int lastRow = qMax(0, listing()->rowCount() - 1) / grid_columns_;
-        const qint64 targetRow =
-            qBound(qint64{0}, qint64{cursorRow() / grid_columns_} + command.count, qint64{lastRow});
-        const int steps = static_cast<int>(qAbs(targetRow - (cursorRow() / grid_columns_)));
-        int target = cursorRow();
-        for (int i = 0; i < steps; ++i) {
-          target = gridTarget(target, command.count < 0 ? GridMove::RowUp : GridMove::RowDown, listing()->rowCount(),
-                              grid_columns_, viewport_rows_);
-        }
-        setCursorRow(target);
-      } else {
-        setCursorRow(qint64{cursorRow()} + command.count);
-      }
-      break;
     case Kind::MoveHorizontal:
-      setCursorRow(qint64{cursorRow()} + command.count);
-      break;
     case Kind::First:
-      setCursorRow(0);
-      break;
     case Kind::Last:
-      setCursorRow(listing()->rowCount() - 1);
+    case Kind::Page:
+    case Kind::HalfPage: {
+      using N = Holonight::NavigationCommand;
+      N motion = N::Next;
+      if (command.kind == Kind::Move)
+        motion = command.count < 0 ? N::Previous : N::Next;
+      else if (command.kind == Kind::MoveHorizontal)
+        motion = command.count < 0 ? N::Left : N::Right;
+      else if (command.kind == Kind::First)
+        motion = N::First;
+      else if (command.kind == Kind::Last)
+        motion = N::Last;
+      else if (command.kind == Kind::Page)
+        motion = command.count < 0 ? N::PageUp : N::PageDown;
+      else
+        motion = command.count < 0 ? N::HalfPageUp : N::HalfPageDown;
+      setCursorRow(Holonight::navigationTarget(
+          cursorRow(), {motion, qAbs(command.count)},
+          {listing()->rowCount(), icon_view_ ? grid_columns_ : 1, qreal(viewport_rows_), {}}));
       break;
+    }
     case Kind::ToggleHidden:
       toggleHidden();
       break;
@@ -395,10 +398,6 @@ void DirectoryController::execute(const FileCommand& command) {
     case Kind::MoveQuickLookLine:
       // Only the viewer's current line moves; the listing did not change, so no changed() and no retarget.
       preview_.moveCurrentLine(command.count);
-      break;
-    case Kind::HalfPage:
-      setCursorRow(qint64{cursorRow()} +
-                   (qint64{command.count} * qMax(1, viewport_rows_ / 2) * (icon_view_ ? grid_columns_ : 1)));
       break;
     case Kind::SwapVisualEnd: {
       const int target = vim_.visualAnchorRow();

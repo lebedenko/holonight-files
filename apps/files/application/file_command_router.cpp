@@ -1,6 +1,5 @@
 #include "file_command_router.h"
 
-#include <limits>
 namespace {
 constexpr qint64 kPendingGTimeoutMs = 600;
 }
@@ -11,65 +10,17 @@ FileCommand FileCommandRouter::route(const QString& key, FileCommandContext cont
   return command_;
 }
 void FileCommandRouter::reset() {
-  pending_count_ = 0;
-  has_pending_count_ = pending_g_ = pending_y_ = pending_d_ = pending_f_ = pending_c_ = false;
+  navigation_.reset();
+  pending_y_ = pending_d_ = pending_f_ = pending_c_ = false;
 }
-int FileCommandRouter::takeCount() {
-  const int count = has_pending_count_ ? pending_count_ : 1;
-  pending_count_ = 0;
-  has_pending_count_ = false;
-  return count;
-}
-bool FileCommandRouter::handleCountAndMotionKeys(const QString& key, bool isDigit) {
-  if (isDigit) {
-    pending_count_ = static_cast<int>(
-        qMin<qint64>(std::numeric_limits<int>::max(), (qint64{pending_count_} * 10) + (key.at(0).unicode() - u'0')));
-    has_pending_count_ = true;
-    return true;
-  }
-  if (key == u"g") {
-    if (pending_g_) {
-      pending_g_ = false;
-      takeCount();
-      command_.kind = FileCommand::Kind::First;
-      return true;
-    }
-    pending_g_ = true;
-    pending_g_timer_.start();
-    return true;
-  }
-  pending_g_ = false;
-  if (key == u"G") {
-    takeCount();
-    command_.kind = FileCommand::Kind::Last;
-    return true;
-  }
-  if (key == u"j" || (context_.icon_view && key == u"ArrowDown")) {
-    command_ = {.kind = FileCommand::Kind::Move, .count = takeCount()};
-    return true;
-  }
-  if (key == u"k" || (context_.icon_view && key == u"ArrowUp")) {
-    command_ = {.kind = FileCommand::Kind::Move, .count = -takeCount()};
-    return true;
-  }
-  return false;
-}
+int FileCommandRouter::takeCount() { return navigation_.takeCount(); }
 bool FileCommandRouter::handleNormalToggleAndNavigationKey(const QString& key) {
-  if (key == u"." || key == u"s") {
+  if (key == u"s") {
     takeCount();
-    if (key == u".") {
-      command_.kind = FileCommand::Kind::ToggleHidden;
-    } else {
-      command_.kind = FileCommand::Kind::ToggleSort;
-    }
+    command_.kind = FileCommand::Kind::ToggleSort;
     return true;
   }
-  if (key == u"h") {
-    takeCount();
-    command_.kind = FileCommand::Kind::Parent;
-    return true;
-  }
-  if (key == u"l" || key == u"Return" || key == u"Enter" || key == u"\r") {
+  if (key == u"Return" || key == u"Enter" || key == u"\r") {
     takeCount();
     command_.kind = FileCommand::Kind::Open;
     return true;
@@ -148,9 +99,6 @@ bool FileCommandRouter::handleNormalOnlyKey(const QString& key) {
   return false;
 }
 void FileCommandRouter::expirePendingCommands() {
-  if (pending_g_ && pending_g_timer_.elapsed() > kPendingGTimeoutMs) {
-    pending_g_ = false;
-  }
   if (pending_y_ && pending_y_timer_.elapsed() > kPendingGTimeoutMs) {
     pending_y_ = false;
   }
@@ -171,6 +119,7 @@ bool FileCommandRouter::handleKey(const QString& key) {
   // until resolved" reads as exclusive key capture — new p/D presses during an open prompt are
   // simply consumed, not queued as additional operations).
   if ((context_.prompt != TaskManager::PromptKind::None)) {
+    reset();
     return handlePromptKey(key);
   }
 
@@ -178,6 +127,7 @@ bool FileCommandRouter::handleKey(const QString& key) {
   if (mode == VimModeController::Mode::Insert || mode == VimModeController::Mode::Search) {
     // Keyboard focus lives on the inline editor / search field now; QML never routes their key
     // events through here (REQ-C-001), but stay a safe no-op regardless.
+    reset();
     return false;
   }
   if (context_.quick_look_open) {
@@ -188,6 +138,7 @@ bool FileCommandRouter::handleKey(const QString& key) {
 
   const bool isVisual = mode == VimModeController::Mode::Visual;
   if (handleFinderKey(key)) {
+    navigation_.reset();
     return true;
   }
   if (key != u"f") {
@@ -197,16 +148,59 @@ bool FileCommandRouter::handleKey(const QString& key) {
     pending_c_ = false;
   }
   if (handleFileOperationKey(key, isVisual)) {
+    navigation_.reset();
     return true;
   }
 
-  if (handleGridHorizontalKey(key)) {
-    return true;
-  }
-  const bool isDigit = key.size() == 1 && key.at(0) >= u'0' && key.at(0) <= u'9';
-  if (key == u"Ctrl+U" || key == u"Ctrl+D") {
-    pending_g_ = false;
-    command_ = {.kind = FileCommand::Kind::HalfPage, .count = key == u"Ctrl+D" ? takeCount() : -takeCount()};
+  const auto movement = navigation_.route(key, context_.vim_navigation, context_.icon_view, true);
+  using N = Holonight::NavigationCommand;
+  if (movement.consumed()) {
+    // Visual mode permits movement, while browsing actions remain Normal-only.
+    if (isVisual && movement.command >= N::Parent) return true;
+    command_.count = movement.count;
+    switch (movement.command) {
+      case N::Previous:
+        command_.count = -movement.count;
+        [[fallthrough]];
+      case N::Next:
+        command_.kind = FileCommand::Kind::Move;
+        break;
+      case N::Left:
+        command_.count = -movement.count;
+        [[fallthrough]];
+      case N::Right:
+        command_.kind = FileCommand::Kind::MoveHorizontal;
+        break;
+      case N::First:
+        command_.kind = FileCommand::Kind::First;
+        break;
+      case N::Last:
+        command_.kind = FileCommand::Kind::Last;
+        break;
+      case N::HalfPageUp:
+        command_.count = -movement.count;
+        [[fallthrough]];
+      case N::HalfPageDown:
+        command_.kind = FileCommand::Kind::HalfPage;
+        break;
+      case N::PageUp:
+        command_.count = -movement.count;
+        [[fallthrough]];
+      case N::PageDown:
+        command_.kind = FileCommand::Kind::Page;
+        break;
+      case N::Parent:
+        command_.kind = FileCommand::Kind::Parent;
+        break;
+      case N::Open:
+        command_.kind = FileCommand::Kind::Open;
+        break;
+      case N::ToggleHidden:
+        command_.kind = FileCommand::Kind::ToggleHidden;
+        break;
+      default:
+        break;  // Focus/location intentions are routed by the window scope.
+    }
     return true;
   }
   if (isVisual && key == u"o") {
@@ -220,7 +214,7 @@ bool FileCommandRouter::handleKey(const QString& key) {
       command_.kind = FileCommand::Kind::ExitVisual;
       return true;
     }
-    if (!isDigit && !isMotionKey(key)) {
+    {
       // REQ-C-004: VISUAL has no other operation consumer this stage — every key besides a
       // count-prefixed motion, Escape, or a file-operation key above is swallowed as a no-op.
       takeCount();
@@ -228,12 +222,6 @@ bool FileCommandRouter::handleKey(const QString& key) {
     }
   }
 
-  if (handleCountAndMotionKeys(key, isDigit)) {
-    return true;
-  }
-
-  // Everything past this point is NORMAL-only: VISUAL already returned above for every key
-  // except digits/g/G/j/k, all handled by handleCountAndMotionKeys() by now.
   if (mode == VimModeController::Mode::Normal) {
     return handleNormalOnlyKey(key);
   }
@@ -248,9 +236,9 @@ bool FileCommandRouter::handleQuickLookKey(const QString& key) {
     command_.kind = FileCommand::Kind::ToggleQuickLook;
   } else if (key == u"Escape") {
     command_.kind = FileCommand::Kind::CloseQuickLook;
-  } else if (key == u"j" || key == u"ArrowDown") {
+  } else if ((context_.vim_navigation && key == u"j") || key == u"ArrowDown") {
     command_ = {.kind = FileCommand::Kind::MoveQuickLookLine, .count = 1};
-  } else if (key == u"k" || key == u"ArrowUp") {
+  } else if ((context_.vim_navigation && key == u"k") || key == u"ArrowUp") {
     command_ = {.kind = FileCommand::Kind::MoveQuickLookLine, .count = -1};
   }
   return true;
@@ -262,7 +250,7 @@ bool FileCommandRouter::handleFinderKey(const QString& key) {
     return false;
   }
   if (key == u"f") {
-    pending_g_ = pending_y_ = pending_d_ = pending_c_ = false;
+    pending_y_ = pending_d_ = pending_c_ = false;
     if (pending_f_) {
       pending_f_ = false;
       takeCount();
@@ -274,7 +262,7 @@ bool FileCommandRouter::handleFinderKey(const QString& key) {
     return true;
   }
   if (key == u"c") {
-    pending_g_ = pending_y_ = pending_d_ = pending_f_ = false;
+    pending_y_ = pending_d_ = pending_f_ = false;
     pending_c_ = true;
     pending_c_timer_.start();
     return true;
@@ -370,20 +358,4 @@ bool FileCommandRouter::handlePromptKey(const QString& key) {
       break;
   }
   return true;
-}
-
-bool FileCommandRouter::handleGridHorizontalKey(const QString& key) {
-  if (!context_.icon_view || (key != u"h" && key != u"l" && key != u"ArrowLeft" && key != u"ArrowRight")) {
-    return false;
-  }
-  pending_g_ = false;
-  command_ = {
-      .kind = FileCommand::Kind::MoveHorizontal,
-      .count = (key == u"h" || key == u"ArrowLeft") ? -takeCount() : takeCount(),
-  };
-  return true;
-}
-bool FileCommandRouter::isMotionKey(const QString& key) const {
-  return key == u"g" || key == u"G" || key == u"j" || key == u"k" ||
-         (context_.icon_view && (key == u"ArrowUp" || key == u"ArrowDown"));
 }

@@ -525,7 +525,7 @@ TEST(WindowHistoryNavigation, ViewSelectorHighlightsControllerSelectionThroughHo
     ASSERT_TRUE(QTest::qWaitFor([&] { return selected->property("checked").toBool(); }));
     EXPECT_FALSE(other->property("checked").toBool());
     EXPECT_EQ(background(other)->property("color").value<QColor>(), QColor(Qt::transparent));
-    EXPECT_EQ(selected->property("focusPolicy").toInt(), Qt::NoFocus);
+    EXPECT_EQ(selected->property("focusPolicy").toInt(), Qt::TabFocus);
     auto* icon = selected->findChild<QQuickItem*>("hnIconButtonIcon");
     ASSERT_NE(icon, nullptr);
     ASSERT_NE(background(selected), nullptr);
@@ -621,7 +621,7 @@ TEST(WindowPanelFocus, RoutesEveryDirectionWithoutChangingBrowsingState) {
   EXPECT_TRUE(current->property("visualFocus").toBool());
   rendered.list->forceActiveFocus();
   QTest::keyClick(rendered.window, Qt::Key_J);
-  EXPECT_EQ(rendered.controller.cursorRow(), row + 2);  // pending count survived
+  EXPECT_EQ(rendered.controller.cursorRow(), row + 1);  // changing focus cancels the pending count
 }
 
 TEST(WindowPanelFocus, HeaderEntryTargetsCurrentSegmentAtRootAndNarrowWidths) {
@@ -898,7 +898,101 @@ TEST(HistoryWindow, HeaderPreferencesReloadWithoutMovingFocusOrReservingCloseSpa
       }));
       EXPECT_GT(hiddenWidth, breadcrumb->width());
       EXPECT_EQ(rendered.window->activeFocusItem(), focus);
-      EXPECT_EQ(close->property("focusPolicy").toInt(), Qt::NoFocus);
+      EXPECT_EQ(close->property("focusPolicy").toInt(), Qt::TabFocus);
     }
+  }
+}
+
+TEST(WindowPanelFocus, LocationEditorUsesConventionalTextInputInBothProfiles) {
+  for (const bool vim : {false, true}) {
+    SCOPED_TRACE(vim);
+    QTemporaryDir config;
+    files_test::ScopedXdgConfigHome guard(config.path());
+    QDir().mkpath(config.filePath("holonight"));
+    files_test::writeFile(config, "holonight/input.toml",
+                          vim ? "version = 1\nprofile = 'vim-navigation'\n" : "version = 1\nprofile = 'standard'\n");
+    HistoryWindow rendered;
+    ASSERT_TRUE(rendered.start());
+    QTest::keyClick(rendered.window, vim ? Qt::Key_D : Qt::Key_L, vim ? Qt::AltModifier : Qt::ControlModifier);
+    auto* editor = rendered.window->findChild<QQuickItem*>("locationEditor");
+    ASSERT_NE(editor, nullptr);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return editor->hasActiveFocus(); }));
+    const int cursor = rendered.controller.cursorRow();
+    QTest::keyClick(rendered.window, Qt::Key_J);
+    QTest::keyClick(rendered.window, Qt::Key_Q, Qt::ShiftModifier);
+    EXPECT_EQ(rendered.controller.cursorRow(), cursor);
+    EXPECT_TRUE(rendered.window->isVisible());
+    editor->setProperty("text", rendered.a);
+    QTest::keyClick(rendered.window, Qt::Key_Return);
+    ASSERT_TRUE(settled(rendered.controller));
+    EXPECT_EQ(rendered.controller.currentPath(), rendered.a);
+    EXPECT_TRUE(rendered.list->hasActiveFocus());
+    QTest::keyClick(rendered.window, Qt::Key_D, Qt::AltModifier);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return editor->hasActiveFocus(); }));
+    QTest::keyClick(rendered.window, Qt::Key_Escape);
+    EXPECT_FALSE(editor->isVisible());
+    EXPECT_TRUE(rendered.list->hasActiveFocus());
+  }
+}
+
+TEST(WindowPanelFocus, TabFollowsHeaderVisualOrder) {
+  HistoryWindow rendered;
+  ASSERT_TRUE(rendered.start());
+  auto* up = rendered.window->findChild<QQuickItem*>("parentUpButton");
+  auto* breadcrumb = rendered.window->findChild<QQuickItem*>("breadcrumbLabel");
+  auto* edit = rendered.window->findChild<QQuickItem*>("hnBreadcrumbEdit");
+  auto* list = rendered.window->findChild<QQuickItem*>("listViewButton");
+  auto* grid = rendered.window->findChild<QQuickItem*>("iconViewButton");
+  ASSERT_TRUE(up && breadcrumb && edit && list && grid);
+  up->forceActiveFocus(Qt::TabFocusReason);
+  QTest::keyClick(rendered.window, Qt::Key_Tab);
+  auto* focused = rendered.window->activeFocusItem();
+  ASSERT_NE(focused, nullptr);
+  EXPECT_TRUE(breadcrumb->isAncestorOf(focused));
+  edit->forceActiveFocus(Qt::TabFocusReason);
+  QTest::keyClick(rendered.window, Qt::Key_Tab);
+  EXPECT_TRUE(list->hasActiveFocus());
+  QTest::keyClick(rendered.window, Qt::Key_Tab);
+  EXPECT_TRUE(grid->hasActiveFocus());
+  QTest::keyClick(rendered.window, Qt::Key_Backtab);
+  EXPECT_TRUE(list->hasActiveFocus());
+}
+
+TEST(WindowPanelFocus, CollectionsHaveOneTabStopAndOneCursor) {
+  for (bool icons : {false, true}) {
+    HistoryWindow rendered;
+    ASSERT_TRUE(rendered.start());
+    rendered.controller.setIconView(icons);
+    auto* view = rendered.window->findChild<QQuickItem*>(icons ? "directoryGridView" : "directoryListView");
+    ASSERT_NE(view, nullptr);
+    view->forceActiveFocus(Qt::TabFocusReason);
+    QTest::keyClick(rendered.window, Qt::Key_Down);
+    const int row = rendered.controller.cursorRow();
+    int cursors = 0;
+    QList<QQuickItem*> entries;
+    ASSERT_TRUE(QTest::qWaitFor([&] {
+      entries.clear();
+      for (auto* cell : view->property("contentItem").value<QQuickItem*>()->childItems()) {
+        auto* entry = icons ? cell->findChild<QQuickItem*>("directoryIconDelegate") : cell;
+        if (entry && entry->objectName() == (icons ? "directoryIconDelegate" : "directoryEntryDelegate"))
+          entries.push_back(entry);
+      }
+      return !entries.empty();
+    }));
+    for (auto* entry : entries) {
+      EXPECT_FALSE(entry->activeFocusOnTab());
+      cursors += entry->property("keyboardCursor").toBool();
+    }
+    EXPECT_EQ(cursors, 1);
+    QTest::keyClick(rendered.window, Qt::Key_Tab);
+    EXPECT_FALSE(view->hasActiveFocus());
+    EXPECT_EQ(rendered.controller.cursorRow(), row);
+    for (auto* entry : entries) {
+      EXPECT_FALSE(entry->hasActiveFocus());
+      EXPECT_FALSE(entry->property("keyboardCursor").toBool());
+    }
+    QTest::keyClick(rendered.window, Qt::Key_Backtab);
+    EXPECT_TRUE(view->hasActiveFocus());
+    EXPECT_EQ(rendered.controller.cursorRow(), row);
   }
 }

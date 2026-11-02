@@ -1,11 +1,12 @@
 #pragma once
-
 #include "directory_model.h"
 #include "directory_proxy_model.h"
 #include "jump_list.h"
 
 #include <QFileSystemWatcher>
 #include <QHash>
+
+#include <holonight/navigation.h>
 
 class DirectoryController;
 
@@ -47,5 +48,5 @@ class NavigationSession {
   QString pending_restore_name_;
   QHash<quint64, quint64> bookmark_dispatch_navigation_serial_;
   bool awaiting_initial_load_ = false;
-  int cursor_row_ = 0;
+  Holonight::NavigationCursor cursor_;
 };

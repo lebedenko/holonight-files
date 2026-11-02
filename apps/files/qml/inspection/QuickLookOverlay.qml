@@ -104,7 +104,7 @@ Controls.Popup {
                 event.accepted = true;
         }
         Keys.onPressed: event => {
-            if (markdownLoader.item && (event.key === Qt.Key_J || event.key === Qt.Key_K || event.key === Qt.Key_Up || event.key === Qt.Key_Down) && event.modifiers === Qt.NoModifier) {
+            if (markdownLoader.item && ((HnInputPreferences.vimNavigation && (event.key === Qt.Key_J || event.key === Qt.Key_K)) || event.key === Qt.Key_Up || event.key === Qt.Key_Down) && event.modifiers === Qt.NoModifier) {
                 const direction = event.key === Qt.Key_J || event.key === Qt.Key_Down ? 1 : -1;
                 (markdownLoader.item as MarkdownScroller).scrollLine(direction);
                 event.accepted = true;

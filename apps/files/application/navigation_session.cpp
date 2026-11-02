@@ -26,7 +26,7 @@ void NavigationSession::openInternal(const QString& requestedPath, const QString
   current_path_ = path;
   controller_.devices_->navigationChanged(path);
   controller_.status_message_ = fallbackReason;
-  cursor_row_ = 0;
+  cursor_.clear();
   // Every navigation replaces whatever restore a superseded one was still waiting on (REQ-F-016).
   awaiting_initial_load_ = false;
   pending_restore_name_ = restoreName;
@@ -40,10 +40,10 @@ void NavigationSession::openInternal(const QString& requestedPath, const QString
 }
 QString NavigationSession::outgoingCursorName() const {
   // A listing that never settled has no trustworthy row to come back to (REQ-F-039).
-  if (awaiting_initial_load_ || cursor_row_ < 0 || cursor_row_ >= proxy_.rowCount()) {
+  if (awaiting_initial_load_ || cursor_.index() < 0 || cursor_.index() >= proxy_.rowCount()) {
     return {};
   }
-  return entryNameAt(cursor_row_);
+  return entryNameAt(cursor_.index());
 }
 void NavigationSession::traverseHistory(int direction, int count) {
   // Rechecked here, not only in QML bindings, so direct callers get the same gating
@@ -130,12 +130,11 @@ void NavigationSession::setCursorRow(qint64 row) {
   if (visual && last < 0) {
     controller_.vim_.exitVisual();
   }
-  const int first = 0;
-  cursor_row_ = static_cast<int>(qBound(qint64{first}, row, qint64{qMax(first, last)}));
+  cursor_.setIndex(row);
   if (controller_.vim_.currentMode() == VimModeController::Mode::Visual) {
-    controller_.vim_.extendVisual(cursor_row_);
+    controller_.vim_.extendVisual(cursor_.index());
   }
-  controller_.vim_.updateSearchPositions(entryNameAt(cursor_row_));
+  controller_.vim_.updateSearchPositions(entryNameAt(cursor_.index()));
   emit controller_.changed();
 }
 void NavigationSession::clampCursorRow() {
@@ -144,8 +143,11 @@ void NavigationSession::clampCursorRow() {
   if (visual && last < 0) {
     controller_.vim_.exitVisual();
   }
-  const int first = 0;
-  cursor_row_ = qBound(first, cursor_row_, qMax(first, last));
+  QVector<QByteArray> ids;
+  ids.reserve(proxy_.rowCount());
+  for (int row = 0; row < proxy_.rowCount(); ++row)
+    ids.append(proxy_.index(row, 0).data(DirectoryModel::NativePathRole).toByteArray());
+  cursor_.reconcile(std::move(ids));
 }
 QString NavigationSession::entryNameAt(int proxyRow) const {
   if (proxyRow < 0 || proxyRow >= proxy_.rowCount()) {

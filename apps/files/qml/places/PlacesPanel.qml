@@ -146,6 +146,7 @@ Item {
             anchors.bottom: parent.bottom
             height: button.height
             color: "transparent"
+            radius: HnAppearance.roundedRadius(HnSurfaceRole.Control, width, height, HnAppearance.revision)
             border.width: HnMetrics.focusBorderWidth
             border.color: HoloniightPalette.borderFocus
             visible: root.keyboardFocus && row.isCursor

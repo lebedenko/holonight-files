@@ -15,14 +15,14 @@ void EditingSession::beginRename(VimModeController::InsertKind kind) {
   // Entering a mode commits to the current cursor; suspendUpdates() below would otherwise settle
   // the partial listing and apply the restore under the editor.
   controller_.cancelPendingRestore();
-  if (controller_.navigation_.cursor_row_ < 0 ||
-      controller_.navigation_.cursor_row_ >= controller_.navigation_.proxy_.rowCount()) {
+  if (controller_.navigation_.cursor_.index() < 0 ||
+      controller_.navigation_.cursor_.index() >= controller_.navigation_.proxy_.rowCount()) {
     return;  // nothing selected to rename; the key is still consumed by the caller
   }
   controller_.navigation_.proxy_.setEditing(true);
   controller_.navigation_.model_.suspendUpdates();
-  controller_.vim_.enterInsert(kind, controller_.navigation_.cursor_row_, controller_.navigation_.current_path_,
-                               controller_.entryNameAt(controller_.navigation_.cursor_row_));
+  controller_.vim_.enterInsert(kind, controller_.navigation_.cursor_.index(), controller_.navigation_.current_path_,
+                               controller_.entryNameAt(controller_.navigation_.cursor_.index()));
 }
 void EditingSession::beginCreate(VimModeController::InsertKind kind) {
   controller_.cancelPendingRestore();
@@ -33,7 +33,7 @@ void EditingSession::beginCreate(VimModeController::InsertKind kind) {
   bool anchorIsDir = false;
   if (controller_.navigation_.proxy_.rowCount() > 0) {
     const int anchorProxyRow =
-        qBound(0, controller_.navigation_.cursor_row_, controller_.navigation_.proxy_.rowCount() - 1);
+        qBound(0, controller_.navigation_.cursor_.index(), controller_.navigation_.proxy_.rowCount() - 1);
     const auto anchorSourceIndex =
         controller_.navigation_.proxy_.mapToSource(controller_.navigation_.proxy_.index(anchorProxyRow, 0));
     anchorName = controller_.navigation_.model_.data(anchorSourceIndex, DirectoryModel::NameRole).toString();
@@ -136,7 +136,7 @@ void EditingSession::listingChanged() {
   controller_.clampCursorRow();
   if (controller_.vim_.currentMode() == VimModeController::Mode::Search) {
     ensureSearchCurrent();
-    controller_.vim_.updateSearchPositions(controller_.entryNameAt(controller_.navigation_.cursor_row_));
+    controller_.vim_.updateSearchPositions(controller_.entryNameAt(controller_.navigation_.cursor_.index()));
   }
   emit controller_.changed();
 }
@@ -165,7 +165,7 @@ void EditingSession::updateSearchQuery(const QString& query) {
   if (best >= 0) {
     controller_.setCursorRow(best);
   }
-  controller_.vim_.updateSearchPositions(controller_.entryNameAt(controller_.navigation_.cursor_row_));
+  controller_.vim_.updateSearchPositions(controller_.entryNameAt(controller_.navigation_.cursor_.index()));
 }
 void EditingSession::commitSearchEditing() { controller_.vim_.commitSearch(); }
 void EditingSession::cancelSearchEditing() {

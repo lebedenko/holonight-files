@@ -6,6 +6,7 @@
 #include <QElapsedTimer>
 
 #include <cstdint>
+#include <holonight/navigation.h>
 
 // Parsing is independent of listing/operation side effects. The application executes commands.
 struct FileCommand {
@@ -41,6 +42,7 @@ struct FileCommand {
     CancelConflict,
     ConfirmTrash,
     HalfPage,
+    Page,
     SwapVisualEnd,
     FindFile,
     ChangeDirectory,
@@ -56,6 +58,7 @@ struct FileCommandContext {
   bool quick_look_open = false;
   bool can_preview = false;
   bool icon_view = false;
+  bool vim_navigation = false;
 };
 class FileCommandRouter {
  public:
@@ -64,28 +67,22 @@ class FileCommandRouter {
   void reset();
 
  private:
-  bool handleCountAndMotionKeys(const QString& key, bool isDigit);
   bool handleNormalToggleAndNavigationKey(const QString& key);
   bool handleModeTransitionKey(const QString& key);
   bool handleNormalOnlyKey(const QString& key);
   void expirePendingCommands();
   bool handleKey(const QString& key);
-  bool handleGridHorizontalKey(const QString& key);
-  [[nodiscard]] bool isMotionKey(const QString& key) const;
   bool handleFinderKey(const QString& key);
   bool handleFileOperationKey(const QString& key, bool isVisual);
   bool handlePromptKey(const QString& key);
   bool handleQuickLookKey(const QString& key);
+  Holonight::NavigationInterpreter navigation_;
   FileCommand command_;
   FileCommandContext context_{};
-  int pending_count_ = 0;
-  bool has_pending_count_ = false;
-  bool pending_g_ = false;
   bool pending_y_ = false;
   bool pending_d_ = false;
   bool pending_f_ = false;
   bool pending_c_ = false;
-  QElapsedTimer pending_g_timer_;
   QElapsedTimer pending_y_timer_;
   QElapsedTimer pending_d_timer_;
   QElapsedTimer pending_f_timer_;

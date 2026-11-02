@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls as Controls
 import Holonight.Core
 import Holonight.Controls
 
@@ -12,6 +13,14 @@ HnHeaderBar {
     required property DirectoryController controller
     required property Item listingPanel
     property bool showCloseButton: true
+    property bool editingLocation: false
+    signal locationEditFinished
+    function editLocation(): void {
+        if (!root.historyEnabled)
+            return;
+        root.editingLocation = true;
+        (root.contentItem as HeaderContent).editLocation();
+    }
     signal closeRequested
 
     function focusCurrentSegment(): bool {
@@ -48,7 +57,7 @@ HnHeaderBar {
     component ViewButton: HnIconButton {
         id: button
         sizeRole: HnControlSize.Compact
-        focusPolicy: Qt.NoFocus
+        focusPolicy: Qt.TabFocus
         checkable: true
         autoExclusive: true
         enabled: root.historyEnabled
@@ -63,19 +72,24 @@ HnHeaderBar {
     }
 
     component HeaderContent: Item {
+        function editLocation(): void {
+            location.text = root.controller.currentPath;
+            location.forceActiveFocus();
+            location.selectAll();
+        }
         function focusCurrentSegment(): bool {
             return breadcrumbLabel.focusCurrentSegment();
         }
 
         // History buttons sit inside the sidebar region, leaving the listing-aligned breadcrumb clear
-        // (navigation-history REQ-F-030..036). NoFocus keeps Vim keys on the listing after a click.
+        // (navigation-history REQ-F-030..036). TabFocus keeps pointer clicks from stealing listing focus.
         HnIconButton {
             id: backButton
             objectName: "historyBackButton"
             x: HnMetrics.internalSpacing(HnControlSize.Normal)
             anchors.verticalCenter: parent.verticalCenter
             sizeRole: HnControlSize.Compact
-            focusPolicy: Qt.NoFocus
+            focusPolicy: Qt.TabFocus
             icon.name: "go-previous"
             enabled: root.historyEnabled && root.controller.canGoBack
             Accessible.name: qsTr("Back")
@@ -88,7 +102,7 @@ HnHeaderBar {
             x: backButton.x + backButton.width
             anchors.verticalCenter: parent.verticalCenter
             sizeRole: HnControlSize.Compact
-            focusPolicy: Qt.NoFocus
+            focusPolicy: Qt.TabFocus
             icon.name: "go-next"
             enabled: root.historyEnabled && root.controller.canGoForward
             Accessible.name: qsTr("Forward")
@@ -101,11 +115,53 @@ HnHeaderBar {
             x: forwardButton.x + forwardButton.width
             anchors.verticalCenter: parent.verticalCenter
             sizeRole: HnControlSize.Compact
-            focusPolicy: Qt.NoFocus
+            focusPolicy: Qt.TabFocus
             icon.name: "go-up"
             enabled: root.historyEnabled && root.controller.canGoUp
             Accessible.name: qsTr("Up")
             onClicked: root.controller.goUp()
+        }
+        Item {
+            id: breadcrumbContainer
+            objectName: "breadcrumbContainer"
+            x: root.breadcrumbLeftInset
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.max(0, Math.min(root.listingPanel.width, (root.showCloseButton ? closeButton.x - 8 : parent.width - 12) - x - viewSelector.width - 8))
+            height: HnMetrics.controlHeight(HnControlSize.Normal)
+
+            HnBreadcrumbBar {
+                id: breadcrumbLabel
+                objectName: "breadcrumbLabel"
+                editable: true
+                visible: !root.editingLocation
+                onLocationEditRequested: root.editLocation()
+                vimNavigation: HnInputPreferences.vimNavigation
+                clip: true
+                sizeRole: HnControlSize.Normal
+                anchors.fill: parent
+                enabled: root.historyEnabled && !root.controller.quickLookOpen
+                segments: root.controller.breadcrumbLabels
+                onSegmentActivated: index => root.controller.activateBreadcrumb(index)
+            }
+            Controls.TextField {
+                id: location
+                objectName: "locationEditor"
+                anchors.fill: parent
+                visible: root.editingLocation
+                Accessible.name: qsTr("Location")
+                onAccepted: {
+                    const path = text.startsWith("~/") ? root.controller.finder.homePath + text.slice(1) : text;
+                    root.controller.open(path);
+                    root.editingLocation = false;
+                    root.locationEditFinished();
+                }
+                onActiveFocusChanged: if (!activeFocus)
+                    root.editingLocation = false
+                Keys.onEscapePressed: {
+                    root.editingLocation = false;
+                    root.locationEditFinished();
+                }
+            }
         }
         Row {
             id: viewSelector
@@ -133,33 +189,11 @@ HnHeaderBar {
             anchors.right: parent.right
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            focusPolicy: Qt.NoFocus
+            focusPolicy: Qt.TabFocus
             visible: root.showCloseButton
             enabled: visible
             Accessible.ignored: !visible
             onClicked: root.closeRequested()
-        }
-
-        Item {
-            id: breadcrumbContainer
-            objectName: "breadcrumbContainer"
-            x: root.breadcrumbLeftInset
-            anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(0, Math.min(root.listingPanel.width, (root.showCloseButton ? closeButton.x - 8 : parent.width - 12) - x - viewSelector.width - 8))
-            height: HnMetrics.controlHeight(HnControlSize.Normal)
-
-            HnBreadcrumbBar {
-                id: breadcrumbLabel
-                objectName: "breadcrumbLabel"
-                editable: false
-                vimNavigation: true
-                clip: true
-                sizeRole: HnControlSize.Normal
-                anchors.fill: parent
-                enabled: root.historyEnabled && !root.controller.quickLookOpen
-                segments: root.controller.breadcrumbLabels
-                onSegmentActivated: index => root.controller.activateBreadcrumb(index)
-            }
         }
     }
 }

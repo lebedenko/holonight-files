@@ -156,7 +156,7 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
       EXPECT_TRUE(QTest::qWaitFor([&] {
         return item->mapRectToScene(item->boundingRect()).intersects(list->mapRectToScene(list->boundingRect()));
       }));
-      EXPECT_TRUE(item->property("highlighted").toBool());
+      EXPECT_TRUE(item->property("keyboardCursor").toBool());
       EXPECT_EQ(item->property("title").toString(),
                 controller.listing()->data(controller.listing()->index(row, 0), DirectoryModel::NameRole).toString());
     }
@@ -194,13 +194,17 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   expectCursor(0);
   // Both toggles consume counts and pending g chords.
   for (const auto toggle : {Qt::Key_Period, Qt::Key_S}) {
+    controller.selectEntry(10);
+    const auto identity = controller.cursorPath();
     QTest::keyClick(window, Qt::Key_5);
     QTest::keyClick(window, Qt::Key_G);
     QTest::keyClick(window, toggle);
+    EXPECT_EQ(controller.cursorPath(), identity);
+    const int next = controller.cursorRow() + 1;
     QTest::keyClick(window, Qt::Key_J);
-    expectCursor(1);
+    expectCursor(next);
     QTest::keyClick(window, Qt::Key_G);
-    expectCursor(1);
+    expectCursor(next);
     QTest::keyClick(window, Qt::Key_G);
     expectCursor(0);
   }
@@ -210,6 +214,7 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   QTest::keyClick(window, Qt::Key_S);
   QTest::keyClick(window, Qt::Key_Period);
   EXPECT_EQ(list->property("count").toInt(), 31);
+  QTest::keyClick(window, Qt::Key_Home);
   expectCursor(0);
   for (const auto enter : {Qt::Key_L, Qt::Key_Return, Qt::Key_Enter}) {
     QTest::keyClick(window, enter);
@@ -1080,7 +1085,7 @@ TEST(Files, NamedFolderFallsBackToTheFolderGlyphWhenTheThemeLacksItsIcon) {
   ASSERT_NE(failedIcons, nullptr);
   EXPECT_TRUE(failedIcons->isUnresolved("folder-documents/folder/inode-directory"));
 
-  QTest::keyClick(window, Qt::Key_J);
+  QTest::keyClick(window, Qt::Key_Down);
   ASSERT_TRUE(QTest::qWaitFor([&] { return previewFallback->isVisible() && imageReady(previewFallback); }));
   EXPECT_TRUE(previewFallback->property("source").toString().endsWith("generic-file-fallback.svg"));
 }
@@ -1154,6 +1159,14 @@ TEST(Files, EmbeddedStyleSelection) {
 }
 
 int main(int argc, char* argv[]) {
+  // Existing mode regressions explicitly opt into the navigation profile they exercise.
+  const QString inputDirectory = QString::fromUtf8(FILES_FIXTURE_DIR) + "/input-config/holonight";
+  QDir().mkpath(inputDirectory);
+  QFile inputFile(inputDirectory + "/input.toml");
+  if (!inputFile.open(QIODevice::WriteOnly)) return 1;
+  inputFile.write("version = 1\nprofile = 'vim-navigation'\n");
+  inputFile.close();
+  qputenv("XDG_CONFIG_HOME", QFile::encodeName(QFileInfo(inputDirectory).absolutePath()));
   configurePreviewImageLimits();
   const auto testStyle = qgetenv("FILES_TEST_STYLE");
   if (testStyle.isEmpty()) {

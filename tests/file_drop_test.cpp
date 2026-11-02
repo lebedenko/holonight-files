@@ -175,6 +175,7 @@ TEST(FileDrop, IconTilesKeepEightPixelGapsAndPaddingAcrossResizeAndScroll) {
     SCOPED_TRACE(width);
     root->setSize({static_cast<qreal>(width), 300});
     controller.selectEntry(0);
+    grid->forceActiveFocus();
     QMetaObject::invokeMethod(grid, "forceLayout");
     const int columns = grid->property("columns").toInt();
     ASSERT_TRUE(QTest::qWaitFor([&] { return tile(0) && tile(columns); }));
@@ -183,7 +184,8 @@ TEST(FileDrop, IconTilesKeepEightPixelGapsAndPaddingAcrossResizeAndScroll) {
     EXPECT_NEAR(start.x(), 8, 0.01);
     EXPECT_NEAR(start.y(), 8, 0.01);
     EXPECT_EQ(first->height(), 128);
-    EXPECT_TRUE(first->property("highlighted").toBool());
+    EXPECT_TRUE(first->property("keyboardCursor").toBool());
+    EXPECT_FALSE(first->property("highlighted").toBool());
     auto* icon = first->findChild<QQuickItem*>("iconColumnField");
     ASSERT_NE(icon, nullptr);
     EXPECT_EQ(icon->size(), QSizeF(64, 64));
