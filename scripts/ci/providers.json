@@ -13,7 +13,7 @@
   },
   {
     "name": "holonight-qt",
-    "revision": "21aebdda3d9de71c374f5f1f5e61df8a056c1b32"
+    "revision": "ac48ae2eddb2cd4cb6ab9df6c633ea597460a558"
   },
   {
     "name": "holonight-images",
@@ -29,7 +29,7 @@
   },
   {
     "name": "holonight-file-browser",
-    "revision": "520662b874e7bcb14d419c91c229eea856770000",
+    "revision": "caec685c7c85388cc0b41b962cbc237df2db643d",
     "options": []
   }
 ]

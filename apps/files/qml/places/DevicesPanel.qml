@@ -142,7 +142,7 @@ Item {
                         objectName: "deviceThemeIcon"
                         anchors.centerIn: parent
                         size: parent.implicitWidth
-                        source: "image://icon/" + row.iconName
+                        source: "image://icon/" + row.iconName + "?revision=" + HnAppearance.revision
                         visible: !hasError
                     }
                     HnIcon {

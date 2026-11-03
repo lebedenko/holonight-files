@@ -159,7 +159,7 @@ Item {
                             objectName: "themeFileIcon"
                             anchors.centerIn: parent
                             size: 64
-                            source: iconCell.skipRequest ? "" : "image://icon/" + delegate.iconName
+                            source: iconCell.skipRequest ? "" : "image://icon/" + delegate.iconName + "?revision=" + HnAppearance.revision
                             rendering: HnIcon.Original
                             visible: !iconCell.thumbnailReady && !iconCell.showFallback
                             onHasErrorChanged: if (hasError) {

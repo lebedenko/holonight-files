@@ -103,7 +103,7 @@ Item {
                     objectName: "placeThemeIcon"
                     anchors.centerIn: parent
                     size: parent.implicitWidth
-                    source: "image://icon/" + row.iconName
+                    source: "image://icon/" + row.iconName + "?revision=" + HnAppearance.revision
                     rendering: HnIcon.Original
                     visible: !hasError
                 }
@@ -127,7 +127,7 @@ Item {
                     objectName: "placeWarningThemeIcon"
                     anchors.centerIn: parent
                     size: parent.implicitWidth
-                    source: "image://icon/dialog-warning"
+                    source: "image://icon/dialog-warning?revision=" + HnAppearance.revision
                     rendering: HnIcon.Original
                     visible: !hasError
                 }

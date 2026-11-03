@@ -913,7 +913,9 @@ TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
         return folder.theme != nullptr && folder.theme->isVisible() && imageReady(folder.theme);
       })) << row;
       EXPECT_FALSE(rowIcons(list, row).fallback->isVisible()) << row;
-      EXPECT_EQ(rowIcons(list, row).theme->property("source").toString(), "image://icon/folder/inode-directory") << row;
+      EXPECT_TRUE(rowIcons(list, row).theme->property("source").toString().startsWith(
+          "image://icon/folder/inode-directory?revision="))
+          << row;
     }
     for (const int row : {1, 2}) {
       ASSERT_TRUE(QTest::qWaitFor([&] {

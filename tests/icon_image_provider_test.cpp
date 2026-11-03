@@ -135,3 +135,30 @@ TEST(IconImageProvider, RepeatedNamedFolderRequestsDoNotInflateLookupsOrWarnings
     EXPECT_EQ(iconWarningCount().load(), 0);
   }
 }
+
+TEST(IconImageProvider, RevisionAndThemeContextInvalidateHitsAndMisses) {
+  QTemporaryDir root(fixturePattern("icon-tiny-theme"));
+  ASSERT_TRUE(writeTinyTheme(root));
+  const auto restore = scopedIconTheme({root.path()}, QStringLiteral("tiny-test-theme"));
+  IconImageProvider provider;
+  auto request = [&](const QString& revision) {
+    EXPECT_FALSE(provider.requestPixmap("absent/folder?revision=" + revision, nullptr, QSize(30, 30)).isNull());
+  };
+  request("1");
+  request("1");
+  EXPECT_EQ(IconImageProviderTestAccess::themeLookupCount(provider), 2);
+  request("2");
+  EXPECT_EQ(IconImageProviderTestAccess::themeLookupCount(provider), 4);
+  QIcon::setFallbackThemeName("different-fallback");
+  request("2");
+  EXPECT_EQ(IconImageProviderTestAccess::themeLookupCount(provider), 6);
+  QIcon::setThemeSearchPaths({root.path(), root.filePath("extra")});
+  request("2");
+  EXPECT_EQ(IconImageProviderTestAccess::themeLookupCount(provider), 8);
+  QIcon::setThemeName("another-theme");
+  QIcon::setFallbackThemeName("tiny-test-theme");
+  request("2");
+  EXPECT_EQ(IconImageProviderTestAccess::themeLookupCount(provider), 10);
+  request("1");
+  EXPECT_EQ(IconImageProviderTestAccess::themeLookupCount(provider), 12);
+}

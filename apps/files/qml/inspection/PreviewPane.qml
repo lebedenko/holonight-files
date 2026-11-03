@@ -258,7 +258,7 @@ Item {
                     width: imageArea.iconExtent
                     height: imageArea.iconExtent
                     size: imageArea.iconSourceSize
-                    source: !root.preview.hasEntry || root.preview.hasImage || imageArea.skipRequest ? "" : "image://icon/" + root.preview.iconName
+                    source: !root.preview.hasEntry || root.preview.hasImage || imageArea.skipRequest ? "" : "image://icon/" + root.preview.iconName + "?revision=" + HnAppearance.revision
                     rendering: HnIcon.Original
                     visible: root.showIconFallback && !imageArea.showFallback
                     onHasErrorChanged: if (hasError) {

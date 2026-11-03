@@ -310,7 +310,7 @@ Item {
                             objectName: "themeFileIcon"
                             anchors.centerIn: parent
                             size: root.iconColumnWidth
-                            source: iconCell.skipRequest ? "" : "image://icon/" + delegate.iconName
+                            source: iconCell.skipRequest ? "" : "image://icon/" + delegate.iconName + "?revision=" + HnAppearance.revision
                             rendering: HnIcon.Original
                             visible: !iconCell.showFallback
                             onHasErrorChanged: if (hasError) {

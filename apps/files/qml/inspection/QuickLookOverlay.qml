@@ -204,7 +204,7 @@ Controls.Popup {
                 property string failedChain
                 readonly property bool useFallback: IconFallbacks.isUnresolved(root.preview.iconName) || compactIcon.failedChain === root.preview.iconName
                 readonly property bool isFolderEntry: root.preview.isDirectory
-                source: presentation.kind !== QuickLookPresentationModel.Compact ? "" : !compactIcon.useFallback ? "image://icon/" + root.preview.iconName : compactIcon.isFolderEntry ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
+                source: presentation.kind !== QuickLookPresentationModel.Compact ? "" : !compactIcon.useFallback ? "image://icon/" + root.preview.iconName + "?revision=" + HnAppearance.revision : compactIcon.isFolderEntry ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
                 rendering: compactIcon.useFallback ? HnIcon.Semantic : HnIcon.Original
                 visible: presentation.kind === QuickLookPresentationModel.Compact && !root.preview.hasImage && !root.preview.quickLookBusy
                 onHasErrorChanged: if (hasError && !compactIcon.useFallback) {
