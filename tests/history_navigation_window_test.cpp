@@ -909,8 +909,8 @@ TEST(WindowPanelFocus, LocationEditorUsesConventionalTextInputInBothProfiles) {
     QTemporaryDir config;
     files_test::ScopedXdgConfigHome guard(config.path());
     QDir().mkpath(config.filePath("holonight"));
-    files_test::writeFile(config, "holonight/input.toml",
-                          vim ? "version = 1\nprofile = 'vim-navigation'\n" : "version = 1\nprofile = 'standard'\n");
+    files_test::writeFile(config, "holonight/config.toml",
+                          vim ? "[input]\nnavigation = 'vim-navigation'\n" : "[input]\nnavigation = 'standard'\n");
     HistoryWindow rendered;
     ASSERT_TRUE(rendered.start());
     QTest::keyClick(rendered.window, vim ? Qt::Key_D : Qt::Key_L, vim ? Qt::AltModifier : Qt::ControlModifier);

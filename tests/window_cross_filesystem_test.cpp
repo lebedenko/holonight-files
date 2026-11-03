@@ -294,8 +294,8 @@ int main(int argc, char* argv[]) {
   if (!QDir().mkpath(config + "/holonight")) {
     return 1;
   }
-  QFile input(config + "/holonight/input.toml");
-  if (!input.open(QIODevice::WriteOnly) || input.write("version = 1\nprofile = 'vim-navigation'\n") < 0) {
+  QFile input(config + "/holonight/config.toml");
+  if (!input.open(QIODevice::WriteOnly) || input.write("[input]\nnavigation = 'vim-navigation'\n") < 0) {
     return 1;
   }
   input.close();

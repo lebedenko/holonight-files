@@ -50,7 +50,7 @@ struct SeededUserDirs {
     }
     files_test::writeFile(config_home, "user-dirs.dirs", contents);
     QDir().mkpath(config_home.filePath("holonight"));
-    files_test::writeFile(config_home, "holonight/input.toml", "version = 1\nprofile = 'vim-navigation'\n");
+    files_test::writeFile(config_home, "holonight/config.toml", "[input]\nnavigation = 'vim-navigation'\n");
     return config_home.path();
   }
 };
@@ -817,8 +817,8 @@ TEST(PlacesWindow, SharedNavigationProfilesAndSectionPaging) {
   for (const bool vim : {false, true}) {
     SCOPED_TRACE(vim);
     const SeededUserDirs seeded(9);
-    files_test::writeFile(seeded.config_home, "holonight/input.toml",
-                          vim ? "version = 1\nprofile = 'vim-navigation'\n" : "version = 1\nprofile = 'standard'\n");
+    files_test::writeFile(seeded.config_home, "holonight/config.toml",
+                          vim ? "[input]\nnavigation = 'vim-navigation'\n" : "[input]\nnavigation = 'standard'\n");
     DevicesWindow view;
     ASSERT_TRUE(view.startWith({files_test::storageDrive("stick")}, {files_test::storageVolume("usb", "stick")}));
     auto* navigator = view.controller.sidebarNavigator();
