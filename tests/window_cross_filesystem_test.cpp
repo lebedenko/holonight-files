@@ -289,6 +289,17 @@ int main(int argc, char* argv[]) {
   qputenv("TMPDIR", QFile::encodeName(fixtureRoot));
   qputenv("XDG_CACHE_HOME", QFile::encodeName(fixtureRoot + "/cache"));
   static QTemporaryDir home;  // static duration: lives for the process, cleaned up at exit
+  // These regressions exercise Vim visual-selection commands in an isolated profile.
+  const auto config = home.filePath("config");
+  if (!QDir().mkpath(config + "/holonight")) {
+    return 1;
+  }
+  QFile input(config + "/holonight/input.toml");
+  if (!input.open(QIODevice::WriteOnly) || input.write("version = 1\nprofile = 'vim-navigation'\n") < 0) {
+    return 1;
+  }
+  input.close();
+  qputenv("XDG_CONFIG_HOME", QFile::encodeName(config));
   if (setupResult().available) {
     xdgDataHomeForTest() = home.path();
     qputenv("XDG_DATA_HOME", xdgDataHomeForTest().toLocal8Bit());
