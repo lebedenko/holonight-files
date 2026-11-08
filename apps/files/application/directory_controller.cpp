@@ -33,10 +33,17 @@ Holonight::NavigationCommand navigationMotion(const FileCommand& command) {
 }  // namespace
 
 DirectoryController::DirectoryController(QObject* parent) : DirectoryController(nullptr, parent) {}
+DirectoryController::DirectoryController(HolonightFileBrowser::ImageRuntimeOptions runtime, QObject* parent)
+    : DirectoryController(nullptr, parent, {}, std::move(runtime)) {}
 DirectoryController::DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
                                          std::shared_ptr<const CapacityProbe> capacity)
+    : DirectoryController(storage, parent, std::move(capacity), HolonightFileBrowser::defaultImageRuntimeOptions()) {}
+DirectoryController::DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
+                                         std::shared_ptr<const CapacityProbe> capacity,
+                                         HolonightFileBrowser::ImageRuntimeOptions runtime)
     : QObject(parent),
-      devices_(storage != nullptr ? new DevicesModel(storage, this, std::move(capacity)) : new DevicesModel(this)) {
+      devices_(storage != nullptr ? new DevicesModel(storage, this, std::move(capacity)) : new DevicesModel(this)),
+      preview_(std::move(runtime)) {
   connect(&input_preferences_, &Holonight::InputPreferences::profileChanged, this,
           &DirectoryController::resetNavigationInput);
   connect(this, &DirectoryController::navigated, this,

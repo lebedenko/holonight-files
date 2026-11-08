@@ -36,7 +36,8 @@ with tempfile.TemporaryDirectory(prefix='files-native-observer-') as temporary:
     evidence = root / 'events.jsonl'
     env.update(QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software',
                FILES_NATIVE_EVIDENCE=str(evidence), FILES_NATIVE_EXIT_AFTER_MS='1000')
-    process = subprocess.run([sys.argv[1], str(folder)], env=env, capture_output=True, text=True, timeout=10)
+    runtime_args = ["--image-runtime", sys.argv[2]] if len(sys.argv) > 2 and sys.argv[2] else []
+    process = subprocess.run([sys.argv[1], *runtime_args, str(folder)], env=env, capture_output=True, text=True, timeout=10)
     native.validate_exit(process.returncode)
     events = native.read_events(evidence)
     snapshots = [e for e in events if e['event'] == 'snapshot']

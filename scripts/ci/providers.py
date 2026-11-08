@@ -25,5 +25,15 @@ for provider in json.loads((root / 'scripts/ci/providers.json').read_text()):
         ['cmake', '--build', build, '--parallel', (os.environ.get('JOBS') or subprocess.check_output(['nproc'], text=True).strip())],
         ['cmake', '--install', build],
     ]
+    if name == 'holonight-images' and (source / 'cmake/Isolated.cmake').exists():
+        commands[0].append('-DHOLONIGHT_IMAGES_ISOLATED=ON')
+        bundle = build / 'acceptance-runtime'
+        commands[2:2] = [
+            ['python3', source / 'scripts/prepare-isolated-runtime.py', '--helper', build / 'holonight-images-helper',
+             '--plugins', '/usr/lib/qt6/plugins', '--output', bundle],
+            ['cmake', '-S', source, '-B', build, f'-DHOLONIGHT_IMAGES_RUNTIME_BUNDLE={bundle}'],
+        ]
+    if name == 'holonight-thumbnails':
+        commands[0].append('-DHOLONIGHT_THUMBNAILS_ISOLATED=ON')
     for command in commands:
         subprocess.run(list(map(str, command)), check=True)

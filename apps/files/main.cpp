@@ -18,6 +18,7 @@
 #include <cstdlib>
 
 #ifdef FILES_NATIVE_PREVIEW_LAB
+#include "isolated_preview_acceptance.h"
 #include "native_preview_observer.h"
 #endif
 
@@ -41,12 +42,22 @@ int main(int argc, char* argv[]) {
   parser.addVersionOption();
   parser.addPositionalArgument(QStringLiteral("folder"), QCoreApplication::translate("main", "Folder to open"),
                                QStringLiteral("[folder]"));
+#ifdef FILES_NATIVE_PREVIEW_LAB
+  parser.addOption({QStringLiteral("verify-isolated-preview"), QStringLiteral("Run offscreen preview acceptance")});
+  parser.addOption({QStringLiteral("image-runtime"), QStringLiteral("Explicit acceptance runtime directory"),
+                    QStringLiteral("directory")});
+#endif
   parser.process(app);
   const auto arguments = parser.positionalArguments();
   if (arguments.size() > 1) {
     QTextStream(stderr) << QCoreApplication::translate("main", "Open at most one folder.") << '\n';
     return EXIT_FAILURE;
   }
+#ifdef FILES_NATIVE_PREVIEW_LAB
+  if (parser.isSet("verify-isolated-preview")) {
+    return verifyIsolatedPreview({parser.value("image-runtime")}, arguments.value(0));
+  }
+#endif
   // Capture startup settings before any folder opens. Header preferences reload independently.
   StderrWarningSink warnings;
   FilesPreferences preferences;
@@ -58,7 +69,14 @@ int main(int argc, char* argv[]) {
                           : StateLoadResult{};
   const auto plan = planStartup(arguments, restoreEnabled, stored.last_location);
   QGuiApplication::setQuitOnLastWindowClosed(false);
+#ifdef FILES_NATIVE_PREVIEW_LAB
+  const auto runtime = parser.isSet("image-runtime")
+                           ? HolonightFileBrowser::ImageRuntimeOptions{parser.value("image-runtime")}
+                           : HolonightFileBrowser::defaultImageRuntimeOptions();
+  DirectoryController controller(runtime);
+#else
   DirectoryController controller;
+#endif
   controller.configureRestore(restoreEnabled);
 #ifdef FILES_NATIVE_PREVIEW_LAB
   NativePreviewObserver observer(controller, labClock);
@@ -66,7 +84,11 @@ int main(int argc, char* argv[]) {
   QObject::connect(&app, &QGuiApplication::lastWindowClosed, &controller, &DirectoryController::shutdown);
   QObject::connect(&controller, &DirectoryController::shutdownFinished, &app, &QCoreApplication::quit);
   QQmlApplicationEngine engine;
+#ifdef FILES_NATIVE_PREVIEW_LAB
+  initializeFilesEngine(engine, runtime);
+#else
   initializeFilesEngine(engine);
+#endif
   QObject::connect(
       &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(EXIT_FAILURE); },
       Qt::QueuedConnection);

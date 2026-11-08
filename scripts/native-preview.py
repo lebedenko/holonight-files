@@ -253,7 +253,9 @@ def run_session(args, output, cache, phase):
           'Close Files normally when finished.', flush=True)
     started = time.monotonic_ns()
     with (output / 'process.log').open('w') as log:
-        process = subprocess.run([str(args.binary), str(args.fixtures)], env=env, stdout=log, stderr=log)
+        runtime = getattr(args, 'image_runtime', None)
+        runtime_args = ['--image-runtime', str(runtime)] if runtime else []
+        process = subprocess.run([str(args.binary), *runtime_args, str(args.fixtures)], env=env, stdout=log, stderr=log)
     save(output / 'process.json', {'returncode': process.returncode,
                                   'elapsed_ns': time.monotonic_ns() - started})
     after = json.loads(command('hyprctl', '-j', 'monitors'))
@@ -297,6 +299,9 @@ def validate_launch_environment(args):
 
 def launch(args):
     validate_launch_environment(args)
+    runtime = getattr(args, 'image_runtime', None)
+    if runtime:
+        require((runtime / 'manifest.json').is_file(), 'Explicit runtime manifest missing')
     args.output.mkdir(parents=True, exist_ok=False)
     record = {'scale': args.expected_scale, 'trial': args.trial, 'mode': args.mode,
               'binary': str(args.binary), 'binary_sha256': digest(args.binary),
@@ -310,6 +315,8 @@ def launch(args):
                                      for p in args.provider_prefix.rglob('*')
                                      if p.is_file() and ('.so' in p.name or p.suffix in ('.qml', '.cmake'))},
               'provider_prefix': str(args.provider_prefix),
+              'image_runtime': str(runtime) if runtime else None,
+              'runtime_manifest_sha256': digest(runtime / 'manifest.json') if runtime else None,
               'fixture_directory': str(args.fixtures),
               'fixtures': {p.name: digest(p) for p in args.fixtures.iterdir() if p.is_file()},
               'status': 'incomplete'}
@@ -340,6 +347,10 @@ def resume_disk(args):
     require(args.mode == 'pair', 'Only a completed cold phase can resume to disk')
     record = json.loads((args.output / 'manifest.json').read_text())
     require(record['status'] == 'failed' and not (args.output / 'disk').exists(), 'Not an eligible cold-only attempt')
+    runtime = getattr(args, 'image_runtime', None)
+    require(record.get('image_runtime') == (str(runtime) if runtime else None), 'Resume runtime selection changed')
+    require(record.get('runtime_manifest_sha256') == (digest(runtime / 'manifest.json') if runtime else None),
+            'Resume runtime manifest changed')
     require(record['binary_sha256'] == digest(args.binary) and record['scale'] == args.expected_scale and
             record['trial'] == args.trial, 'Resume binary/scale/trial mismatch')
     require(record['provider_artifacts'] == {str(p.relative_to(args.provider_prefix)): digest(p)
@@ -443,6 +454,7 @@ def main():
     run = sub.add_parser('run')
     for name in ('binary', 'provider-prefix', 'output', 'fixtures'):
         run.add_argument('--' + name, type=lambda s: Path(s).resolve(), required=True)
+    run.add_argument('--image-runtime', type=lambda s: Path(s).resolve())
     run.add_argument('--expected-scale', type=float, choices=SUPPORTED_SCALES, required=True)
     run.add_argument('--trial', type=int, required=True)
     run.add_argument('--resume-disk', action='store_true', help='Revalidate complete cold evidence after a parser correction; preserve failure history')

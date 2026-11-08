@@ -173,7 +173,9 @@ TEST(PreviewConsumers, SidebarWorkerThumbnailIsVisibleBeforeMetadataAndOnCacheRe
   ASSERT_TRUE(dir.isValid());
   const auto path = files_test::writeJpegWithExif(dir);
   const QFileInfo info(path);
-  DirectoryController controller;
+  const auto runtime = QString::fromUtf8(FILES_TEST_IMAGE_RUNTIME);
+  DirectoryController controller(runtime.isEmpty() ? HolonightFileBrowser::defaultImageRuntimeOptions()
+                                                   : HolonightFileBrowser::ImageRuntimeOptions{runtime});
   auto& preview = *controller.preview();
   QQmlEngine engine;
   initializeFilesEngine(engine);

@@ -66,9 +66,12 @@ class DirectoryController : public QObject {
   Q_PROPERTY(bool finderOpen MEMBER finder_open_ NOTIFY changed)
  public:
   explicit DirectoryController(QObject* parent = nullptr);
+  explicit DirectoryController(HolonightFileBrowser::ImageRuntimeOptions runtime, QObject* parent = nullptr);
   // A null capacity probe measures the real filesystem; tests pass a fake (device-actions REQ-C-006).
   DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
                       std::shared_ptr<const CapacityProbe> capacity = {});
+  DirectoryController(HoloNight::System::StorageController* storage, QObject* parent,
+                      std::shared_ptr<const CapacityProbe> capacity, HolonightFileBrowser::ImageRuntimeOptions runtime);
   [[nodiscard]] QString currentPath() const { return navigation_.current_path_; }
   [[nodiscard]] QString cursorPath() const;
   [[nodiscard]] QString statusMessage() const { return status_message_; }
