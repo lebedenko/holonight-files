@@ -31,6 +31,11 @@ add_test(NAME files-smoke COMMAND ${Python3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/s
 set_tests_properties(files-smoke PROPERTIES ENVIRONMENT
   "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
 
+add_test(NAME files-smoke-config-isolation COMMAND ${Python3_EXECUTABLE}
+  "${PROJECT_SOURCE_DIR}/scripts/check-smoke-config-isolation.py" $<TARGET_FILE:files-smoke>)
+set_tests_properties(files-smoke-config-isolation PROPERTIES
+  ENVIRONMENT "QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}" TIMEOUT 180)
+
 # Enum registration diagnostics must be observed before any other QML loads.
 add_test(NAME files-preview-scoped-enums
   COMMAND files-smoke --gtest_filter=Files.PreviewServiceScopedEnumsRemainDistinct)

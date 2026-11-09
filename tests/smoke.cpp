@@ -1163,17 +1163,33 @@ TEST(Files, EmbeddedStyleSelection) {
 }
 
 int main(int argc, char* argv[]) {
-  // Existing mode regressions explicitly opt into the navigation profile they exercise.
-  const QString inputDirectory =
-      qEnvironmentVariable("XDG_CONFIG_HOME", QString::fromUtf8(FILES_FIXTURE_DIR) + "/input-config") + "/holonight";
-  QDir().mkpath(inputDirectory);
-  QFile inputFile(inputDirectory + "/config.toml");
-  if (!inputFile.open(QIODevice::WriteOnly)) {
+  // Declared before the application so isolation also covers enumeration and application teardown.
+  const QTemporaryDir configDirectory;
+  if (!configDirectory.isValid()) {
+    qCritical() << "files-smoke: cannot create temporary configuration directory:" << configDirectory.errorString();
     return 1;
   }
-  inputFile.write("[input]\nnavigation = 'vim-navigation'\n");
+  if (!qputenv("XDG_CONFIG_HOME", QFile::encodeName(configDirectory.path()))) {
+    qCritical() << "files-smoke: cannot set isolated XDG_CONFIG_HOME";
+    return 1;
+  }
+  // Existing mode regressions explicitly opt into the navigation profile they exercise.
+  const QString inputDirectory = configDirectory.filePath("holonight");
+  if (!QDir().mkpath(inputDirectory)) {
+    qCritical() << "files-smoke: cannot create navigation fixture directory:" << inputDirectory;
+    return 1;
+  }
+  QFile inputFile(inputDirectory + "/config.toml");
+  if (!inputFile.open(QIODevice::WriteOnly)) {
+    qCritical() << "files-smoke: cannot open navigation fixture:" << inputFile.errorString();
+    return 1;
+  }
+  const QByteArray inputConfig("[input]\nnavigation = 'vim-navigation'\n");
+  if (inputFile.write(inputConfig) != inputConfig.size() || !inputFile.flush()) {
+    qCritical() << "files-smoke: cannot write complete navigation fixture:" << inputFile.errorString();
+    return 1;
+  }
   inputFile.close();
-  qputenv("XDG_CONFIG_HOME", QFile::encodeName(QFileInfo(inputDirectory).absolutePath()));
   configurePreviewImageLimits();
   const auto testStyle = qgetenv("FILES_TEST_STYLE");
   if (testStyle.isEmpty()) {
