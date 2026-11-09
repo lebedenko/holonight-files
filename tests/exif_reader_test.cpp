@@ -1,4 +1,5 @@
 #include "directory_fixtures.h"
+#include "image_runtime.h"
 #include "preview_fixtures.h"
 
 #include <QBuffer>
@@ -8,6 +9,8 @@
 #include <QThread>
 
 #include <HolonightFileBrowser/preview/exif_reader.h>
+#include <HolonightFileBrowser/preview/image_policy.h>
+#include <algorithm>
 #include <atomic>
 #include <future>
 #include <gtest/gtest.h>
@@ -180,7 +183,8 @@ class SlowCountingDevice final : public CountingReadDevice {
  protected:
   qint64 readData(char* data, qint64 maxlen) override {
     QThread::msleep(1);
-    return CountingReadDevice::readData(data, maxlen);
+    // Fragment reads so cancellation can interrupt input capture as well as scanning.
+    return CountingReadDevice::readData(data, std::min<qint64>(maxlen, 64));
   }
 };
 
@@ -190,7 +194,7 @@ TEST(ExifReader, ExtractsAllFieldsFromAJpegWithExif) {
   QTemporaryDir dir(fixturePattern("exif-jpeg"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeJpegWithExif(dir);
-  const auto summary = ExifReader::read(path, "image/jpeg");
+  const auto summary = ExifReader::read(path, "image/jpeg", files_test::imageRuntime);
   EXPECT_TRUE(summary.present);
   EXPECT_EQ(summary.make, "Holonight");
   EXPECT_EQ(summary.model, "TestCam 1000");
@@ -205,7 +209,7 @@ TEST(ExifReader, PartialExifWithOnlyLensAndApertureIsStillPresent) {
   QTemporaryDir dir(fixturePattern("exif-lens-only"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeJpegWithExifBlob(dir, "lens-only.jpg", buildLensAndApertureOnlyExifBlob());
-  const auto summary = ExifReader::read(path, "image/jpeg");
+  const auto summary = ExifReader::read(path, "image/jpeg", files_test::imageRuntime);
   EXPECT_TRUE(summary.present);
   EXPECT_TRUE(summary.make.isEmpty());
   EXPECT_TRUE(summary.exposure_time.isEmpty());
@@ -217,7 +221,7 @@ TEST(ExifReader, MissingLensAndApertureLeaveThoseFieldsEmptyWithoutFailingTheRea
   QTemporaryDir dir(fixturePattern("exif-no-lens"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeJpegWithExifBlob(dir, "no-lens.jpg", buildSampleExifBlobWithoutLens());
-  const auto summary = ExifReader::read(path, "image/jpeg");
+  const auto summary = ExifReader::read(path, "image/jpeg", files_test::imageRuntime);
   EXPECT_TRUE(summary.present);
   EXPECT_EQ(summary.make, "Holonight");
   EXPECT_EQ(summary.iso, "100");
@@ -234,9 +238,9 @@ TEST(ExifReader, ApertureFormatsNonIntegerFStopsToOneDecimalPlace) {
                                          buildExifBlob({.f_number = ExifRational{.numerator = 63, .denominator = 10}}));
   const auto fast = writeJpegWithExifBlob(
       dir, "f14.jpg", buildExifBlob({.f_number = ExifRational{.numerator = 14, .denominator = 10}}));
-  EXPECT_EQ(ExifReader::read(wide, "image/jpeg").aperture, "f/2.8");
-  EXPECT_EQ(ExifReader::read(mid, "image/jpeg").aperture, "f/6.3");
-  EXPECT_EQ(ExifReader::read(fast, "image/jpeg").aperture, "f/1.4");
+  EXPECT_EQ(ExifReader::read(wide, "image/jpeg", files_test::imageRuntime).aperture, "f/2.8");
+  EXPECT_EQ(ExifReader::read(mid, "image/jpeg", files_test::imageRuntime).aperture, "f/6.3");
+  EXPECT_EQ(ExifReader::read(fast, "image/jpeg", files_test::imageRuntime).aperture, "f/1.4");
 }
 
 TEST(ExifReader, ZeroDenominatorApertureIsTreatedAsAbsent) {
@@ -244,7 +248,7 @@ TEST(ExifReader, ZeroDenominatorApertureIsTreatedAsAbsent) {
   ASSERT_TRUE(dir.isValid());
   const auto path = writeJpegWithExifBlob(dir, "f-zero.jpg",
                                           buildExifBlob({.f_number = ExifRational{.numerator = 8, .denominator = 0}}));
-  const auto summary = ExifReader::read(path, "image/jpeg");
+  const auto summary = ExifReader::read(path, "image/jpeg", files_test::imageRuntime);
   EXPECT_TRUE(summary.present);
   EXPECT_TRUE(summary.aperture.isEmpty());
   EXPECT_EQ(summary.lens_model, "HN 24-70mm F2.8");
@@ -254,7 +258,7 @@ TEST(ExifReader, JpegWithoutExifReportsNotPresent) {
   QTemporaryDir dir(fixturePattern("exif-none"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeJpegWithoutExif(dir);
-  const auto summary = ExifReader::read(path, "image/jpeg");
+  const auto summary = ExifReader::read(path, "image/jpeg", files_test::imageRuntime);
   EXPECT_FALSE(summary.present);
   EXPECT_TRUE(summary.make.isEmpty());
 }
@@ -263,10 +267,10 @@ TEST(ExifReader, CorruptedExifDoesNotCrashAndLeavesFieldsEmptyOrPartial) {
   QTemporaryDir dir(fixturePattern("exif-corrupt"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeCorruptJpeg(dir);
-  const auto summary = ExifReader::read(path, "image/jpeg");
+  const auto summary = ExifReader::read(path, "image/jpeg", files_test::imageRuntime);
   // The file is truncated mid-stream; libexif must not crash, and whatever it can't parse must
   // simply come back empty rather than throwing or aborting (REQ-F-023).
-  EXPECT_NO_THROW(ExifReader::read(path, "image/jpeg"));
+  EXPECT_NO_THROW(ExifReader::read(path, "image/jpeg", files_test::imageRuntime));
   EXPECT_TRUE(summary.exposure_time.isEmpty() || summary.present);
 }
 
@@ -274,18 +278,19 @@ TEST(ExifReader, MalformedPngLengthFieldsAreHandledWithoutCrash) {
   QTemporaryDir dir(fixturePattern("exif-malformed"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeMalformedPngChunk(dir);
-  const auto summary = ExifReader::read(path, "image/png");
+  const auto summary = ExifReader::read(path, "image/png", files_test::imageRuntime);
   EXPECT_FALSE(summary.present);
 }
 
 TEST(ExifReader, OversizedPngExifPayloadIsIgnoredWithoutUnboundedRead) {
+  const std::atomic_bool running{false};
   QTemporaryDir dir(fixturePattern("exif-oversized"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writePngWithOversizedExif(dir);
   CountingReadDevice device(path);
   ASSERT_TRUE(device.open(QIODevice::ReadOnly));
   const auto before = device.bytesRead();
-  const auto summary = ExifReader::read(device, "image/png");
+  const auto summary = ExifReader::format(HolonightImages::readMetadata(device, kPreviewImageLimits, running));
   EXPECT_FALSE(summary.present);
   EXPECT_GE(device.bytesRead(), before);
   EXPECT_LT(device.bytesRead(), qint64{1'200'000});
@@ -299,7 +304,8 @@ TEST(ExifReader, CancellationStopsLongRunningExifScan) {
   SlowCountingDevice device(path);
   ASSERT_TRUE(device.open(QIODevice::ReadOnly));
 
-  auto future = std::async(std::launch::async, [&] { return ExifReader::read(device, "image/png", cancel); });
+  auto future = std::async(std::launch::async,
+                           [&] { return ExifReader::read(device, "image/png", cancel, files_test::imageRuntime); });
   QThread::msleep(10);
   cancel->store(true, std::memory_order_release);
   const auto summary = future.get();
@@ -311,7 +317,7 @@ TEST(ExifReader, PngExifChunkIsExtractedViaTheChunkScanner) {
   QTemporaryDir dir(fixturePattern("exif-png"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writePngWithExif(dir);
-  const auto summary = ExifReader::read(path, "image/png");
+  const auto summary = ExifReader::read(path, "image/png", files_test::imageRuntime);
   EXPECT_TRUE(summary.present);
   EXPECT_EQ(summary.make, "Holonight");
   EXPECT_EQ(summary.model, "TestCam 1000");
@@ -324,11 +330,12 @@ TEST(ExifReader, PlainPngWithoutEXifChunkReportsNotPresent) {
   QImage image(QSize(16, 16), QImage::Format_RGB32);
   image.fill(Qt::black);
   ASSERT_TRUE(image.save(path, "PNG"));
-  const auto summary = ExifReader::read(path, "image/png");
+  const auto summary = ExifReader::read(path, "image/png", files_test::imageRuntime);
   EXPECT_FALSE(summary.present);
 }
 
 TEST(ExifReader, LargeImagePayloadIsSkippedAndRecordCountIsBounded) {
+  const std::atomic_bool running{false};
   QTemporaryDir dir(fixturePattern("exif-sparse"));
   ASSERT_TRUE(dir.isValid());
   const auto path = dir.filePath("sparse.png");
@@ -349,7 +356,11 @@ TEST(ExifReader, LargeImagePayloadIsSkippedAndRecordCountIsBounded) {
   file.close();
   CountingReadDevice device(path);
   ASSERT_TRUE(device.open(QIODevice::ReadOnly | QIODevice::Unbuffered));
-  EXPECT_TRUE(ExifReader::read(device, "image/png").present);
+  // This sparse fixture is larger than the consumer input budget. Exercise the
+  // scanner's read budget with a caller limit that admits the complete fixture.
+  auto limits = kPreviewImageLimits;
+  limits.inputBytes = QFileInfo(path).size();
+  EXPECT_TRUE(ExifReader::format(HolonightImages::readMetadata(device, limits, running)).present);
   EXPECT_LT(device.bytesRead(), 65536);
 
   QFile many(path);
@@ -361,7 +372,7 @@ TEST(ExifReader, LargeImagePayloadIsSkippedAndRecordCountIsBounded) {
   many.close();
   CountingReadDevice bounded(path);
   ASSERT_TRUE(bounded.open(QIODevice::ReadOnly | QIODevice::Unbuffered));
-  EXPECT_FALSE(ExifReader::read(bounded, "image/png").present);
+  EXPECT_FALSE(ExifReader::format(HolonightImages::readMetadata(bounded, kPreviewImageLimits, running)).present);
   EXPECT_LE(bounded.bytesRead(), 8 + (4096 * 8));
 }
 
@@ -373,24 +384,25 @@ class FailedMetadataDevice : public QBuffer {
 }  // namespace
 
 TEST(ExifReader, PreservesDeviceIoFailure) {
+  const std::atomic_bool running{false};
   FailedMetadataDevice device;
   device.setData(QByteArray(64, 'x'));
   ASSERT_TRUE(device.open(QIODevice::ReadOnly | QIODevice::Unbuffered));
-  const auto result = ExifReader::read(device, "image/jpeg");
+  const auto result = ExifReader::format(HolonightImages::readMetadata(device, kPreviewImageLimits, running));
   EXPECT_EQ(result.outcome, HolonightImages::Outcome::IoFailure);
 }
 
 TEST(ExifReader, DistinguishesSkippedCompletedLimitedAndMalformedOptionalTags) {
   QTemporaryDir dir(fixturePattern("metadata-outcomes"));
   const auto plain = writeJpegWithoutExif(dir);
-  EXPECT_FALSE(ExifReader::read(plain, "image/gif").outcome);
-  const auto empty = ExifReader::read(plain, "image/jpeg");
+  EXPECT_FALSE(ExifReader::read(plain, "image/gif", files_test::imageRuntime).outcome);
+  const auto empty = ExifReader::read(plain, "image/jpeg", files_test::imageRuntime);
   EXPECT_EQ(empty.outcome, HolonightImages::Outcome::Success);
   EXPECT_FALSE(empty.present);
-  EXPECT_EQ(ExifReader::read(writePngWithOversizedExif(dir), "image/png").outcome,
+  EXPECT_EQ(ExifReader::read(writePngWithOversizedExif(dir), "image/png", files_test::imageRuntime).outcome,
             HolonightImages::Outcome::ResourceLimit);
   const auto malformed = writeJpegWithExifBlob(dir, "malformed.jpg", QByteArray("Exif\0\0bad optional tags", 23));
-  const auto optional = ExifReader::read(malformed, "image/jpeg");
+  const auto optional = ExifReader::read(malformed, "image/jpeg", files_test::imageRuntime);
   EXPECT_EQ(optional.outcome, HolonightImages::Outcome::Success);
   EXPECT_FALSE(optional.present);
 }

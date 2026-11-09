@@ -1,6 +1,7 @@
-#include <QFile>
 #include <QImageIOPlugin>
 #include <QVariant>
+
+#include <cstdlib>
 
 namespace {
 bool matches(QIODevice* device) {
@@ -13,17 +14,16 @@ class Handler : public QImageIOHandler {
     if (!matches(device())) {
       return false;
     }
-    setFormat("hnunknownsize");
+    setFormat("tiff");
     return true;
   }
   [[nodiscard]] bool supportsOption(ImageOption option) const override { return option == Size; }
   [[nodiscard]] QVariant option(ImageOption option) const override {
-    return option == Size ? QVariant(QSize()) : QVariant();
+    return option == Size ? QVariant(device()->peek(19).endsWith('K') ? QSize(2, 3) : QSize()) : QVariant();
   }
   bool read(QImage* image) override {
-    QFile marker(qEnvironmentVariable("FILES_UNKNOWN_SIZE_READ_MARKER"));
-    if (!marker.open(QIODevice::WriteOnly | QIODevice::Append) || marker.write("read\n") != 5) {
-      return false;
+    if (!device()->peek(19).endsWith('K')) {
+      std::_Exit(86);  // The helper must reject unknown dimensions before pixel decoding.
     }
     *image = QImage(2, 3, QImage::Format_RGB32);
     image->fill(Qt::red);
@@ -37,7 +37,7 @@ class UnknownDimensionsPlugin : public QImageIOPlugin {
   Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QImageIOHandlerFactoryInterface" FILE "handler.json")
  public:
   Capabilities capabilities(QIODevice* device, const QByteArray& format) const override {
-    return format == "hnunknownsize" || (format.isEmpty() && matches(device)) ? CanRead : Capabilities{};
+    return (format.isEmpty() || format == "tiff") && matches(device) ? CanRead : Capabilities{};
   }
   QImageIOHandler* create(QIODevice* device, const QByteArray& format) const override {
     auto* handler = new Handler;

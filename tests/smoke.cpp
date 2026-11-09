@@ -2,10 +2,12 @@
 #include "directory_fixtures.h"
 #include "engine_setup.h"
 #include "icon_fallbacks.h"
+#include "image_runtime.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
 #include "quick_look_presentation_model_test_access.h"
 #include "size_format.h"
+#include "storage_fixtures.h"
 
 #include <QAccessible>
 #include <QCoreApplication>
@@ -130,9 +132,9 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
   ASSERT_TRUE(QFile::link(dir.filePath("missing-target"), dir.filePath("child/dangling-link")));
   files_test::populateEntries(dir, 30);
   ASSERT_FALSE(files_test::writeFile(dir, ".hidden").isEmpty());
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -279,9 +281,9 @@ TEST(Files, PopulatedWindowKeyboardAndInlineError) {
 TEST(Files, WindowColumnAlignmentAndNarrowNames) {
   QTemporaryDir dir(files_test::fixturePattern("columns"));
   ASSERT_FALSE(files_test::writeFile(dir, "example.txt").isEmpty());
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -369,9 +371,9 @@ TEST(Files, WindowColumnAlignmentAndNarrowNames) {
 TEST(Files, WindowAnchorOnlySeparatorsOccupyAndPaint) {
   QTemporaryDir dir(files_test::fixturePattern("separator-geometry"));
   ASSERT_FALSE(files_test::writeFile(dir, "example.txt").isEmpty());
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -417,7 +419,7 @@ namespace {
 struct LoadedWindow {
   std::unique_ptr<QQmlApplicationEngine> engine = [] {
     auto engine = std::make_unique<QQmlApplicationEngine>();
-    initializeFilesEngine(*engine);
+    initializeFilesEngine(*engine, files_test::imageRuntime);
     return engine;
   }();
   QQuickWindow* window = nullptr;
@@ -492,7 +494,7 @@ TEST(Files, LineNumberGutterHybridNumberingFollowsCursorSortAndFilter) {
   ASSERT_TRUE(dir.isValid());
   files_test::populateEntries(dir, 5);
   ASSERT_FALSE(files_test::writeFile(dir, ".hidden").isEmpty());
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   auto loaded = loadActiveWindow(controller, dir.path());
   ASSERT_NE(loaded.list, nullptr);
   auto* window = loaded.window;
@@ -567,7 +569,7 @@ TEST(Files, LineNumberGutterWidthGrowsWithDigitsButBreadcrumbStays) {
   QTemporaryDir dir(files_test::fixturePattern("gutter-width"));
   ASSERT_TRUE(dir.isValid());
   files_test::populateEntries(dir, 999);
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   auto loaded = loadActiveWindow(controller, dir.path());
   ASSERT_NE(loaded.list, nullptr);
   auto* listing = loaded.listing;
@@ -615,7 +617,7 @@ TEST(Files, LineNumberGutterNumbersPlaceholderRowsAndClearsForInlineEditor) {
   QTemporaryDir dir(files_test::fixturePattern("gutter-placeholder"));
   ASSERT_TRUE(dir.isValid());
   files_test::populateEntries(dir, 4);
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   auto loaded = loadActiveWindow(controller, dir.path());
   ASSERT_NE(loaded.list, nullptr);
   auto* window = loaded.window;
@@ -666,7 +668,7 @@ TEST(Files, LineNumberGutterHeaderStaysForEmptyAndUnreadableDirectories) {
   ASSERT_TRUE(QDir(dir.path()).mkdir("empty"));
   ASSERT_TRUE(QDir(dir.path()).mkdir("blocked"));
   files_test::writeFile(dir, "blocked/secret.txt");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   auto loaded = loadActiveWindow(controller, dir.path());
   ASSERT_NE(loaded.list, nullptr);
   auto* list = loaded.list;
@@ -740,7 +742,7 @@ TEST(Files, EntryNameStylingReflectsFolderSymlinkAndFile) {
   ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
   ASSERT_TRUE(QFile::link(dir.filePath("plain.txt"), dir.filePath("file-link")));
   ASSERT_TRUE(QFile::link(dir.filePath("folder"), dir.filePath("folder-link")));
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   auto loaded = loadActiveWindow(controller, dir.path());
   ASSERT_NE(loaded.list, nullptr);
   ASSERT_TRUE(QTest::qWaitFor([&] { return !controller.scanning() && loaded.list->property("count").toInt() == 4; }));
@@ -793,7 +795,7 @@ TEST(Files, EntryNameSearchOverridesColorAndWeightWhilePreservingItalic) {
     if (symlink) {
       ASSERT_TRUE(QFile::link(dir.filePath("target"), dir.filePath(name)));
     }
-    DirectoryController controller;
+    DirectoryController controller{files_test::imageRuntime};
     auto loaded = loadActiveWindow(controller, dir.path());
     ASSERT_NE(loaded.list, nullptr);
     ASSERT_TRUE(QTest::qWaitFor([&] { return !filenameRunsFor(loaded.list, name).isEmpty(); }));
@@ -889,9 +891,9 @@ TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
   QIcon::setFallbackThemeName(QStringLiteral("folder-only-theme"));
 
   {
-    DirectoryController controller;
+    DirectoryController controller{files_test::imageRuntime};
     QQmlApplicationEngine engine;
-    initializeFilesEngine(engine);
+    initializeFilesEngine(engine, files_test::imageRuntime);
     engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
     engine.loadFromModule("HolonightFiles", "Main");
     ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -976,9 +978,9 @@ TEST(Files, IconColumnUsesThemeIconsAndFallsBackToBundledGlyphs) {
   QIcon::setThemeSearchPaths({dir.filePath("a-folder")});
   QIcon::setThemeName(QStringLiteral("nonexistent-test-theme"));
   QIcon::setFallbackThemeName(QStringLiteral("nonexistent-test-theme"));
-  DirectoryController bareController;
+  DirectoryController bareController{files_test::imageRuntime};
   QQmlApplicationEngine bareEngine;
-  initializeFilesEngine(bareEngine);
+  initializeFilesEngine(bareEngine, files_test::imageRuntime);
   bareEngine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&bareController)}});
   bareEngine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(bareEngine.rootObjects().size(), 1);
@@ -1056,9 +1058,9 @@ TEST(Files, NamedFolderFallsBackToTheFolderGlyphWhenTheThemeLacksItsIcon) {
   QIcon::setThemeName(QStringLiteral("nonexistent-test-theme"));
   QIcon::setFallbackThemeName(QStringLiteral("nonexistent-test-theme"));
 
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -1093,9 +1095,9 @@ TEST(Files, NamedFolderFallsBackToTheFolderGlyphWhenTheThemeLacksItsIcon) {
 }
 
 TEST(Files, WindowAndKeyboard) {
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -1151,7 +1153,7 @@ TEST(Files, WindowAndKeyboard) {
 
 TEST(Files, EmbeddedStyleSelection) {
   QQmlEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   QQmlComponent component(&engine);
   component.setData("import QtQuick.Controls\nButton {}", QUrl());
   const std::unique_ptr<QObject> button(component.create());
@@ -1162,7 +1164,8 @@ TEST(Files, EmbeddedStyleSelection) {
 
 int main(int argc, char* argv[]) {
   // Existing mode regressions explicitly opt into the navigation profile they exercise.
-  const QString inputDirectory = QString::fromUtf8(FILES_FIXTURE_DIR) + "/input-config/holonight";
+  const QString inputDirectory =
+      qEnvironmentVariable("XDG_CONFIG_HOME", QString::fromUtf8(FILES_FIXTURE_DIR) + "/input-config") + "/holonight";
   QDir().mkpath(inputDirectory);
   QFile inputFile(inputDirectory + "/config.toml");
   if (!inputFile.open(QIODevice::WriteOnly)) {
@@ -1180,10 +1183,11 @@ int main(int argc, char* argv[]) {
   }
   qunsetenv("QT_QUICK_CONTROLS_FALLBACK_STYLE");
   qunsetenv("QT_QUICK_CONTROLS_CONF");
-  if (!qEnvironmentVariableIsSet("FILES_PREVIEW_PERFORMANCE")) {
+  if (!qEnvironmentVariableIsSet("FILES_PREVIEW_PERFORMANCE") && !qEnvironmentVariableIsSet("XDG_CACHE_HOME")) {
     qputenv("XDG_CACHE_HOME", QByteArray(FILES_FIXTURE_DIR) + "/cache");
   }
   const QGuiApplication app(argc, argv);
+  files_test::readImageRuntime(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
@@ -1195,9 +1199,9 @@ TEST(Files, QuickLookConsumesSpaceBeforeDelegateActivationAndRestoresFocus) {
   ASSERT_TRUE(dir.isValid());
   files_test::writeFile(dir, "a.txt");
   files_test::writeFile(dir, "b.txt");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -1277,9 +1281,9 @@ TEST(Files, NativeInspectionAcceptance) {
     ASSERT_TRUE(image.save(path));
     ASSERT_GT(QFileInfo(path).size(), 5'000'000);
   }
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   QElapsedTimer elapsed;
   elapsed.start();
@@ -1372,9 +1376,9 @@ TEST(Files, InspectionImageSplitterAndPixelSizing) {
     }
   }
   ASSERT_TRUE(source.save(dir.filePath("image.bmp")));
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -1397,7 +1401,8 @@ TEST(Files, InspectionImageSplitterAndPixelSizing) {
   QTest::mouseMove(window, handle - QPoint(100, 0), 100);
   QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, handle - QPoint(100, 0));
   ASSERT_TRUE(QTest::qWaitFor([&] { return pane->width() > originalWidth + 50; }));
-  QTest::qWait(300);
+  ASSERT_TRUE(QTest::qWaitFor(
+      [&] { return controller.preview()->image().height() >= qRound(230 * window->devicePixelRatio()); }));
   const auto imageSize = controller.preview()->image().size();
   EXPECT_LE(qAbs((imageSize.width() * 3) - (imageSize.height() * 4)), 4);
   EXPECT_GE(imageSize.height(), qRound(230 * window->devicePixelRatio()));
@@ -1428,9 +1433,9 @@ TEST(Files, ModalEditingWindowKeyboardAndHighlighting) {
   QTemporaryDir destination(files_test::fixturePattern("modal-window-destination"));
   files_test::writeFile(dir, "<b>nN&.txt");
   files_test::writeFile(dir, "beta.txt");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -1563,9 +1568,9 @@ TEST(Files, ModeStatusBarShowsProgressAndConflictPromptAndCtrlCCancels) {
   files_test::writeFile(src, "b.txt", "NEW");
   files_test::writeFile(src, "c.txt");
   files_test::writeFile(dst, "b.txt", "OLD");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -1616,9 +1621,9 @@ TEST(Files, ModeStatusBarShowsTrashConfirmation) {
   ASSERT_TRUE(home.isValid() && src.isValid());
   const files_test::ScopedXdgDataHome guard(home.path());
   files_test::writeFile(src, "gone.txt");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -1653,9 +1658,9 @@ TEST(Files, PromptsCaptureKeysAndCtrlCInEveryModeWithoutChangingEditorState) {
     ASSERT_TRUE(src.isValid() && dst.isValid());
     const auto source = files_test::writeFile(src, "file.txt", "new");
     files_test::writeFile(dst, "file.txt", "old");
-    DirectoryController controller;
+    DirectoryController controller{files_test::imageRuntime};
     QQmlApplicationEngine engine;
-    initializeFilesEngine(engine);
+    initializeFilesEngine(engine, files_test::imageRuntime);
     engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
     engine.loadFromModule("HolonightFiles", "Main");
     ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -1780,7 +1785,7 @@ TEST(Files, ListingLoaderSwitchesAndResizesWithoutBindingLoops) {
   }
   for (bool initialIcons : {false, true}) {
     SCOPED_TRACE(initialIcons);
-    DirectoryController controller;
+    DirectoryController controller{files_test::imageRuntime};
     controller.setIconView(initialIcons);
     auto loaded = loadActiveWindow(controller, dir.path());
     ASSERT_NE(loaded.window, nullptr);
@@ -1808,9 +1813,9 @@ TEST(Files, PreviewSidebarSizeMatchesListingAndDirectoriesShowDir) {
   QTemporaryDir dir(files_test::fixturePattern("sidebar-size"));
   ASSERT_TRUE(QDir(dir.path()).mkdir("folder"));
   ASSERT_FALSE(files_test::writeFile(dir, "large.bin", QByteArray(5 * 1024 * 1024, 'x')).isEmpty());
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -1860,9 +1865,11 @@ TEST(Files, PreviewSidebarRowsHideWrapAndStayFreeOfBindingLoops) {
   bindingLoopCounter().previous = qInstallMessageHandler(countBindingLoops);
   const auto restoreHandler = qScopeGuard([] { qInstallMessageHandler(bindingLoopCounter().previous); });
 
-  DirectoryController controller;
+  files_test::FakeStorage backend;
+  HoloNight::System::StorageController storage(&backend);
+  DirectoryController controller(&storage, nullptr, {}, files_test::imageRuntime);
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -1966,9 +1973,9 @@ TEST(Files, PreviewSidebarTablesShareLeftAlignedColumns) {
   ASSERT_TRUE(dir.isValid());
   files_test::writeJpegWithExifBlob(dir, "01-full.jpg", files_test::buildSampleExifBlob());
   files_test::writeJpegWithExifBlob(dir, "02-partial.jpg", files_test::buildSampleExifBlobWithoutLens());
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -2047,9 +2054,9 @@ TEST(Files, PreviewSidebarScrollsToWrappedExifInShortWindows) {
   files_test::writeJpegWithExifBlob(
       dir, "01-photo.jpg", files_test::buildExifBlob({.lens_model = files_test::kLongLensModel}), QSize(600, 900));
   files_test::writeSmallText(dir, "02-notes.txt");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -2099,8 +2106,11 @@ namespace {
 
 // quick-look-redesign: a rendered main window at a fixed size with the overlay located.
 struct QuickLookHarness {
-  QuickLookHarness() { initializeFilesEngine(engine); }
-  DirectoryController controller;
+  explicit QuickLookHarness(HoloNight::System::StorageController* storage = nullptr)
+      : controller(storage, nullptr, {}, files_test::imageRuntime) {
+    initializeFilesEngine(engine, files_test::imageRuntime);
+  }
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
   QQuickWindow* window = nullptr;
   QObject* popup = nullptr;
@@ -2724,7 +2734,9 @@ TEST(Files, QuickLookNavigationAndResizeProduceNoBindingLoops) {
   bindingLoopCounter().previous = qInstallMessageHandler(countBindingLoops);
   const auto restoreHandler = qScopeGuard([] { qInstallMessageHandler(bindingLoopCounter().previous); });
 
-  QuickLookHarness harness;
+  files_test::FakeStorage backend;
+  HoloNight::System::StorageController storage(&backend);
+  QuickLookHarness harness(&storage);
   ASSERT_NO_FATAL_FAILURE(loadQuickLookHarness(harness, dir.path()));
   ASSERT_NO_FATAL_FAILURE(openQuickLook(harness));
   const QList<QSize> sizes{{1280, 800}, {640, 420}, {1600, 1000}};
@@ -2812,7 +2824,7 @@ ModeBadge findModeBadge(QQuickWindow* window) {
 
 struct BadgeHarness {
   QTemporaryDir dir{files_test::fixturePattern("mode-badge")};
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   LoadedWindow loaded;
   ModeBadge badge;
 
@@ -2982,7 +2994,7 @@ TEST(Files, InlineEditorSynchronizesTextWithoutBindingLoops) {
   QTemporaryDir dir(files_test::fixturePattern("inline-binding"));
   ASSERT_TRUE(dir.isValid());
   files_test::populateEntries(dir, 3);
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   auto loaded = loadActiveWindow(controller, dir.path());
   ASSERT_NE(loaded.list, nullptr);
   QTest::keyClick(loaded.window, Qt::Key_J);
@@ -3016,9 +3028,9 @@ TEST(Files, InlineEditorSynchronizesTextWithoutBindingLoops) {
 
 TEST(Files, RuntimeStyleEditingShowsValidationAndCommits) {
   QTemporaryDir dir(files_test::fixturePattern("runtime-style-edit"));
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlApplicationEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
   engine.loadFromModule("HolonightFiles", "Main");
   ASSERT_EQ(engine.rootObjects().size(), 1);
@@ -3304,7 +3316,7 @@ TEST(Files, MouseFileActivationSelectsPreviewsAndOpensExactlyOnce) {
     SCOPED_TRACE(icons ? "Icons" : "List");
     QTemporaryDir dir(files_test::fixturePattern("mouse-file"));
     const auto path = files_test::writeFile(dir, "a.txt", "preview me");
-    DirectoryController controller;
+    DirectoryController controller{files_test::imageRuntime};
     auto loaded = loadActiveWindow(controller, dir.path());
     ASSERT_NE(loaded.list, nullptr);
     controller.setIconView(icons);

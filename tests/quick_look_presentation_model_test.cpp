@@ -1,6 +1,7 @@
 #include "quick_look_presentation_model.h"
 
 #include "directory_fixtures.h"
+#include "image_runtime.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
 #include "quick_look_presentation_model_test_access.h"
@@ -56,7 +57,7 @@ class QuickLookPresentationTest : public ::testing::Test {
 
  private:
   QTemporaryDir dir_{files_test::fixturePattern("quicklook-model")};
-  PreviewService service_;
+  PreviewService service_{files_test::imageRuntime};
   QuickLookPresentationModel model_;
 };
 }  // namespace
@@ -213,7 +214,7 @@ TEST_F(QuickLookPresentationTest, DuplicateInputsAndSameRoundedSizeDoNotResubmit
 }
 
 TEST(QuickLookPresentationLifecycle, QmlConstructionDefersFirstRequest) {
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   QuickLookPresentationModel model;
   model.classBegin();
   model.setPreview(&service);
@@ -231,7 +232,7 @@ TEST_F(QuickLookPresentationTest, ReplacementDisconnectsAndDestructionResetsReta
   ASSERT_FALSE(path.isEmpty());
   selectFile(service(), path);
   ASSERT_TRUE(waitForPreview());
-  auto replacement = std::make_unique<PreviewService>();
+  auto replacement = std::make_unique<PreviewService>(files_test::imageRuntime);
   const auto calls = Access::requestedSizeCallCount(model());
   model().setPreview(replacement.get());
   EXPECT_EQ(model().kind(), Kind::None);
@@ -302,7 +303,7 @@ TEST(QuickLookPresentationModel, MarkdownUsesTheFullFrameBeforeSourceLoading) {
   QTemporaryDir dir;
   ASSERT_TRUE(dir.isValid());
   const auto path = files_test::writeFile(dir, "README.md", "# Heading\n");
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   QuickLookPresentationModel model;
   configure(model);
   model.setPreview(&service);

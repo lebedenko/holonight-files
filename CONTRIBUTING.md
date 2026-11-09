@@ -20,3 +20,35 @@ consumer commits that reference them. Update umbrella pins per coherent mileston
 Use C++23, Qt 6.11+, shared HoloNight controls and tokens, translated UI strings,
 and native decorations. Preserve GPL-3.0-or-later metadata and third-party attribution.
 System installation/removal belongs to the umbrella; standalone DESTDIR staging remains supported.
+
+Image consumer acceptance has two lanes. Ordinary CTest and `task check` run the
+portable selection in `tests/lanes.json`, plus the direct-provider unknown-size
+checks. The inventory is compared with executable enumeration: unassigned,
+duplicate and stale selections fail. Container success does not accept isolated
+inspection, source/cache decoding, cancellation or cleanup.
+
+Build against explicit host-native installed providers, then prepare a fresh,
+non-installed test bundle (the helper and production format policy are unchanged):
+
+```sh
+python3 scripts/prepare-test-runtime.py \
+  --prepare ../holonight-images/scripts/prepare-isolated-runtime.py \
+  --helper "$PREFIX/libexec/holonight-images/runtime/usr/libexec/holonight-images-helper" \
+  --plugins /usr/lib/qt6/plugins \
+  --codec build/dev/tests/unknown-size-plugins/imageformats/libfiles-unknown-size-handler.so \
+  --output build/unknown-size-runtime
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+  QML_IMPORT_PATH="$PREFIX/lib/qt6/qml" \
+  task test:isolated RUNTIME="$PREFIX/libexec/holonight-images/runtime" \
+  TEST_RUNTIME="$PWD/build/unknown-size-runtime"
+```
+
+The synthetic TIFF recognizes only its private signature. Its known-size variant
+proves helper codec loading; pixel decoding the unknown-size variant exits 86.
+Successful unknown-size rejection requires `RuntimeStatus::Success`, `Damaged`,
+no pixels and no cache. A crashing helper cannot satisfy this test.
+
+Before publication, run the umbrella `scripts/check-isolated-previews.py` gate
+as documented in `docs/initiatives/image-isolation.md` in the umbrella repository.
+It requires the real user session manager, namespaces and cgroups and covers
+staged and relocated prefixes. Required host skips and missing results fail.

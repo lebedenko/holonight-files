@@ -61,6 +61,12 @@ NativePreviewObserver::NativePreviewObserver(DirectoryController& controller, QE
     const int duration = qEnvironmentVariableIntValue("FILES_NATIVE_EXIT_AFTER_MS");
     if (duration > 0) {
       QTimer::singleShot(duration, &controller_, &DirectoryController::shutdown);
+      connect(&timer_, &QTimer::timeout, this, [this] {
+        if (!controller_.preview()->busy() && controller_.preview()->hasImage() && ticks_ >= 10) {
+          snapshot("completed-pixels");
+          controller_.shutdown();
+        }
+      });
       auto advanceConnection = std::make_shared<QMetaObject::Connection>();
       *advanceConnection = connect(&controller_, &DirectoryController::changed, this, [this, advanceConnection] {
         if (!controller_.scanning() && controller_.listing()->rowCount() > 1 && controller_.cursorRow() == 0) {

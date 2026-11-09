@@ -1,4 +1,5 @@
 #include "directory_fixtures.h"
+#include "image_runtime.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
 
@@ -46,7 +47,7 @@ TEST(PreviewService, SetTargetUpdatesGenericMetadataSynchronously) {
   QTemporaryDir dir(fixturePattern("preview-metadata"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeSmallText(dir);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   // No qWait: the metadata block must already be correct the instant setTarget() returns.
   EXPECT_TRUE(service.hasEntry());
@@ -60,7 +61,7 @@ TEST(PreviewService, ClearResetsToThePlaceholderState) {
   QTemporaryDir dir(fixturePattern("preview-clear"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeSmallText(dir);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   EXPECT_FALSE(service.isDirectory());
@@ -77,7 +78,7 @@ TEST(PreviewService, RapidRetargetingOnlyEverShowsTheLastTarget) {
   const auto pathA = writeSmallText(dir, "a.txt");
   const auto pathB = writeSmallText(dir, "b.txt");
   const auto pathC = writeSmallText(dir, "c.txt");
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   // Each setTarget() bumps the generation synchronously before any worker result can land, so
   // A's and B's results — however fast they complete — must never overwrite C's.
   setTargetFromFile(service, pathA);
@@ -91,7 +92,7 @@ TEST(PreviewService, DecodeTimeoutSetsErrorAndIgnoresALateSuccessfulResult) {
   QTemporaryDir dir(fixturePattern("preview-timeout"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeJpegWithExif(dir);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   PreviewServiceTestAccess::beforeDispatch(service, [] { QThread::msleep(3500); });
   setTargetFromFile(service, path);
   ASSERT_TRUE(QTest::qWaitFor(
@@ -109,7 +110,7 @@ TEST(PreviewService, ANewTargetAfterATimeoutClearsTheTimedOutFlag) {
   ASSERT_TRUE(dir.isValid());
   const auto slow = writeJpegWithExif(dir, "slow.jpg");
   const auto fast = writeSmallText(dir, "fast.txt");
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   PreviewServiceTestAccess::beforeDispatch(service, [] { QThread::msleep(3500); });
   setTargetFromFile(service, slow);
   ASSERT_TRUE(QTest::qWaitFor(
@@ -125,7 +126,7 @@ TEST(PreviewService, DirectoryTargetSetsInodeDirectoryMimeTypeWithNoWorkerDispat
   QTemporaryDir dir(fixturePattern("preview-dir"));
   ASSERT_TRUE(dir.isValid());
   ASSERT_TRUE(QDir(dir.path()).mkdir("child"));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setTarget(dir.filePath("child"), true, -1, QFileInfo(dir.path()).lastModified(), 040755, false, {});
   EXPECT_EQ(service.mimeType(), QStringLiteral("inode/directory"));
   EXPECT_TRUE(service.isDirectory());
@@ -141,7 +142,7 @@ TEST(PreviewService, MimeTypeDescriptionIsPopulatedAfterAnImageDecodeCompletes) 
   QTemporaryDir dir(fixturePattern("preview-mime-description"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeJpegWithExif(dir);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   EXPECT_EQ(service.mimeType(), QStringLiteral("image/jpeg"));
@@ -156,7 +157,7 @@ TEST(PreviewService, MimeTypeDescriptionIsTheEnglishCommentUnderAPinnedLocale) {
   const auto previous = QLocale();
   QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
   const auto restore = qScopeGuard([&] { QLocale::setDefault(previous); });
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   EXPECT_EQ(service.mimeTypeDescription(), QStringLiteral("JPEG image"));
@@ -169,7 +170,7 @@ TEST(PreviewService, MimeTypeDescriptionIsNonEmptyUnderAFrenchLocale) {
   const auto previous = QLocale();
   QLocale::setDefault(QLocale(QLocale::French, QLocale::France));
   const auto restore = qScopeGuard([&] { QLocale::setDefault(previous); });
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   // Only non-emptiness: the translated string depends on the installed shared-mime-info.
@@ -180,7 +181,7 @@ TEST(PreviewService, ExifLensModelAndApertureSurfaceFromTheExtendedSummary) {
   QTemporaryDir dir(fixturePattern("preview-exif-lens"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeJpegWithExif(dir);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   EXPECT_TRUE(service.exifPresent());
@@ -192,7 +193,7 @@ TEST(PreviewService, ExifLensModelAndApertureStayEmptyWhenTheTagsAreAbsent) {
   QTemporaryDir dir(fixturePattern("preview-exif-no-lens"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeJpegWithExifBlob(dir, "no-lens.jpg", files_test::buildSampleExifBlobWithoutLens());
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   EXPECT_TRUE(service.exifPresent());
@@ -205,7 +206,7 @@ TEST(PreviewService, ExifLensModelAndApertureClearOnRetarget) {
   ASSERT_TRUE(dir.isValid());
   const auto image = writeJpegWithExif(dir);
   const auto text = writeSmallText(dir);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, image);
   ASSERT_TRUE(settled(service));
   ASSERT_FALSE(service.exifLensModel().isEmpty());
@@ -219,7 +220,7 @@ TEST(PreviewService, ExifLensModelAndApertureClearOnRetarget) {
 }
 
 TEST(PreviewService, StatFailedTargetIsReportedAsAnErrorWithoutWorkerDispatch) {
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setTarget(QStringLiteral("/nonexistent/broken-link"), false, -1, {}, 0, true,
                     QStringLiteral("Broken symbolic link"));
   EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::BrokenSymlink);
@@ -233,7 +234,7 @@ TEST(PreviewService, IconNameIsTheListingChainVerbatimAndClearsWithTheTarget) {
   const auto path = writeFile(dir, "script.py", "hello\n");
   ASSERT_FALSE(path.isEmpty());
   const QFileInfo info(path);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   QSignalSpy changed(&service, &PreviewService::changed);
   service.setTarget(path, false, info.size(), info.lastModified(), S_IFREG | 0644, false, {},
                     QStringLiteral("text-x-python/text-x-generic/application-x-generic"));
@@ -258,7 +259,7 @@ TEST(PreviewService, EmptyPathClearsTheService) {
   QTemporaryDir dir(fixturePattern("preview-empty-path"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeSmallText(dir);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   service.setTarget({}, false, -1, {}, 0, false, {});
@@ -270,7 +271,7 @@ TEST(PreviewService, NoImageAppearsUntilAdequateDecodeCompletes) {
   const auto path = writeFile(
       dir, "large.jpg",
       files_test::spliceJpegExif(files_test::renderJpegBytes({2000, 1500}), files_test::buildSampleExifBlob()));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   PreviewServiceTestAccess::beforeFullDecode(service, [] { QThread::msleep(400); });
   setTargetFromFile(service, path);
   QTest::qWait(150);
@@ -293,7 +294,7 @@ TEST(PreviewService, NoImageAppearsUntilAdequateDecodeCompletes) {
 TEST(PreviewService, TimeoutDuringAdequateDecodeNeverPublishesPixels) {
   QTemporaryDir dir(fixturePattern("progressive-timeout"));
   const auto path = writeJpegWithExif(dir);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   PreviewServiceTestAccess::beforeFullDecode(service, [] { QThread::msleep(3400); });
   setTargetFromFile(service, path);
   QTest::qWait(150);
@@ -309,7 +310,7 @@ TEST(PreviewService, PendingRequestsAreReplacedAndFullImagesAreReused) {
   QTemporaryDir dir(fixturePattern("pending-cache"));
   const auto path = writeJpegWithExif(dir);
   const auto text = writeSmallText(dir);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   std::atomic_int starts = 0;
   std::atomic_int decodes = 0;
   PreviewServiceTestAccess::beforeDispatch(service, [&] {
@@ -336,7 +337,7 @@ TEST(PreviewService, PendingRequestsAreReplacedAndFullImagesAreReused) {
 TEST(PreviewService, GradualGrowthAndConsumerChangesUseActualRequiredPixels) {
   QTemporaryDir dir(fixturePattern("consumer-size"));
   const auto path = writeFile(dir, "large.jpg", files_test::renderJpegBytes({2000, 1500}));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {200, 200});
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
@@ -363,7 +364,8 @@ TEST(PreviewService, SpecialFilesAndReplacementCannotBlockWorkerOrShutdown) {
     environment.insert("FILES_FIFO_CHILD", "1");
     child.setProcessEnvironment(environment);
     child.start(QCoreApplication::applicationFilePath(),
-                {"--gtest_filter=PreviewService.SpecialFilesAndReplacementCannotBlockWorkerOrShutdown"});
+                {"--gtest_filter=PreviewService.SpecialFilesAndReplacementCannotBlockWorkerOrShutdown",
+                 "--image-runtime", files_test::imageRuntime.directory});
     ASSERT_TRUE(child.waitForStarted());
     const bool finished = child.waitForFinished(10000);
     if (!finished) {
@@ -378,7 +380,7 @@ TEST(PreviewService, SpecialFilesAndReplacementCannotBlockWorkerOrShutdown) {
   ASSERT_TRUE(dir.isValid());
   const auto fifo = dir.filePath("pipe.txt");
   ASSERT_EQ(::mkfifo(QFile::encodeName(fifo).constData(), 0600), 0);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setTarget(fifo, false, 0, {}, S_IFIFO | 0600, false, {});
   EXPECT_FALSE(service.busy());
   EXPECT_FALSE(service.hasText());
@@ -418,7 +420,7 @@ TEST(PreviewService, FullResolutionCacheEnforcesEntryAndByteLimitsAndSourceRevis
   const auto first = writeFile(dir, "first.jpg", files_test::renderJpegBytes({6000, 4500}));
   const auto second = writeFile(dir, "second.jpg", files_test::renderJpegBytes({6000, 4500}));
   const auto third = writeFile(dir, "third.jpg", files_test::renderJpegBytes({6000, 4500}));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {1200, 1200});
   std::atomic_int decodes = 0;
   PreviewServiceTestAccess::beforeFullDecode(service, [&] { ++decodes; });
@@ -467,7 +469,7 @@ TEST(PreviewService, SameSizeAndMtimeReplacementInvalidatesBothCacheTiers) {
   ASSERT_TRUE(image.save(path));
   const auto oldMtime = QFileInfo(path).lastModified();
   const auto oldSize = QFileInfo(path).size();
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   EXPECT_EQ(service.image().pixelColor(0, 0), QColor(Qt::red));
@@ -497,7 +499,7 @@ TEST(PreviewService, RegularSymlinkAndPermissionDeniedRecovery) {
   const auto path = writeSmallText(dir);
   const auto link = dir.filePath("link.txt");
   ASSERT_TRUE(QFile::link(path, link));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, link);
   ASSERT_TRUE(settled(service));
   EXPECT_FALSE(service.hasText());
@@ -547,11 +549,11 @@ TEST_P(PreviewOrientation, WarmDiskAndMemoryReuseAvoidSourceDecodeAndUpgradeReta
     std::cout << "Preview latency ms: " << timer.elapsed() << "; source decodes: " << decodes.load() << '\n';
   };
   {
-    PreviewService cold;
+    PreviewService cold{files_test::imageRuntime};
     start(cold);
   }
   EXPECT_EQ(decodes.load(), 1);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   start(service);  // A fresh service has no memory entries.
   EXPECT_EQ(decodes.load(), 1);
   const auto retained = service.image().cacheKey();
@@ -587,7 +589,7 @@ bool canReadDespiteNoPermissions(const QString& path) {
 TEST(PreviewService, CurrentLineStartsAtTheFirstLineOnceTextLoads) {
   QTemporaryDir dir(fixturePattern("preview-line-init"));
   ASSERT_TRUE(dir.isValid());
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setQuickLookActive(true);
   EXPECT_EQ(service.currentLineIndex(), -1);
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 5));
@@ -600,7 +602,7 @@ TEST(PreviewService, CurrentLineStartsAtTheFirstLineOnceTextLoads) {
 TEST(PreviewService, MoveCurrentLineClampsAtBothEnds) {
   QTemporaryDir dir(fixturePattern("preview-line-clamp"));
   ASSERT_TRUE(dir.isValid());
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setQuickLookActive(true);
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 5));
   ASSERT_TRUE(settled(service));
@@ -623,7 +625,7 @@ TEST(PreviewService, MoveCurrentLineClampsAtBothEnds) {
 TEST(PreviewService, CurrentLineSignalFiresOncePerActualChange) {
   QTemporaryDir dir(fixturePattern("preview-line-signal"));
   ASSERT_TRUE(dir.isValid());
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setQuickLookActive(true);
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 3));
   ASSERT_TRUE(settled(service));
@@ -643,7 +645,7 @@ TEST(PreviewService, CurrentLineSignalFiresOncePerActualChange) {
 TEST(PreviewService, EmptyFileShowsOneEmptyLineThatCannotMove) {
   QTemporaryDir dir(fixturePattern("preview-line-empty"));
   ASSERT_TRUE(dir.isValid());
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setQuickLookActive(true);
   setTargetFromFile(service, files_test::writeEmptyText(dir));
   ASSERT_TRUE(settled(service));
@@ -659,7 +661,7 @@ TEST(PreviewService, EmptyFileShowsOneEmptyLineThatCannotMove) {
 TEST(PreviewService, NoLinesMeansMinusOneAndMovesAreIgnored) {
   QTemporaryDir dir(fixturePattern("preview-line-none"));
   ASSERT_TRUE(dir.isValid());
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setQuickLookActive(true);
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 3));
   ASSERT_TRUE(settled(service));
@@ -686,7 +688,7 @@ TEST(PreviewService, UnreadableTextFileHasNoLinesButStaysEligible) {
   if (canReadDespiteNoPermissions(path)) {
     GTEST_SKIP() << "running with privileges that bypass file permissions";
   }
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   EXPECT_EQ(service.previewErrorKind(), PreviewService::PreviewErrorKind::PermissionDenied);
@@ -698,7 +700,7 @@ TEST(PreviewService, UnreadableTextFileHasNoLinesButStaysEligible) {
 
 TEST(PreviewService, OpeningQuickLookResetsTheCurrentLineToTheFirst) {
   QTemporaryDir dir(fixturePattern("preview-line-open"));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 6));
   ASSERT_TRUE(settled(service));
   EXPECT_EQ(service.currentLineIndex(), -1);
@@ -720,7 +722,7 @@ TEST(PreviewService, SamePathReloadKeepsAndClampsTheCurrentLineButANewPathResets
   QTemporaryDir dir(fixturePattern("preview-line-reload"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeNumberedLines(dir, "a.txt", 10);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setQuickLookActive(true);
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
@@ -746,7 +748,7 @@ TEST(PreviewService, SamePathReloadKeepsAndClampsTheCurrentLineButANewPathResets
 TEST(PreviewService, QuickLookEligibilityFollowsTheMimeGate) {
   QTemporaryDir dir(fixturePattern("preview-gate"));
   ASSERT_TRUE(dir.isValid());
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   EXPECT_FALSE(service.quickLookEligible());  // no entry
 
   const auto eligible = [&](const QString& path) {
@@ -771,7 +773,7 @@ TEST(PreviewService, QuickLookEligibilityFollowsTheMimeGate) {
 }
 
 TEST(PreviewService, StatFailedEntryIsNotQuickLookEligible) {
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setTarget(QStringLiteral("/nonexistent/x.txt"), false, -1, {}, 0120777, true,
                     QStringLiteral("Broken symbolic link"));
   EXPECT_FALSE(service.quickLookEligible());
@@ -780,7 +782,7 @@ TEST(PreviewService, StatFailedEntryIsNotQuickLookEligible) {
 TEST(PreviewService, LoadingTextNeverBlocksTheUiThread) {
   QTemporaryDir dir(fixturePattern("preview-line-offthread"));
   ASSERT_TRUE(dir.isValid());
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setQuickLookActive(true);
   // The hook runs on the worker: the UI thread must keep dispatching timer events while it blocks.
   PreviewServiceTestAccess::beforeDispatch(service, [] { QThread::msleep(400); });
@@ -808,7 +810,7 @@ TEST_P(PreviewRoundedBounds, FullDecodeFitsOriginalBoundsOnceAndReusesAdequatePi
   const auto path = writeFile(dir, png ? "image.png" : "image.jpg", bytes);
   const QSize source = GetParam() >= 5 ? QSize(1600, 2400) : QSize(2400, 1600);
   std::atomic_int attempts = 0;
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   PreviewServiceTestAccess::beforeFullDecode(service, [&] { ++attempts; });
   service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {1100, 1100});
   setTargetFromFile(service, path);
@@ -850,7 +852,7 @@ TEST_P(PreviewThumbnailCancellation, StopsObsoleteWorkAndCompletesNewestRequest)
   std::atomic_int laterStages = 0;
   std::atomic_bool reached = false;
   std::atomic_bool waitExpired = false;
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   // Establish MIME for the real resize debounce path, then request a larger uncached tier.
   service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {64, 64});
   setTargetFromFile(service, path);
@@ -947,7 +949,7 @@ TEST(PreviewService, MetadataLimitDoesNotFailPixelsAndSelectionResetsStatus) {
   const auto bytes = files_test::splicePngExifChunk(files_test::renderPngBytes(),
                                                     QByteArray("Exif\0\0", 6) + QByteArray(2 * 1024 * 1024, 'x'));
   const auto path = files_test::writeFile(dir, "limited.png", bytes);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   EXPECT_TRUE(service.hasImage());
@@ -965,7 +967,7 @@ QByteArray smallSvg(const QByteArray& body = "<rect width='12' height='12' fill=
 TEST(PreviewService, SvgEnlargesForPaneAndQuickLookAndStopsRedispatching) {
   QTemporaryDir dir(fixturePattern("svg-preview"));
   const auto path = writeFile(dir, "small.svg", smallSvg());
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   std::atomic_int starts = 0;
   PreviewServiceTestAccess::beforeDispatch(service, [&] { ++starts; });
   service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {300, 300});
@@ -988,7 +990,7 @@ TEST(PreviewService, SvgFractionalGeometryUsesOriginalPixelBoundExactlyOnce) {
   QTemporaryDir dir(fixturePattern("svg-fractional"));
   const auto path =
       writeFile(dir, "fraction.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='7.5' height='3.5'/>");
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   std::atomic_int starts = 0;
   PreviewServiceTestAccess::beforeDispatch(service, [&] { ++starts; });
   service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {1375, 1375});
@@ -1001,7 +1003,7 @@ TEST(PreviewService, SvgFractionalGeometryUsesOriginalPixelBoundExactlyOnce) {
 }
 TEST(PreviewService, SvgDispatchUsesMimeOrSuffixAndValidatesContent) {
   QTemporaryDir dir(fixturePattern("svg-dispatch"));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   const auto extensionless = writeFile(dir, "vector", smallSvg());
   setTargetFromFile(service, extensionless);
   ASSERT_TRUE(settled(service));
@@ -1024,7 +1026,7 @@ TEST(PreviewService, SvgPolicyValidationPrecedesThumbnailLookup) {
       ThumbnailService::renderSvg(source, path, {}, smallSvg(), {128, 128}, ThumbnailService::Tier::Normal, running)
           .outcome,
       HolonightImages::Outcome::Success);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   service.setRequestedSize(PreviewService::PreviewConsumer::Pane, {128, 128});
   std::atomic_int cacheInspections = 0;
   PreviewServiceTestAccess::thumbnailStage(service, [&](ThumbnailService::Stage stage) {
@@ -1056,7 +1058,7 @@ TEST(PreviewService, SvgDiskAndMemoryCachesReuseValidatedPixels) {
   std::atomic_int decodes = 0;
   std::atomic_int commits = 0;
   {
-    PreviewService service;
+    PreviewService service{files_test::imageRuntime};
     PreviewServiceTestAccess::beforeFullDecode(service, [&] { ++decodes; });
     PreviewServiceTestAccess::thumbnailStage(service, [&](ThumbnailService::Stage stage) {
       if (stage == ThumbnailService::Stage::BeforeCommit) {
@@ -1075,7 +1077,7 @@ TEST(PreviewService, SvgDiskAndMemoryCachesReuseValidatedPixels) {
   }
   EXPECT_EQ(QDir(cacheHome.path() + "/thumbnails").entryList(QDir::Dirs | QDir::NoDotAndDotDot), QStringList{"large"});
   EXPECT_EQ(commits.load(), 1);
-  PreviewService second;
+  PreviewService second{files_test::imageRuntime};
   PreviewServiceTestAccess::beforeFullDecode(second, [&] { ++decodes; });
   second.setRequestedSize(PreviewService::PreviewConsumer::Pane, {200, 200});
   setTargetFromFile(second, path);
@@ -1090,7 +1092,7 @@ TEST(PreviewService, SvgRetargetDuringRenderSuppressesStalePixelsAndCacheWrite) 
   QSemaphore entered;
   QSemaphore release;
   std::atomic_int commits = 0;
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   const auto unblock = qScopeGuard([&] { release.release(); });
   PreviewServiceTestAccess::thumbnailStage(service, [&](ThumbnailService::Stage stage) {
     if (stage == ThumbnailService::Stage::BeforeCommit) {
@@ -1119,7 +1121,7 @@ TEST(PreviewService, SvgInputBudgetRejectsOversizedSource) {
   ASSERT_TRUE(file.open(QIODevice::WriteOnly));
   ASSERT_TRUE(file.resize((10 * 1024 * 1024) + 1));
   file.close();
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   EXPECT_FALSE(service.hasImage());
@@ -1131,7 +1133,7 @@ TEST(PreviewService, SelectionNotificationPublishesBusyAtomicallyAndTracksRefres
   ASSERT_TRUE(dir.isValid());
   const auto path = writeJpegWithExif(dir);
   const QFileInfo info(path);
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   QSignalSpy selections(&service, &PreviewService::selectionChanged);
   int initialChanges = 0;
   bool initial = true;
@@ -1166,7 +1168,7 @@ TEST(PreviewService, SelectionNotificationPublishesBusyAtomicallyAndTracksRefres
 
 TEST(PreviewService, BrowsingNeverDispatchesTextAndReopeningReloadsIt) {
   QTemporaryDir dir(fixturePattern("demand-text"));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   std::atomic_int loads = 0;
   PreviewServiceTestAccess::beforeText(service, [&] { ++loads; });
   for (const auto& name : {"a.txt", "b.md"}) {
@@ -1191,7 +1193,7 @@ TEST(PreviewService, BrowsingNeverDispatchesTextAndReopeningReloadsIt) {
 
 TEST(PreviewService, ClosingDuringInspectionPreservesInspectionWithoutLoadingText) {
   QTemporaryDir dir(fixturePattern("demand-inspection"));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   QSemaphore entered;
   QSemaphore release;
   const auto guard = qScopeGuard([&] { release.release(); });
@@ -1218,7 +1220,7 @@ TEST(PreviewService, ClosingDuringInspectionPreservesInspectionWithoutLoadingTex
 
 TEST(PreviewService, ClosingBlockedTextThenReopeningRejectsOldRequest) {
   QTemporaryDir dir(fixturePattern("demand-reopen"));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, writeNumberedLines(dir, "a.txt", 3));
   ASSERT_TRUE(settled(service));
   QSemaphore entered;
@@ -1243,7 +1245,7 @@ TEST(PreviewService, ClosingBlockedTextThenReopeningRejectsOldRequest) {
 
 TEST(PreviewService, TextReopenRevalidatesReplacementAndKeepsSidebarErrorSeparate) {
   QTemporaryDir dir(fixturePattern("demand-replace"));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   const auto path = writeSmallText(dir, "a.txt");
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
@@ -1268,7 +1270,7 @@ class ObsoleteTextRequest : public testing::TestWithParam<int> {};
 
 TEST_P(ObsoleteTextRequest, RefreshRetargetAndShutdownInvalidateBlockedResults) {
   QTemporaryDir dir(fixturePattern("obsolete-text"));
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   const auto name = GetParam() >= 3 ? QStringLiteral("a.md") : QStringLiteral("a.txt");
   const auto path = writeNumberedLines(dir, name, 3);
   setTargetFromFile(service, path);
@@ -1321,7 +1323,7 @@ TEST(PreviewService, MarkdownLoadsOnlyWhileActiveAndPreservesSource) {
         name.startsWith(QLatin1String("empty")) ? QByteArray() : QByteArray("# Heading\n\nBody  \n\n");
     ASSERT_EQ(file.write(source), source.size());
     file.close();
-    PreviewService service;
+    PreviewService service{files_test::imageRuntime};
     setTargetFromFile(service, path);
     ASSERT_TRUE(settled(service));
     ASSERT_TRUE(service.quickLookMarkdown());
@@ -1350,7 +1352,7 @@ TEST(PreviewService, BinaryMarkdownIsRejected) {
   const QByteArray bytes("# Heading\nabc\0def", 17);
   ASSERT_EQ(file.write(bytes), bytes.size());
   file.close();
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   service.setQuickLookActive(true);
@@ -1364,7 +1366,7 @@ TEST(PreviewService, ClosingBlockedMarkdownThenReopeningRejectsOldSource) {
   QTemporaryDir dir;
   ASSERT_TRUE(dir.isValid());
   const auto path = writeBytes(dir, "readme.md", "# Original\n");
-  PreviewService service;
+  PreviewService service{files_test::imageRuntime};
   setTargetFromFile(service, path);
   ASSERT_TRUE(settled(service));
   QSemaphore entered;

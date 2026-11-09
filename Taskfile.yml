@@ -92,3 +92,12 @@ tasks:
     desc: Container acceptance plus Release staging and runtime checks
     cmds:
     - python3 scripts/ci/container.py integration {{.CLI_ARGS}}
+  test:isolated:
+    desc: Required host runtime selection (explicit RUNTIME and TEST_RUNTIME)
+    requires:
+      vars: [RUNTIME, TEST_RUNTIME]
+    cmds:
+    - python3 scripts/test-lane.py --framework gtest --inventory tests/unknown-dimensions-lanes.json --lane portable -- build/{{.PRESET}}/tests/files-unknown-dimensions
+    - python3 scripts/test-lane.py --framework gtest --inventory tests/unknown-dimensions-lanes.json --lane host --runtime '{{.TEST_RUNTIME}}' -- build/{{.PRESET}}/tests/files-unknown-dimensions
+    - python3 scripts/test-lane.py --framework gtest --inventory tests/lanes.json --lane host --runtime '{{.RUNTIME}}' -- build/{{.PRESET}}/tests/files-smoke
+    - python3 scripts/check-native-observer.py build/{{.PRESET}}/tests/files-native-preview-lab '{{.RUNTIME}}'

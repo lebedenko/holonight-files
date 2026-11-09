@@ -1,3 +1,4 @@
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_files_application(files-smoke file_drop_test.cpp smoke.cpp separator_window_test.cpp size_format_test.cpp inspection_helpers_test.cpp directory_model_test.cpp directory_proxy_model_test.cpp
   devices_model_test.cpp storage_policy_test.cpp capacity_probe_test.cpp sidebar_navigator_test.cpp
   directory_controller_test.cpp directory_performance_test.cpp initial_directory_test.cpp
@@ -26,7 +27,7 @@ set_target_properties(files-finder-benchmark PROPERTIES QT_QML_MODULE_NO_IMPORT_
 set(FILES_TEST_IMAGE_RUNTIME "" CACHE PATH "Explicit runtime for native preview presentation regressions")
 target_compile_definitions(files-smoke PRIVATE FILES_TEST_IMAGE_RUNTIME="${FILES_TEST_IMAGE_RUNTIME}" FILES_FIXTURE_DIR="${CMAKE_CURRENT_BINARY_DIR}/fixtures/files"
   FILES_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-add_test(NAME files-smoke COMMAND files-smoke)
+add_test(NAME files-smoke COMMAND ${Python3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/test-lane.py" --framework gtest --inventory "${CMAKE_CURRENT_SOURCE_DIR}/lanes.json" --lane portable -- $<TARGET_FILE:files-smoke>)
 set_tests_properties(files-smoke PROPERTIES ENVIRONMENT
   "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
 
@@ -103,7 +104,6 @@ foreach(ratio IN ITEMS 1.0 1.25 1.5 1.5625 1.75 2.0)
 endforeach()
 
 # Runner correctness is deterministic; the performance matrix remains opt-in.
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME files-development-launcher COMMAND ${Python3_EXECUTABLE}
   "${CMAKE_SOURCE_DIR}/scripts/check-development-launcher.py" "${CMAKE_BINARY_DIR}/run-files")
 add_test(NAME files-preview-runner COMMAND ${Python3_EXECUTABLE}
@@ -119,10 +119,14 @@ set_target_properties(files-native-preview-lab PROPERTIES QT_QML_MODULE_NO_IMPOR
 add_test(NAME files-native-preview-runner COMMAND ${Python3_EXECUTABLE}
   "${CMAKE_SOURCE_DIR}/scripts/check-native-preview.py")
 set_tests_properties(files-native-preview-runner PROPERTIES TIMEOUT 30)
-add_test(NAME files-native-preview-observer COMMAND ${Python3_EXECUTABLE}
-  "${CMAKE_SOURCE_DIR}/scripts/check-native-observer.py" $<TARGET_FILE:files-native-preview-lab> "${FILES_TEST_IMAGE_RUNTIME}")
-set_tests_properties(files-native-preview-observer PROPERTIES TIMEOUT 15 ENVIRONMENT
-  "QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
+option(FILES_HOST_RUNTIME_TESTS "Register required host-only runtime acceptance" OFF)
+if(FILES_HOST_RUNTIME_TESTS)
+  add_test(NAME files-native-preview-observer COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_SOURCE_DIR}/scripts/check-native-observer.py" $<TARGET_FILE:files-native-preview-lab> "${FILES_TEST_IMAGE_RUNTIME}")
+  set_tests_properties(files-native-preview-observer PROPERTIES TIMEOUT 15 ENVIRONMENT
+    "QML_IMPORT_PATH=${FILES_RUNTIME_QML_PATH}")
+  set_tests_properties(files-native-preview-observer PROPERTIES LABELS host-runtime)
+endif()
 
 # Synthetic codec visible only to this isolated process; never installed or put on QT_PLUGIN_PATH.
 add_library(files-unknown-size-handler MODULE unknown_dimensions/handler.cpp)
@@ -135,7 +139,12 @@ target_compile_definitions(files-unknown-dimensions PRIVATE
   FILES_UNKNOWN_PLUGIN_PATH="${CMAKE_CURRENT_BINARY_DIR}/unknown-size-plugins")
 add_dependencies(files-unknown-dimensions files-unknown-size-handler)
 set_target_properties(files-unknown-dimensions PROPERTIES QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
-add_test(NAME files-unknown-dimensions COMMAND files-unknown-dimensions)
+add_test(NAME files-unknown-dimensions COMMAND ${Python3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/test-lane.py" --framework gtest --inventory "${CMAKE_CURRENT_SOURCE_DIR}/unknown-dimensions-lanes.json" --lane portable -- $<TARGET_FILE:files-unknown-dimensions>)
 set_tests_properties(files-unknown-dimensions PROPERTIES TIMEOUT 15)
 
 add_test(NAME files-performance-comparison COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/scripts/check-compare-performance.py")
+
+add_test(NAME consumer-test-lane COMMAND ${Python3_EXECUTABLE}
+  "${PROJECT_SOURCE_DIR}/scripts/check-test-lane.py")
+add_test(NAME files-test-runtime-preparation COMMAND ${Python3_EXECUTABLE}
+  "${PROJECT_SOURCE_DIR}/scripts/check-test-runtime.py")

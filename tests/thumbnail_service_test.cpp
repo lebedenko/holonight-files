@@ -1,4 +1,5 @@
 #include "directory_fixtures.h"
+#include "image_runtime.h"
 #include "preview_fixtures.h"
 
 #include <QCryptographicHash>
@@ -48,7 +49,7 @@ TEST(ThumbnailService, FreshSystemWithNoPriorCacheStillDecodes) {
   QTemporaryDir sourceDir(fixturePattern("thumb-fresh"));
   ASSERT_TRUE(sourceDir.isValid());
   const auto path = writeJpegWithExif(sourceDir);
-  const auto image = ThumbnailService::lookupOrDecode(path).image;
+  const auto image = ThumbnailService::lookupOrDecode(path, files_test::imageRuntime).image;
   EXPECT_FALSE(image.isNull());
 }
 
@@ -57,7 +58,7 @@ TEST(ThumbnailService, CacheKeyMatchesFreedesktopMd5OfUri) {
   QTemporaryDir sourceDir(fixturePattern("thumb-key"));
   ASSERT_TRUE(sourceDir.isValid());
   const auto path = writeJpegWithExif(sourceDir);
-  ThumbnailService::lookupOrDecode(path);
+  ThumbnailService::lookupOrDecode(path, files_test::imageRuntime);
   const auto expectedCachePath = cachePathFor(cacheHome.dir.path(), path);
   EXPECT_TRUE(QFile::exists(expectedCachePath)) << expectedCachePath.toStdString();
 }
@@ -67,7 +68,7 @@ TEST(ThumbnailService, ModifiedSourceInvalidatesCachedThumbnail) {
   QTemporaryDir sourceDir(fixturePattern("thumb-invalidate"));
   ASSERT_TRUE(sourceDir.isValid());
   const auto path = writeJpegWithExif(sourceDir);
-  ThumbnailService::lookupOrDecode(path);
+  ThumbnailService::lookupOrDecode(path, files_test::imageRuntime);
   const auto cachePath = cachePathFor(cacheHome.dir.path(), path);
   // PNG tEXt chunks are available after a full image decode.
   const QImage firstCached(cachePath);
@@ -83,7 +84,7 @@ TEST(ThumbnailService, ModifiedSourceInvalidatesCachedThumbnail) {
   file.write(renderJpegBytes(QSize(200, 40)));
   file.close();
 
-  ThumbnailService::lookupOrDecode(path);
+  ThumbnailService::lookupOrDecode(path, files_test::imageRuntime);
   const QImage secondCached(cachePath);
   ASSERT_FALSE(secondCached.isNull());
   const auto secondMtime = secondCached.text(QStringLiteral("Thumb::MTime"));
@@ -98,7 +99,7 @@ TEST(ThumbnailService, NormalTierIsBoundedTo128PixelsPreservingAspectRatio) {
   wide.fill(Qt::blue);
   const auto path = sourceDir.filePath("wide.png");
   ASSERT_TRUE(wide.save(path, "PNG"));
-  const auto thumb = ThumbnailService::lookupOrDecode(path).image;
+  const auto thumb = ThumbnailService::lookupOrDecode(path, files_test::imageRuntime).image;
   ASSERT_FALSE(thumb.isNull());
   EXPECT_LE(thumb.width(), 128);
   EXPECT_LE(thumb.height(), 128);
@@ -111,7 +112,7 @@ TEST(ThumbnailService, CacheDirectoryIsCreatedWithOwnerOnlyPermissions) {
   QTemporaryDir sourceDir(fixturePattern("thumb-perms"));
   ASSERT_TRUE(sourceDir.isValid());
   const auto path = writeJpegWithExif(sourceDir);
-  ThumbnailService::lookupOrDecode(path);
+  ThumbnailService::lookupOrDecode(path, files_test::imageRuntime);
   const auto normalDir = cacheHome.dir.path() + "/thumbnails/normal";
   ASSERT_TRUE(QDir(normalDir).exists());
   const auto perms = QFile(normalDir).permissions();
@@ -125,7 +126,7 @@ TEST(ThumbnailService, DecodeScaledProducesFullResolutionTierBoundedToRequestedS
   QTemporaryDir sourceDir(fixturePattern("thumb-scaled"));
   ASSERT_TRUE(sourceDir.isValid());
   const auto path = writeJpegWithExif(sourceDir, "photo.jpg");  // 64x48 source
-  const auto full = ThumbnailService::decodeScaled(path, QSize(512, 512)).image;
+  const auto full = ThumbnailService::decodeScaled(path, QSize(512, 512), files_test::imageRuntime).image;
   ASSERT_FALSE(full.isNull());
   EXPECT_LE(full.width(), 512);
   EXPECT_LE(full.height(), 512);
@@ -158,15 +159,25 @@ TEST(ThumbnailService, OnlySelectedTierIsWrittenAndLargerTierIsReused) {
   QFile file(path);
   ASSERT_TRUE(file.open(QIODevice::ReadOnly));
   using namespace ThumbnailService;
-  EXPECT_EQ(lookupOrDecode(file, path, "revision", Tier::XLarge, {400, 200}, cancelled).image.size(), QSize(512, 256));
+  EXPECT_EQ(ThumbnailService::lookupOrDecode(file, path, "revision", Tier::XLarge, {400, 200}, cancelled, {}, {},
+                                             files_test::imageRuntime)
+                .image.size(),
+            QSize(512, 256));
   const auto root = home.dir.path() + "/thumbnails/";
   EXPECT_EQ(QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot), QStringList{"x-large"});
-  EXPECT_EQ(lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled).value().image.size(), QSize(512, 256));
-  EXPECT_FALSE(lookup(file, path, "changed", Tier::Large, {200, 100}, cancelled));
-  EXPECT_FALSE(lookup(file, path, "revision", Tier::XXLarge, {600, 300}, cancelled));
+  EXPECT_EQ(ThumbnailService::lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled, {},
+                                     ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime)
+                .value()
+                .image.size(),
+            QSize(512, 256));
+  EXPECT_FALSE(ThumbnailService::lookup(file, path, "changed", Tier::Large, {200, 100}, cancelled, {},
+                                        ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime));
+  EXPECT_FALSE(ThumbnailService::lookup(file, path, "revision", Tier::XXLarge, {600, 300}, cancelled, {},
+                                        ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime));
   // Disk lookup requires metadata from the verified open source descriptor.
   file.close();
-  EXPECT_FALSE(lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled));
+  EXPECT_FALSE(ThumbnailService::lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled, {},
+                                        ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime));
 }
 
 TEST(ThumbnailService, RejectsUndersizedCorruptAndIncorrectMetadata) {
@@ -177,25 +188,32 @@ TEST(ThumbnailService, RejectsUndersizedCorruptAndIncorrectMetadata) {
   QFile file(path);
   ASSERT_TRUE(file.open(QIODevice::ReadOnly));
   using namespace ThumbnailService;
-  lookupOrDecode(file, path, "revision", Tier::Large, {200, 100}, cancelled);
+  ThumbnailService::lookupOrDecode(file, path, "revision", Tier::Large, {200, 100}, cancelled, {}, {},
+                                   files_test::imageRuntime);
   const auto cachePath = cachePathFor(home.dir.path(), path).replace("/normal/", "/large/");
   const QImage valid(cachePath);
   ASSERT_FALSE(valid.isNull());
   auto small = valid.scaled(100, 50);
   ASSERT_TRUE(small.save(cachePath));
-  EXPECT_FALSE(lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled));
+  EXPECT_FALSE(ThumbnailService::lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled, {},
+                                        ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime));
   for (const auto& key : {"Thumb::URI", "Thumb::MTime", "Thumb::Size", "Files::Revision"}) {
     auto invalid = valid;
     invalid.setText(QString::fromLatin1(key), "invalid");
     ASSERT_TRUE(invalid.save(cachePath));
-    EXPECT_FALSE(lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled));
+    EXPECT_FALSE(ThumbnailService::lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled, {},
+                                          ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime));
   }
   QFile corrupt(cachePath);
   ASSERT_TRUE(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));
   corrupt.write("not a PNG");
   corrupt.close();
-  EXPECT_FALSE(lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled));
-  EXPECT_EQ(lookupOrDecode(file, path, "revision", Tier::Large, {200, 100}, cancelled).image.size(), QSize(256, 128));
+  EXPECT_FALSE(ThumbnailService::lookup(file, path, "revision", Tier::Large, {200, 100}, cancelled, {},
+                                        ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime));
+  EXPECT_EQ(ThumbnailService::lookupOrDecode(file, path, "revision", Tier::Large, {200, 100}, cancelled, {}, {},
+                                             files_test::imageRuntime)
+                .image.size(),
+            QSize(256, 128));
 }
 
 TEST(ThumbnailService, CacheWriteFailureDoesNotPreventDecode) {
@@ -208,10 +226,10 @@ TEST(ThumbnailService, CacheWriteFailureDoesNotPreventDecode) {
   const std::atomic_bool cancelled{false};
   QFile file(path);
   ASSERT_TRUE(file.open(QIODevice::ReadOnly));
-  EXPECT_EQ(
-      ThumbnailService::lookupOrDecode(file, path, "revision", ThumbnailService::Tier::Large, {200, 100}, cancelled)
-          .image.size(),
-      QSize(256, 128));
+  EXPECT_EQ(ThumbnailService::lookupOrDecode(file, path, "revision", ThumbnailService::Tier::Large, {200, 100},
+                                             cancelled, {}, {}, files_test::imageRuntime)
+                .image.size(),
+            QSize(256, 128));
 }
 
 namespace {
@@ -242,10 +260,10 @@ TEST_P(ThumbnailOrientation, AppliesCornersRectangularBoundsAndNoUpscaling) {
   const std::atomic_bool cancelled{false};
   QFile source(path);
   ASSERT_TRUE(source.open(QIODevice::ReadOnly));
-  const auto bounded = ThumbnailService::decodeScaled(source, {40, 60}, cancelled).image;
+  const auto bounded = ThumbnailService::decodeScaled(source, {40, 60}, cancelled, {}, files_test::imageRuntime).image;
   EXPECT_EQ(bounded.size(), GetParam() >= 5 ? QSize(30, 60) : QSize(40, 20));
   expectCorners(bounded, GetParam());
-  const auto small = ThumbnailService::decodeScaled(source, {500, 500}, cancelled).image;
+  const auto small = ThumbnailService::decodeScaled(source, {500, 500}, cancelled, {}, files_test::imageRuntime).image;
   EXPECT_EQ(small.size(), GetParam() >= 5 ? QSize(60, 120) : QSize(120, 60));
   expectCorners(small, GetParam());
   EXPECT_TRUE(source.isOpen());
@@ -266,7 +284,9 @@ TEST_P(ThumbnailOrientation, RejectsConflictingPolicyAndReusesOrientedPixelsAcro
     const QSize required = GetParam() >= 5 ? QSize(extent / 2, extent) : QSize(extent, extent / 2);
     const auto cachePath =
         cachePathFor(home.dir.path(), path).replace("/normal/", "/" + QString::fromLatin1(names.at(index++)) + "/");
-    const auto cold = lookupOrDecode(source, path, "revision", tier, required, cancelled).image;
+    const auto cold = ThumbnailService::lookupOrDecode(source, path, "revision", tier, required, cancelled, {}, {},
+                                                       files_test::imageRuntime)
+                          .image;
     EXPECT_EQ(cold.size(), required);
     expectCorners(cold, GetParam());
     const QImage marked(cachePath);
@@ -274,14 +294,20 @@ TEST_P(ThumbnailOrientation, RejectsConflictingPolicyAndReusesOrientedPixelsAcro
     QImage invalid = marked;
     invalid.setText("Files::OrientationPolicy", "different-v1");
     ASSERT_TRUE(invalid.save(cachePath));
-    EXPECT_FALSE(lookup(source, path, "revision", tier, required, cancelled));
-    const auto regenerated = lookupOrDecode(source, path, "revision", tier, required, cancelled).image;
+    EXPECT_FALSE(ThumbnailService::lookup(source, path, "revision", tier, required, cancelled, {},
+                                          ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime));
+    const auto regenerated = ThumbnailService::lookupOrDecode(source, path, "revision", tier, required, cancelled, {},
+                                                              {}, files_test::imageRuntime)
+                                 .image;
     expectCorners(regenerated, GetParam());
     const QImage persisted(cachePath);
     EXPECT_EQ(persisted.text("Files::OrientationPolicy"), "applied-v1");
     source.close();
     ASSERT_TRUE(source.open(QIODevice::ReadOnly));  // Reuse without source decode, with no second transform.
-    const auto warm = lookup(source, path, "revision", tier, required, cancelled).value().image;
+    const auto warm = ThumbnailService::lookup(source, path, "revision", tier, required, cancelled, {},
+                                               ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime)
+                          .value()
+                          .image;
     EXPECT_EQ(warm, persisted);
     expectCorners(warm, GetParam());
     EXPECT_EQ(QDir(home.dir.path() + "/thumbnails").entryList(QDir::Dirs | QDir::NoDotAndDotDot).size(), index);
@@ -296,7 +322,9 @@ TEST(ThumbnailService, ReusesExternalRasterWithStandardMetadata) {
   ASSERT_TRUE(source.open(QIODevice::ReadOnly));
   const std::atomic_bool cancelled{false};
   using namespace ThumbnailService;
-  ASSERT_FALSE(lookupOrDecode(source, path, "revision", Tier::Large, {200, 100}, cancelled).image.isNull());
+  ASSERT_FALSE(ThumbnailService::lookupOrDecode(source, path, "revision", Tier::Large, {200, 100}, cancelled, {}, {},
+                                                files_test::imageRuntime)
+                   .image.isNull());
   const auto cachePath = cachePathFor(home.dir.path(), path).replace("/normal/", "/large/");
   const QImage generated(cachePath);
   ASSERT_FALSE(generated.isNull());
@@ -306,7 +334,8 @@ TEST(ThumbnailService, ReusesExternalRasterWithStandardMetadata) {
     external.setText(key, generated.text(key));
   }
   ASSERT_TRUE(external.save(cachePath, "PNG"));
-  const auto hit = lookup(source, path, "revision", Tier::Large, {200, 100}, cancelled);
+  const auto hit = ThumbnailService::lookup(source, path, "revision", Tier::Large, {200, 100}, cancelled, {},
+                                            ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime);
   ASSERT_TRUE(hit);
   EXPECT_EQ(hit->image.pixelColor(0, 0), QColor(Qt::magenta));
 }
@@ -318,7 +347,7 @@ TEST(ThumbnailService, MissingAndInvalidOrientationUseStoredDimensionsAndCorners
   QTemporaryDir dir(fixturePattern("orientation-invalid"));
   for (const auto orientation : {std::optional<int>{}, std::optional<int>{0}, std::optional<int>{9}}) {
     const auto path = files_test::writeFile(dir, "image.jpg", files_test::orientationJpeg({120, 60}, orientation));
-    const auto image = ThumbnailService::decodeScaled(path, {500, 500}).image;
+    const auto image = ThumbnailService::decodeScaled(path, {500, 500}, files_test::imageRuntime).image;
     EXPECT_EQ(image.size(), QSize(120, 60));
     expectCorners(image, 1);
   }
@@ -335,12 +364,18 @@ TEST(ThumbnailService, PreCancelledDescriptorOperationsAreSilentAndDoNotTouchCac
   int stages = 0;
   const auto callback = [&](ThumbnailService::Stage) { ++stages; };
   using namespace ThumbnailService;
-  EXPECT_EQ(lookup(file, path, {}, Tier::Normal, {64, 48}, cancelled, callback)->outcome,
+  EXPECT_EQ(ThumbnailService::lookup(file, path, {}, Tier::Normal, {64, 48}, cancelled, callback,
+                                     ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime)
+                ->outcome,
             HolonightImages::Outcome::Cancelled);
-  EXPECT_EQ(lookupOrDecode(file, path, {}, Tier::Normal, {64, 48}, cancelled, callback).outcome,
+  EXPECT_EQ(ThumbnailService::lookupOrDecode(file, path, {}, Tier::Normal, {64, 48}, cancelled, callback, {},
+                                             files_test::imageRuntime)
+                .outcome,
             HolonightImages::Outcome::Cancelled);
-  EXPECT_EQ(lookupOrDecode(file, path, {}, cancelled).outcome, HolonightImages::Outcome::Cancelled);
-  EXPECT_EQ(decodeScaled(file, {128, 128}, cancelled, callback).outcome, HolonightImages::Outcome::Cancelled);
+  EXPECT_EQ(ThumbnailService::lookupOrDecode(file, path, {}, cancelled, files_test::imageRuntime).outcome,
+            HolonightImages::Outcome::Cancelled);
+  EXPECT_EQ(ThumbnailService::decodeScaled(file, {128, 128}, cancelled, callback, files_test::imageRuntime).outcome,
+            HolonightImages::Outcome::Cancelled);
   EXPECT_EQ(stages, 0);
   EXPECT_EQ(file.pos(), 7);
   EXPECT_FALSE(QDir(home.dir.path() + "/thumbnails").exists());
@@ -358,9 +393,13 @@ TEST_P(ThumbnailCancellation, StopsFallbackAndPreservesExistingCacheBytes) {
   QFile file(path);
   ASSERT_TRUE(file.open(QIODevice::ReadOnly));
   std::atomic_bool cancelled{false};
-  ASSERT_FALSE(lookupOrDecode(file, path, "valid", Tier::Normal, {128, 64}, cancelled).image.isNull());
+  ASSERT_FALSE(ThumbnailService::lookupOrDecode(file, path, "valid", Tier::Normal, {128, 64}, cancelled, {}, {},
+                                                files_test::imageRuntime)
+                   .image.isNull());
   // A second eligible cache tier makes accidental fallback observable.
-  ASSERT_FALSE(lookupOrDecode(file, path, "valid", Tier::Large, {256, 128}, cancelled).image.isNull());
+  ASSERT_FALSE(ThumbnailService::lookupOrDecode(file, path, "valid", Tier::Large, {256, 128}, cancelled, {}, {},
+                                                files_test::imageRuntime)
+                   .image.isNull());
   QFile existing(cachePathFor(home.dir.path(), path));
   ASSERT_TRUE(existing.open(QIODevice::ReadOnly));
   const auto original = existing.readAll();
@@ -378,8 +417,8 @@ TEST_P(ThumbnailCancellation, StopsFallbackAndPreservesExistingCacheBytes) {
   // Cache stages cancel a valid hit; source/write stages force revision rejection and regeneration.
   const bool cachedStage =
       GetParam() == Stage::CacheInspect || GetParam() == Stage::CacheInspected || GetParam() == Stage::CacheDecode;
-  const auto result =
-      lookupOrDecode(file, path, cachedStage ? "valid" : "new", Tier::Normal, {128, 64}, cancelled, callback);
+  const auto result = ThumbnailService::lookupOrDecode(file, path, cachedStage ? "valid" : "new", Tier::Normal,
+                                                       {128, 64}, cancelled, callback, {}, files_test::imageRuntime);
   EXPECT_EQ(result.outcome, HolonightImages::Outcome::Cancelled);
   EXPECT_TRUE(result.image.isNull());
   EXPECT_TRUE(reached);
@@ -402,11 +441,14 @@ TEST(ThumbnailService, CancelAfterUncachedOriginalDecodeDiscardsImage) {
   QFile file(path);
   ASSERT_TRUE(file.open(QIODevice::ReadOnly));
   std::atomic_bool cancelled{false};
-  const auto result = ThumbnailService::decodeScaled(file, {2048, 2048}, cancelled, [&](ThumbnailService::Stage stage) {
-    if (stage == ThumbnailService::Stage::OriginalDecoded) {
-      cancelled = true;
-    }
-  });
+  const auto result = ThumbnailService::decodeScaled(
+      file, {2048, 2048}, cancelled,
+      [&](ThumbnailService::Stage stage) {
+        if (stage == ThumbnailService::Stage::OriginalDecoded) {
+          cancelled = true;
+        }
+      },
+      files_test::imageRuntime);
   EXPECT_TRUE(cancelled.load());
   EXPECT_TRUE(result.image.isNull());
   EXPECT_EQ(result.outcome, HolonightImages::Outcome::Cancelled);
@@ -422,18 +464,23 @@ TEST(ThumbnailService, CacheMissAndSourceFailuresPreserveOutcomes) {
   QFile file(path);
   ASSERT_TRUE(file.open(QIODevice::ReadOnly));
   const std::atomic_bool running{false};
-  EXPECT_FALSE(lookup(file, path, {}, Tier::Normal, {100, 50}, running));
-  EXPECT_EQ(lookupOrDecode(file, path, {}, running).outcome, Outcome::Success);
-  const auto hit = lookup(file, path, {}, Tier::Normal, {100, 50}, running);
+  EXPECT_FALSE(ThumbnailService::lookup(file, path, {}, Tier::Normal, {100, 50}, running, {},
+                                        ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime));
+  EXPECT_EQ(ThumbnailService::lookupOrDecode(file, path, {}, running, files_test::imageRuntime).outcome,
+            Outcome::Success);
+  const auto hit = ThumbnailService::lookup(file, path, {}, Tier::Normal, {100, 50}, running, {},
+                                            ThumbnailService::ImageKind::Raster, {}, files_test::imageRuntime);
   ASSERT_TRUE(hit);
   EXPECT_EQ(hit->outcome, Outcome::Success);
   file.close();
-  EXPECT_EQ(decodeScaled(file, {100, 50}, running).outcome, Outcome::IoFailure);
-  EXPECT_EQ(decodeScaled(dir.filePath("missing.png"), {100, 50}).outcome, Outcome::IoFailure);
+  EXPECT_EQ(ThumbnailService::decodeScaled(file, {100, 50}, running, {}, files_test::imageRuntime).outcome,
+            Outcome::IoFailure);
+  EXPECT_EQ(ThumbnailService::decodeScaled(dir.filePath("missing.png"), {100, 50}, files_test::imageRuntime).outcome,
+            Outcome::IoFailure);
   const auto unsupported = files_test::writeFile(dir, "unsupported.png", "not an image");
-  EXPECT_EQ(lookupOrDecode(unsupported).outcome, Outcome::Unsupported);
+  EXPECT_EQ(ThumbnailService::lookupOrDecode(unsupported, files_test::imageRuntime).outcome, Outcome::Unsupported);
   const auto damaged = files_test::writeFile(dir, "damaged.png", files_test::renderPngBytes().first(45));
-  EXPECT_EQ(decodeScaled(damaged, {100, 50}).outcome, Outcome::Damaged);
+  EXPECT_EQ(ThumbnailService::decodeScaled(damaged, {100, 50}, files_test::imageRuntime).outcome, Outcome::Damaged);
 }
 
 TEST(ThumbnailService, SvgPolicyMarkerRejectsLegacyThumbnailsAndRevisionMismatch) {
@@ -449,7 +496,7 @@ TEST(ThumbnailService, SvgPolicyMarkerRejectsLegacyThumbnailsAndRevisionMismatch
   ASSERT_EQ(rendered.outcome, HolonightImages::Outcome::Success);
   const auto lookup = [&](const QString& revision) {
     return ThumbnailService::lookup(file, path, revision, ThumbnailService::Tier::Normal, {100, 100}, running, {},
-                                    ThumbnailService::ImageKind::Svg);
+                                    ThumbnailService::ImageKind::Svg, {}, files_test::imageRuntime);
   };
   EXPECT_TRUE(lookup("revision").has_value());
   EXPECT_FALSE(lookup("changed").has_value());

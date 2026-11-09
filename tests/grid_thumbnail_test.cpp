@@ -1,6 +1,7 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
 #include "engine_setup.h"
+#include "image_runtime.h"
 
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -45,9 +46,9 @@ TEST(GridThumbnails, GridDecodesImagesKeepsFallbackAndRefreshesMetadata) {
   files_test::writeFile(dir, "corrupt.png", "broken");
   files_test::writeFile(dir, "notes.txt", "text");
   ASSERT_TRUE(QFile::link(dir.filePath("small.png"), dir.filePath("link.png")));
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   QQuickWindow window;
   window.resize(1000, 700);
   QQmlComponent component(&engine);
@@ -101,7 +102,7 @@ TEST(GridThumbnails, LoadingFallbackAndDestructionCancelPendingRequests) {
   std::atomic_bool started = false;
   std::atomic_bool cancelled = false;
   std::atomic_bool release = false;
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   controller.setIconView(true);
   QQmlEngine engine;
   engine.addImageProvider("thumbnail",
@@ -114,7 +115,7 @@ TEST(GridThumbnails, LoadingFallbackAndDestructionCancelPendingRequests) {
                             return ThumbnailResult{};
                           }));
   const QScopeGuard cleanup([&] { release = true; });
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   QQuickWindow window;
   window.resize(800, 600);
   QQmlComponent component(&engine);
@@ -147,9 +148,9 @@ TEST(GridThumbnails, RequestsTrackEffectiveWindowDevicePixelRatio) {
   QImage image(400, 200, QImage::Format_ARGB32);
   image.fill(Qt::red);
   ASSERT_TRUE(image.save(dir.filePath("image.png")));
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   QQuickRenderControl renderControl;
   QQuickWindow window(&renderControl);
   window.resize(800, 600);

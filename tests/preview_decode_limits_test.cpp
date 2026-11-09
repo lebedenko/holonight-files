@@ -1,4 +1,5 @@
 #include "directory_fixtures.h"
+#include "image_runtime.h"
 
 #include <QDataStream>
 #include <QElapsedTimer>
@@ -55,7 +56,7 @@ TEST(PreviewDecodeLimits, PathologicallyLargeDeclaredDimensionsFailFastRatherTha
   const auto path = writePathologicalPng(dir);
   QElapsedTimer elapsed;
   elapsed.start();
-  const auto result = ThumbnailService::decodeScaled(path, QSize(1024, 1024));
+  const auto result = ThumbnailService::decodeScaled(path, QSize(1024, 1024), files_test::imageRuntime);
   EXPECT_TRUE(result.image.isNull());
   EXPECT_EQ(result.outcome, HolonightImages::Outcome::Damaged);
   // "Fails fast" per REQ-NF-001/REQ-NF-003 — well under the 3-second decode timeout budget.
@@ -69,7 +70,7 @@ TEST(PreviewDecodeLimits, ALegitimateLargeImageStillDecodesWithinTheAllocationBu
   large.fill(Qt::gray);
   const auto path = dir.filePath("legit-large.png");
   ASSERT_TRUE(large.save(path, "PNG"));
-  const auto image = ThumbnailService::decodeScaled(path, QSize(1024, 1024)).image;
+  const auto image = ThumbnailService::decodeScaled(path, QSize(1024, 1024), files_test::imageRuntime).image;
   EXPECT_FALSE(image.isNull());
 }
 
@@ -85,5 +86,6 @@ TEST(PreviewDecodeLimits, ValidOversizedHeaderPreservesResourceLimit) {
   ASSERT_TRUE(file.open(QIODevice::WriteOnly));
   ASSERT_EQ(file.write(bitmap), bitmap.size());
   file.close();
-  EXPECT_EQ(ThumbnailService::decodeScaled(path, {1024, 1024}).outcome, HolonightImages::Outcome::ResourceLimit);
+  EXPECT_EQ(ThumbnailService::decodeScaled(path, {1024, 1024}, files_test::imageRuntime).outcome,
+            HolonightImages::Outcome::ResourceLimit);
 }

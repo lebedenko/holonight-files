@@ -1,5 +1,6 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
+#include "image_runtime.h"
 
 #include <QElapsedTimer>
 #include <QImage>
@@ -35,7 +36,7 @@ TEST(PreviewStress, RapidPagingThroughManyLargeImagesShowsOnlyTheFinalEntry) {
   for (int i = 0; i < kEntryCount; ++i) {
     writeLargeImage(dir, QStringLiteral("img-%1.png").arg(i, 3, 10, QLatin1Char('0')));
   }
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   ASSERT_EQ(controller.listing()->rowCount(), kEntryCount);

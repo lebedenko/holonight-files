@@ -1,0 +1,12 @@
+{
+  "portable": [
+    "UnknownDimensions.HandlerIsReadableButHasNoSizeAndRecordsActualDecode",
+    "UnknownDimensions.InstalledProviderAndThumbnailRejectBeforePixelDecode",
+    "UnknownDimensions.PreCancellationReturnsCancelledWithoutPixelsOrPresentationError"
+  ],
+  "host": [
+    "UnknownDimensions.KnownSizeProvesIsolatedCodecLoaded",
+    "UnknownDimensions.IsolatedProviderAndThumbnailRejectBeforePixelDecode",
+    "UnknownDimensions.PreviewRejectsAndRecoversOnValidSelection"
+  ]
+}

@@ -1,5 +1,6 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
+#include "image_runtime.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
 
@@ -34,7 +35,7 @@ TEST(PreviewIntegration, CursorMovementThroughMixedFileTypesUpdatesThePreviewLiv
   writeSmallText(dir, "02-notes.txt");
   writeLargeText(dir, "03-log.txt");
   writeUtf8Multilang(dir, "04-multilang.txt");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   ASSERT_EQ(controller.listing()->rowCount(), 4);
@@ -82,7 +83,7 @@ TEST(PreviewIntegration, RevisitingAnAlreadyCachedEntryUpdatesWithinTheLatencyBu
   ASSERT_TRUE(dir.isValid());
   writeJpegWithExif(dir, "photo.jpg");
   writeSmallText(dir, "notes.txt");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   controller.handleKey("j");                // move to photo.jpg
@@ -103,7 +104,7 @@ TEST(PreviewIntegration, QuickLookOpensPinnedToItsFileAndJMovesTheCurrentLineNot
   ASSERT_TRUE(dir.isValid());
   writeJpegWithExif(dir, "01-photo.jpg");
   writeSmallText(dir, "02-notes.txt");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   ASSERT_TRUE(previewSettled(controller));
@@ -146,7 +147,7 @@ TEST(PreviewIntegration, QuickLookOpensPinnedToItsFileAndJMovesTheCurrentLineNot
 TEST(PreviewIntegration, EmptyDirectoryShowsThePlaceholderWithNoDecodeAttempted) {
   QTemporaryDir dir(fixturePattern("preview-empty-dir"));
   ASSERT_TRUE(dir.isValid());
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   // An empty listing has no entry to preview and does not start a decode.
@@ -160,7 +161,7 @@ TEST(PreviewIntegration, SelectedFileEditsPermissionsReplacementRenameAndDeletio
   QTemporaryDir dir(fixturePattern("preview-watch"));
   ASSERT_TRUE(dir.isValid());
   const auto path = writeSmallText(dir, "selected.txt");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   controller.open(dir.path());
   ASSERT_TRUE(settled(controller));
   controller.handleKey("j");  // move to selected.txt
@@ -198,7 +199,7 @@ TEST_P(PendingQuickLook, EarlySpaceOpensPinnedLoadingThenResolvesSupportedOrUnsu
   QTemporaryDir dir(fixturePattern("pending-quicklook"));
   ASSERT_TRUE(dir.isValid());
   files_test::writeBytes(dir, GetParam() ? "a.txt" : "a.json", GetParam() ? "hello\nworld\n" : "{\"a\": 1}\n");
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QSemaphore entered;
   QSemaphore release;
   const auto guard = qScopeGuard([&] { release.release(); });

@@ -2,6 +2,7 @@
 #include "directory_fixtures.h"
 #include "engine_setup.h"
 #include "icon_theme_fixtures.h"
+#include "image_runtime.h"
 #include "preview_fixtures.h"
 #include "preview_service_test_access.h"
 #include "quick_look_presentation_model.h"
@@ -27,9 +28,9 @@ TEST(PreviewConsumers, UseWindowDprWhenScreenDprDiffersAndTrackChanges) {
   if (QGuiApplication::platformName() != QStringLiteral("offscreen")) {
     GTEST_SKIP() << "Deterministic offscreen binding regression; not native acceptance";
   }
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   QQmlEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   QQmlComponent component(&engine);
   // A redirected window has a controlled effective DPR independent of Screen DPR.
   // No compositor interaction or private Qt API is needed.
@@ -87,10 +88,10 @@ TEST(PreviewConsumers, UseWindowDprWhenScreenDprDiffersAndTrackChanges) {
 }
 
 TEST(PreviewConsumers, SidebarDelaysEveryFallbackAndResetsForEachSelection) {
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   auto& preview = *controller.preview();
   QQmlEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   QQmlComponent component(&engine);
   component.setData(R"(
     import QtQuick
@@ -173,12 +174,10 @@ TEST(PreviewConsumers, SidebarWorkerThumbnailIsVisibleBeforeMetadataAndOnCacheRe
   ASSERT_TRUE(dir.isValid());
   const auto path = files_test::writeJpegWithExif(dir);
   const QFileInfo info(path);
-  const auto runtime = QString::fromUtf8(FILES_TEST_IMAGE_RUNTIME);
-  DirectoryController controller(runtime.isEmpty() ? HolonightFileBrowser::defaultImageRuntimeOptions()
-                                                   : HolonightFileBrowser::ImageRuntimeOptions{runtime});
+  DirectoryController controller(files_test::imageRuntime);
   auto& preview = *controller.preview();
   QQmlEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   QQmlComponent component(&engine);
   component.setData(R"(
     import QtQuick
@@ -238,10 +237,10 @@ TEST(PreviewConsumers, SidebarWorkerThumbnailIsVisibleBeforeMetadataAndOnCacheRe
 }
 
 TEST(PreviewConsumers, SidebarFadesOutgoingThumbnailWithoutRestoringStalePixels) {
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   auto& preview = *controller.preview();
   QQmlEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   QQmlComponent component(&engine);
   component.setData(R"(
     import QtQuick
@@ -359,13 +358,13 @@ TEST_P(SidebarFallbackContinuity, MatchingChainsSurviveRapidNavigationAcrossEver
   ASSERT_TRUE(icons.isValid());
   ASSERT_TRUE(files_test::writeTinyTheme(icons));
   const auto restoreIcons = files_test::scopedIconTheme({icons.path()}, QStringLiteral("tiny-test-theme"));
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   auto& preview = *controller.preview();
   QQuickWindow window;
   window.resize(400, 700);
   window.show();
   QQmlEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   QQmlComponent component(&engine);
   component.setData("import QtQuick\nimport HolonightFiles\nPreviewPane { width: 320; height: 600 }", QUrl());
   std::unique_ptr<QObject> pane(
@@ -416,10 +415,10 @@ TEST_P(SidebarFallbackContinuity, MatchingChainsSurviveRapidNavigationAcrossEver
 INSTANTIATE_TEST_SUITE_P(AllTiers, SidebarFallbackContinuity, testing::Values(0, 1, 2));
 
 TEST(PreviewConsumers, SharedFilePreviewKeepsProgressivePixelsAndBlankSelection) {
-  DirectoryController controller;
+  DirectoryController controller{files_test::imageRuntime};
   auto& preview = *controller.preview();
   QQmlEngine engine;
-  initializeFilesEngine(engine);
+  initializeFilesEngine(engine, files_test::imageRuntime);
   QQmlComponent component(&engine);
   component.setData(R"(
     import QtQuick
