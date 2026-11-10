@@ -185,7 +185,7 @@ Item {
             onVisibleRowsChanged: root.controller.setViewportRows(visibleRows)
             Keys.priority: Keys.BeforeItem
             Keys.onShortcutOverride: event => {
-                if (InspectionKeys.overrideShortcut(event.key, false, root.controller.vim.currentMode === VimModeController.Visual))
+                if (InspectionKeys.overrideShortcut(event.key, false, (root.controller.vim.selectedCount > 0 || root.controller.vim.currentMode === VimModeController.Mark || root.controller.vim.currentMode === VimModeController.Visual)))
                     event.accepted = true;
             }
             Keys.onPressed: event => {
@@ -209,10 +209,10 @@ Item {
                     root.previousQuickLookOpen = root.controller.quickLookOpen;
 
                     const mode = root.controller.vim.currentMode;
-                    if (root.previousMode !== VimModeController.Normal && mode === VimModeController.Normal) {
+                    if (root.previousMode !== mode && (mode === VimModeController.Normal || mode === VimModeController.Mark || mode === VimModeController.Visual)) {
                         listView.forceActiveFocus();
                         Qt.callLater(() => {
-                            if (root.controller.vim.currentMode === VimModeController.Normal)
+                            if (root.controller.vim.currentMode === VimModeController.Normal || root.controller.vim.currentMode === VimModeController.Mark || root.controller.vim.currentMode === VimModeController.Visual)
                                 listView.forceActiveFocus();
                         });
                     }
@@ -254,98 +254,39 @@ Item {
                 rightPadding: 0
                 currentItemSelects: false
                 keyboardCursor: ListView.isCurrentItem && (delegate.activeFocus || delegate.ListView.view.activeFocus)
-                highlighted: root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(delegate.index)
+                // The count notifier also covers membership changes with an unchanged count.
+                highlighted: root.controller.vim.selectedCount > 0 && root.controller.vim.isRowSelected(delegate.index)
                 columns: detailColumns
                 title: name
                 filename: name
-                sizeText: isDir ? "" : SizeFormat.formatSize(size)
+                sizeText: isDir ? "" : HnFormat.formatSize(size)
                 modifiedText: statFailed ? statError : Qt.formatDateTime(modified, "yyyy-MM-dd HH:mm")
 
                 // Numbers live in the strip left of the list view; the delegate's own selection fill
                 // therefore never covers the gutter.
-                HnLabel {
-                    readonly property bool isCursorRow: delegate.index === root.controller.cursorRow
-
-                    objectName: "lineNumberGutterField"
-                    role: HnTypographyRole.Code
-                    textFormat: Text.PlainText
-                    font.weight: isCursorRow ? Font.Bold : Font.Normal
-                    // Vim hybrid numbering: absolute on the cursor row, relative distance elsewhere.
-                    rawText: isCursorRow ? String(delegate.index + 1) : String(Math.abs(delegate.index - root.controller.cursorRow))
-                    color: isCursorRow ? HoloniightPalette.accentViolet : HoloniightPalette.textMuted
-                    horizontalAlignment: isCursorRow ? Text.AlignLeft : Text.AlignRight
-                    verticalAlignment: Text.AlignVCenter
-                    leftPadding: 8
-                    rightPadding: 8
+                Browser.RelativeLineNumber {
+                    rowIndex: delegate.index
+                    cursorIndex: root.controller.cursorRow
                     x: -(root.lineNumberGutterWidth + root.listInset)
                     width: root.lineNumberGutterWidth
                     height: delegate.height
-                    Accessible.ignored: true
                 }
 
                 filenameContent: RowLayout {
                     spacing: 0
-                    Item {
-                        id: iconCell
+                    Browser.FileTypeIcon {
                         objectName: "iconColumnField"
+                        iconName: delegate.iconName
+                        isDirectory: delegate.isDir
+                        extent: root.iconColumnWidth
+                        failureCache: IconFallbacks
+                        folderFallback: "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg"
+                        fileFallback: "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
                         Layout.minimumWidth: root.iconColumnWidth
                         Layout.preferredWidth: root.iconColumnWidth
                         Layout.maximumWidth: root.iconColumnWidth
                         Layout.leftMargin: root.cellPadding
                         Layout.fillHeight: true
-
-                        // Deliberately not reactive to later failures: it only spares rows created after
-                        // an earlier row's miss from repeating the request (IconFallbacks).
-                        readonly property bool knownUnresolved: IconFallbacks.isUnresolved(delegate.iconName)
-                        // Once this row's own request fails, stop re-requesting (e.g. on a device pixel
-                        // ratio change) until the row's chain itself changes.
-                        property string failedChain
-                        readonly property bool skipRequest: knownUnresolved || failedChain === delegate.iconName
-                        readonly property bool showFallback: skipRequest || themeIcon.hasError
-
-                        // Theme icon, untinted in its own colours (REQ-F-003). The chain in iconName is
-                        // walked by the C++ image provider; a total miss surfaces as hasError.
-                        HnIcon {
-                            id: themeIcon
-                            objectName: "themeFileIcon"
-                            anchors.centerIn: parent
-                            size: root.iconColumnWidth
-                            source: iconCell.skipRequest ? "" : "image://icon/" + delegate.iconName + "?revision=" + HnAppearance.revision
-                            rendering: HnIcon.Original
-                            visible: !iconCell.showFallback
-                            onHasErrorChanged: if (hasError) {
-                                const chain = delegate.iconName;
-                                IconFallbacks.markUnresolved(chain);
-                                // Deferred: the failure is reported from inside the source assignment itself.
-                                Qt.callLater(() => iconCell.failedChain = chain);
-                            }
-                        }
-                        // Bundled glyph, tinted with the palette (REQ-F-016/017); sourced only after a miss.
-                        HnIcon {
-                            id: fallbackIcon
-                            objectName: "fallbackFileIcon"
-                            anchors.centerIn: parent
-                            size: root.iconColumnWidth
-                            source: !iconCell.showFallback ? "" : delegate.isDir ? "qrc:/qt/qml/HolonightFiles/icons/folder-fallback.svg" : "qrc:/qt/qml/HolonightFiles/icons/generic-file-fallback.svg"
-                            visible: iconCell.showFallback
-                        }
-                        // Keep a visible marker even if the packaged SVG cannot be decoded.
-                        Rectangle {
-                            objectName: "iconFailurePlaceholder"
-                            anchors.centerIn: parent
-                            width: root.iconColumnWidth
-                            height: root.iconColumnWidth
-                            radius: 3
-                            color: "transparent"
-                            border.color: HoloniightPalette.textMuted
-                            visible: iconCell.showFallback && fallbackIcon.hasError
-                            Text {
-                                anchors.centerIn: parent
-                                text: "?"
-                                color: HoloniightPalette.textMuted
-                                font.pixelSize: 14
-                            }
-                        }
                     }
                     Item {
                         objectName: "nameColumnField"
@@ -411,7 +352,7 @@ Item {
 
                 Keys.priority: Keys.BeforeItem
                 Keys.onShortcutOverride: event => {
-                    if (InspectionKeys.overrideShortcut(event.key, false, root.controller.vim.currentMode === VimModeController.Visual))
+                    if (InspectionKeys.overrideShortcut(event.key, false, (root.controller.vim.selectedCount > 0 || root.controller.vim.currentMode === VimModeController.Mark || root.controller.vim.currentMode === VimModeController.Visual)))
                         event.accepted = true;
                 }
                 Keys.onPressed: event => {
@@ -423,12 +364,21 @@ Item {
                         event.accepted = true;
                 }
 
+                TapHandler {
+                    id: selectionTap
+                    property int pressModifiers: Qt.NoModifier
+                    onPressedChanged: if (pressed)
+                        pressModifiers = point.modifiers
+                    acceptedButtons: Qt.LeftButton
+                }
                 DragHandler {
                     id: rowDrag
                     target: null
                     acceptedButtons: Qt.LeftButton
                     enabled: root.controller.transfersEnabled
                     onActiveChanged: if (active) {
+                        if (!root.controller.vim.isRowSelected(delegate.index))
+                            root.controller.selectEntry(delegate.index);
                         const payload = root.controller.dragUriList(delegate.index);
                         if (payload.length > 0) {
                             dragProxy.Drag.mimeData = {
@@ -441,7 +391,7 @@ Item {
                     }
                 }
                 onClicked: if (!rowDrag.active)
-                    root.controller.selectEntry(delegate.index)
+                    root.controller.selectEntry(delegate.index, selectionTap.pressModifiers)
                 onDoubleClicked: root.controller.activateEntry(delegate.index)
 
                 // INSERT-mode inline rename/create editor (SPEC.md REQ-F-006 through REQ-F-017): an

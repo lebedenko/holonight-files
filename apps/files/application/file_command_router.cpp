@@ -136,7 +136,7 @@ bool FileCommandRouter::handleKey(const QString& key) {
 
   expirePendingCommands();
 
-  const bool isVisual = mode == VimModeController::Mode::Visual;
+  const bool isVisual = mode == VimModeController::Mode::Visual || mode == VimModeController::Mode::Mark;
   if (handleFinderKey(key)) {
     navigation_.reset();
     return true;
@@ -205,7 +205,7 @@ bool FileCommandRouter::handleKey(const QString& key) {
     }
     return true;
   }
-  if (isVisual && key == u"o") {
+  if (mode == VimModeController::Mode::Visual && key == u"o") {
     takeCount();
     command_.kind = FileCommand::Kind::SwapVisualEnd;
     return true;

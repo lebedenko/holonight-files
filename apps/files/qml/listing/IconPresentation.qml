@@ -39,10 +39,12 @@ Item {
             positionViewAtIndex(currentIndex, GridView.Contain)
         Keys.priority: Keys.BeforeItem
         Keys.onShortcutOverride: event => {
-            if (InspectionKeys.overrideShortcut(event.key, false, root.controller.vim.currentMode === VimModeController.Visual))
+            if (InspectionKeys.overrideShortcut(event.key, false, (root.controller.vim.selectedCount > 0 || root.controller.vim.currentMode === VimModeController.Mark || root.controller.vim.currentMode === VimModeController.Visual)))
                 event.accepted = true;
         }
         Keys.onPressed: event => {
+            if (event.key === Qt.Key_Escape && rectangleSelection.selecting)
+                rectangleSelection.selecting = false;
             if (InspectionKeys.press(event.key, event.text, event.modifiers, event.isAutoRepeat, root.controller, false))
                 event.accepted = true;
         }
@@ -63,10 +65,10 @@ Item {
                 root.previousQuickLookOpen = root.controller.quickLookOpen;
 
                 const mode = root.controller.vim.currentMode;
-                if (root.previousMode !== VimModeController.Normal && mode === VimModeController.Normal) {
+                if (root.previousMode !== mode && (mode === VimModeController.Normal || mode === VimModeController.Mark || mode === VimModeController.Visual)) {
                     listView.forceActiveFocus();
                     Qt.callLater(() => {
-                        if (root.controller.vim.currentMode === VimModeController.Normal)
+                        if (root.controller.vim.currentMode === VimModeController.Normal || root.controller.vim.currentMode === VimModeController.Mark || root.controller.vim.currentMode === VimModeController.Visual)
                             listView.forceActiveFocus();
                     });
                 }
@@ -76,6 +78,70 @@ Item {
         Component.onCompleted: {
             forceActiveFocus();
             root.controller.setGridDimensions(columns, visibleRows);
+        }
+
+        MouseArea {
+            id: rectangleSelection
+            objectName: "gridRectangleSelection"
+            anchors.fill: parent
+            z: 2
+            acceptedButtons: Qt.LeftButton
+            enabled: root.controller.transfersEnabled
+            property bool selecting: false
+            property point start
+            property point end
+            function updateSelection(): void {
+                end = Qt.point(mouseX + listView.contentX, mouseY + listView.contentY);
+                const left = Math.min(start.x, end.x);
+                const right = Math.max(start.x, end.x);
+                const top = Math.min(start.y, end.y);
+                const bottom = Math.max(start.y, end.y);
+                root.controller.selection.selectGridRectangle(Qt.rect(left, top, right - left, bottom - top), Qt.size(listView.cellWidth, listView.cellHeight), listView.columns);
+            }
+            onPressed: mouse => {
+                const x = mouse.x + listView.contentX;
+                const y = mouse.y + listView.contentY;
+                const row = listView.indexAt(x, y);
+                const localX = x % listView.cellWidth;
+                const localY = y % listView.cellHeight;
+                if (row >= 0 && localX >= 4 && localX < listView.cellWidth - 4 && localY >= 4 && localY < listView.cellHeight - 4) {
+                    mouse.accepted = false;
+                    return;
+                }
+                start = Qt.point(x, y);
+                end = start;
+                selecting = true;
+                listView.forceActiveFocus(Qt.MouseFocusReason);
+                root.controller.selection.beginRectangle((mouse.modifiers & Qt.ControlModifier) !== 0);
+                updateSelection();
+            }
+            onPositionChanged: if (selecting)
+                updateSelection()
+            onReleased: selecting = false
+            onCanceled: {
+                if (selecting)
+                    root.controller.selection.cancelRectangle();
+                selecting = false;
+            }
+            Rectangle {
+                visible: rectangleSelection.selecting
+                x: Math.min(rectangleSelection.start.x, rectangleSelection.end.x) - listView.contentX
+                y: Math.min(rectangleSelection.start.y, rectangleSelection.end.y) - listView.contentY
+                width: Math.abs(rectangleSelection.end.x - rectangleSelection.start.x)
+                height: Math.abs(rectangleSelection.end.y - rectangleSelection.start.y)
+                color: Qt.alpha(HoloniightPalette.accentViolet, 0.15)
+                border.color: HoloniightPalette.accentViolet
+            }
+            Timer {
+                interval: 40
+                repeat: true
+                running: rectangleSelection.selecting
+                onTriggered: {
+                    const direction = rectangleSelection.mouseY < 32 ? -1 : rectangleSelection.mouseY > listView.height - 32 ? 1 : 0;
+                    listView.contentY = Math.max(listView.originY, Math.min(Math.max(listView.originY, listView.contentHeight - listView.height), listView.contentY + direction * 16));
+                    rectangleSelection.updateSelection();
+                }
+            }
         }
 
         delegate: Item {
@@ -118,7 +184,8 @@ Item {
                 bottomPadding: 0
                 currentItemSelects: false
                 keyboardCursor: cell.GridView.isCurrentItem && (activeFocus || cell.GridView.view.activeFocus)
-                highlighted: root.controller.vim.currentMode === VimModeController.Visual && root.controller.vim.isRowSelected(index)
+                // The count notifier also covers membership changes with an unchanged count.
+                highlighted: root.controller.vim.selectedCount > 0 && root.controller.vim.isRowSelected(index)
                 contentItem: Item {
                     Item {
                         id: iconCell
@@ -229,7 +296,7 @@ Item {
                 }
                 Keys.priority: Keys.BeforeItem
                 Keys.onShortcutOverride: event => {
-                    if (InspectionKeys.overrideShortcut(event.key, false, root.controller.vim.currentMode === VimModeController.Visual))
+                    if (InspectionKeys.overrideShortcut(event.key, false, (root.controller.vim.selectedCount > 0 || root.controller.vim.currentMode === VimModeController.Mark || root.controller.vim.currentMode === VimModeController.Visual)))
                         event.accepted = true;
                 }
                 Keys.onPressed: event => {
@@ -241,12 +308,21 @@ Item {
                         event.accepted = true;
                 }
 
+                TapHandler {
+                    id: selectionTap
+                    property int pressModifiers: Qt.NoModifier
+                    onPressedChanged: if (pressed)
+                        pressModifiers = point.modifiers
+                    acceptedButtons: Qt.LeftButton
+                }
                 DragHandler {
                     id: rowDrag
                     target: null
                     acceptedButtons: Qt.LeftButton
                     enabled: root.controller.transfersEnabled
                     onActiveChanged: if (active) {
+                        if (!root.controller.vim.isRowSelected(delegate.index))
+                            root.controller.selectEntry(delegate.index);
                         const payload = root.controller.dragUriList(delegate.index);
                         if (payload.length > 0) {
                             dragProxy.Drag.mimeData = {
@@ -261,7 +337,7 @@ Item {
 
                 onClicked: if (!rowDrag.active && root.controller.transfersEnabled) {
                     listView.forceActiveFocus(Qt.MouseFocusReason);
-                    root.controller.selectEntry(index);
+                    root.controller.selectEntry(index, selectionTap.pressModifiers);
                 }
                 onDoubleClicked: root.controller.activateEntry(index)
                 Controls.TextField {

@@ -131,9 +131,7 @@ void NavigationSession::setCursorRow(qint64 row) {
     controller_.vim_.exitVisual();
   }
   cursor_.setIndex(row);
-  if (controller_.vim_.currentMode() == VimModeController::Mode::Visual) {
-    controller_.vim_.extendVisual(cursor_.index());
-  }
+  controller_.vim_.selection()->move(cursor_.index());
   controller_.vim_.updateSearchPositions(entryNameAt(cursor_.index()));
   emit controller_.changed();
 }
@@ -149,6 +147,8 @@ void NavigationSession::clampCursorRow() {
     ids.append(proxy_.index(row, 0).data(DirectoryModel::NativePathRole).toByteArray());
   }
   cursor_.reconcile(std::move(ids));
+  controller_.vim_.selection()->restoreCursor(
+      proxy_.index(cursor_.index(), 0).data(DirectoryModel::NativePathRole).toByteArray());
 }
 QString NavigationSession::entryNameAt(int proxyRow) const {
   if (proxyRow < 0 || proxyRow >= proxy_.rowCount()) {

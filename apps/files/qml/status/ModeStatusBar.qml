@@ -36,43 +36,19 @@ RowLayout {
         {
             label: "INSERT",
             fill: HoloniightPalette.success
+        },
+        {
+            label: "V-MARK",
+            fill: HoloniightPalette.accentViolet
         }
     ]
     readonly property var currentModeMeta: modeMeta[controller.vim.currentMode]
 
-    Controls.Control {
+    HnModeBadge {
         objectName: "modeBadge"
         Layout.alignment: Qt.AlignVCenter
-        // Sized off the hidden metric so switching modes never moves the labels that follow.
-        implicitWidth: Math.ceil(badgeMetric.implicitWidth) + leftPadding + rightPadding
-        topPadding: 2
-        bottomPadding: 2
-        leftPadding: 8
-        rightPadding: 8
-        focusPolicy: Qt.NoFocus
-        activeFocusOnTab: false
-        Accessible.role: Accessible.StaticText
-        Accessible.name: qsTr("%1 mode").arg(root.currentModeMeta.label)
-
-        contentItem: HnLabel {
-            objectName: "modeBadgeLabel"
-            role: HnTypographyRole.Code
-            color: HoloniightPalette.background
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            rawText: root.currentModeMeta.label
-        }
-        background: Rectangle {
-            color: root.currentModeMeta.fill
-            radius: HnAppearance.roundedRadius(HnSurfaceRole.Control, width, height, HnAppearance.revision)
-        }
-    }
-
-    HnLabel {
-        id: badgeMetric
-        visible: false
-        role: HnTypographyRole.Code
-        rawText: "NORMAL"
+        label: root.currentModeMeta.label
+        fill: root.currentModeMeta.fill
     }
 
     HnLabel {
@@ -123,15 +99,6 @@ RowLayout {
         visible: root.controller.tasks.hasPrompt && root.controller.tasks.promptKind === TaskManager.TrashConfirm
         Layout.fillWidth: visible
         rawText: qsTr("Trash %1 item(s)? (y/n)").arg(root.controller.tasks.trashConfirmCount)
-    }
-
-    HnLabel {
-        objectName: "visualStatusLabel"
-        role: HnTypographyRole.Caption
-        color: HoloniightPalette.textMuted
-        visible: root.controller.vim.currentMode === VimModeController.Visual
-        Layout.fillWidth: visible
-        rawText: qsTr("%1 selected").arg(root.controller.vim.selectedCount)
     }
 
     Controls.TextField {
@@ -208,5 +175,32 @@ RowLayout {
         visible: root.controller.vim.currentMode === VimModeController.Insert && !root.controller.vim.insertValid
         Layout.fillWidth: visible
         rawText: root.controller.vim.insertErrorMessage
+    }
+
+    Item {
+        Layout.fillWidth: true
+        visible: (root.controller.vim.currentMode === VimModeController.Visual || root.controller.vim.currentMode === VimModeController.Mark) && !root.controller.tasks.busy && !root.controller.tasks.hasPrompt
+    }
+
+    TextMetrics {
+        id: selectionCountMetric
+        font: selectionCountLabel.font
+        text: qsTr("%1 selected").arg("999999") + qsTr(" (%1 hidden)").arg("999999")
+    }
+
+    HnLabel {
+        id: selectionCountLabel
+        objectName: "visualStatusLabel"
+        role: HnTypographyRole.Caption
+        color: HoloniightPalette.textMuted
+        // Keep this slot in the layout when empty, so selection changes do not move other content.
+        opacity: root.controller.vim.selectedCount > 0 || root.controller.vim.currentMode === VimModeController.Mark ? 1 : 0
+        Accessible.ignored: opacity === 0
+        horizontalAlignment: Text.AlignRight
+        elide: Text.ElideRight
+        Layout.minimumWidth: Layout.preferredWidth
+        Layout.preferredWidth: Math.min(Math.ceil(selectionCountMetric.advanceWidth), root.width * 0.4)
+        Layout.maximumWidth: Layout.preferredWidth
+        rawText: qsTr("%1 selected").arg(root.controller.vim.selectedCount) + (root.controller.selection.hiddenSelectedCount > 0 ? qsTr(" (%1 hidden)").arg(root.controller.selection.hiddenSelectedCount) : "")
     }
 }

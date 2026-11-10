@@ -1,6 +1,7 @@
 #include "file_operation_service.h"
 
 #include "directory_fixtures.h"
+#include "native_operation_path.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -383,4 +384,11 @@ TEST(FileOperationService, CopyReadOnlyDirectoryPreservesDirectoryMetadata) {
   }
   EXPECT_EQ(::chmod(source.constData(), 0700), 0);
   EXPECT_EQ(::chmod(child.constData(), 0700), 0);
+}
+
+TEST(NativeOperationPath, RoundTripsInvalidUtf8AndSupplementaryCharacters) {
+  for (const QByteArray& bytes :
+       {QByteArray("/tmp/plain"), QByteArray("/tmp/\xf0\x9f\x92\xa9"), QByteArray("/tmp/\xff\xfe\xe0\x80")}) {
+    EXPECT_EQ(operationBytes(operationPath(bytes)), bytes);
+  }
 }

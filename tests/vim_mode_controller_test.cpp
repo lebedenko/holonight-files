@@ -19,6 +19,7 @@ TEST(VimModeController, StartsInNormalMode) {
 
 TEST(VimModeController, VisualEnterExtendAndExit) {
   VimModeController vim;
+  vim.selection()->setVisibleEntries({"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"});
   vim.enterVisual(5);
   EXPECT_EQ(vim.currentMode(), Mode::Visual);
   EXPECT_EQ(vim.visualAnchorRow(), 5);

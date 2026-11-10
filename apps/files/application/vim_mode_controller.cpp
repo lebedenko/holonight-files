@@ -7,52 +7,20 @@
 #include <ranges>
 #include <utility>
 
-VimModeController::VimModeController(QObject* parent) : QObject(parent) {}
-
-int VimModeController::selectedCount() const {
-  if (mode_ != Mode::Visual || visual_anchor_row_ < 0 || visual_current_row_ < 0) {
-    return 0;
-  }
-  return qAbs(visual_current_row_ - visual_anchor_row_) + 1;
+VimModeController::VimModeController(QObject* parent) : QObject(parent) {
+  connect(&selection_, &HolonightFileBrowser::SelectionSession::changed, this, &VimModeController::changed);
 }
-
-bool VimModeController::isRowSelected(int row) const {
-  if (mode_ != Mode::Visual || visual_anchor_row_ < 0 || visual_current_row_ < 0) {
-    return false;
-  }
-  const int lowRow = qMin(visual_anchor_row_, visual_current_row_);
-  const int highRow = qMax(visual_anchor_row_, visual_current_row_);
-  return row >= lowRow && row <= highRow;
+int VimModeController::selectedCount() const { return selection_.selectedCount(); }
+bool VimModeController::isRowSelected(int row) const { return selection_.isRowSelected(row); }
+void VimModeController::enterVisual(int row) {
+  mode_ = Mode::Normal;
+  selection_.beginRange(row);
 }
-
-void VimModeController::enterVisual(int currentRow) {
-  mode_ = Mode::Visual;
-  visual_anchor_row_ = currentRow;
-  visual_current_row_ = currentRow;
-  emit changed();
-}
-
-void VimModeController::extendVisual(int newRow) {
-  if (mode_ != Mode::Visual) {
-    return;
-  }
-  visual_current_row_ = newRow;
-  emit changed();
-}
-
-void VimModeController::swapVisualEnds() {
-  if (mode_ != Mode::Visual) {
-    return;
-  }
-  std::swap(visual_anchor_row_, visual_current_row_);
-  emit changed();
-}
-
+void VimModeController::extendVisual(int row) { selection_.move(row); }
+void VimModeController::swapVisualEnds() { selection_.swapEnds(); }
 void VimModeController::exitVisual() {
   mode_ = Mode::Normal;
-  visual_anchor_row_ = -1;
-  visual_current_row_ = -1;
-  emit changed();
+  selection_.clear();
 }
 
 bool VimModeController::editingIsCreate() const {

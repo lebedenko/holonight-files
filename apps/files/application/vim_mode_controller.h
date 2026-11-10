@@ -9,6 +9,8 @@
 #include <QtQml/qqmlregistration.h>
 #include <QtTypes>
 
+#include <HolonightFileBrowser/selection_session.h>
+
 // The NORMAL/VISUAL/SEARCH/INSERT mode state machine (docs/sdd/vim-modal-editing/SPEC.md). Owned
 // as a value member of DirectoryController, structurally analogous to PreviewService, but kept
 // free of any pointer into DirectoryModel/DirectoryProxyModel: every method that needs directory
@@ -38,7 +40,7 @@ class VimModeController : public QObject {
   Q_PROPERTY(QList<int> searchMatchRows READ searchMatchRows NOTIFY changed)
 
  public:
-  enum class Mode : quint8 { Normal, Visual, Search, Insert };
+  enum class Mode : quint8 { Normal, Visual, Search, Insert, Mark };
   Q_ENUM(Mode)
   enum class InsertKind : quint8 { Prepend, Append, CreateBelow, CreateAbove };
   Q_ENUM(InsertKind)
@@ -53,10 +55,23 @@ class VimModeController : public QObject {
 
   explicit VimModeController(QObject* parent = nullptr);
 
-  [[nodiscard]] Mode currentMode() const { return mode_; }
+  [[nodiscard]] Mode currentMode() const {
+    if (mode_ == Mode::Insert || mode_ == Mode::Search) {
+      return mode_;
+    }
+    if (selection_.mode() == HolonightFileBrowser::SelectionSession::Mode::Visual) {
+      return Mode::Visual;
+    }
+    if (selection_.mode() == HolonightFileBrowser::SelectionSession::Mode::Mark) {
+      return Mode::Mark;
+    }
+    return Mode::Normal;
+  }
+  [[nodiscard]] HolonightFileBrowser::SelectionSession* selection() { return &selection_; }
+  [[nodiscard]] const HolonightFileBrowser::SelectionSession* selection() const { return &selection_; }
 
   // VISUAL — REQ-F-018 through REQ-F-023
-  [[nodiscard]] int visualAnchorRow() const { return visual_anchor_row_; }
+  [[nodiscard]] int visualAnchorRow() const { return selection_.anchorRow(); }
   [[nodiscard]] int selectedCount() const;
   Q_INVOKABLE [[nodiscard]] bool isRowSelected(int row) const;
   Q_INVOKABLE void enterVisual(int currentRow);
@@ -107,8 +122,7 @@ class VimModeController : public QObject {
 
   Mode mode_ = Mode::Normal;
 
-  int visual_anchor_row_ = -1;
-  int visual_current_row_ = -1;
+  HolonightFileBrowser::SelectionSession selection_;
 
   InsertKind insert_kind_ = InsertKind::Prepend;
   int editing_row_ = -1;

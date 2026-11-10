@@ -2,14 +2,17 @@
 
 #include "directory_fixtures.h"
 #include "file_operation_service.h"
+#include "native_operation_path.h"
 
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 using files_test::fixturePattern;
 using files_test::ScopedXdgDataHome;
@@ -149,4 +152,29 @@ TEST(TrashService, FailedMoveRollsBackOnlyItsOwnMetadata) {
   EXPECT_TRUE(QDir(home.filePath("Trash")).exists());
   EXPECT_TRUE(QFile::exists(QDir(directory.info_dir).filePath("unrelated.trashinfo")));
   EXPECT_FALSE(QFile::exists(QDir(directory.info_dir).filePath("Trash.trashinfo")));
+}
+
+TEST(TrashService, NativeNamesPreserveBytesInPayloadAndTrashInfo) {
+  QTemporaryDir home;
+  QTemporaryDir source;
+  ASSERT_TRUE(home.isValid() && source.isValid());
+  const ScopedXdgDataHome guard(home.path());
+  const QByteArray name = QByteArray("bad-") + static_cast<char>(0xff);
+  const auto path = QFile::encodeName(source.path()) + '/' + name;
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+  const int descriptor = ::open(path.constData(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+  ASSERT_GE(descriptor, 0);
+  ASSERT_EQ(::close(descriptor), 0);
+  const auto result = TrashService::trashEntry(operationPath(path), std::make_shared<std::atomic_bool>(false));
+  ASSERT_TRUE(result.complete()) << result.reason.toStdString();
+  EXPECT_NE(::access(path.constData(), F_OK), 0);
+  const auto payload = QFile::encodeName(home.filePath("Trash/files")) + '/' + name;
+  EXPECT_EQ(::access(payload.constData(), F_OK), 0);
+  const auto info = QFile::encodeName(home.filePath("Trash/info")) + '/' + name + ".trashinfo";
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+  const int infoDescriptor = ::open(info.constData(), O_RDONLY | O_CLOEXEC);
+  ASSERT_GE(infoDescriptor, 0);
+  QFile metadata;
+  ASSERT_TRUE(metadata.open(infoDescriptor, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle));
+  EXPECT_TRUE(metadata.readAll().contains("bad-%FF"));
 }

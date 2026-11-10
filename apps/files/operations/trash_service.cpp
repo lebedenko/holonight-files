@@ -1,6 +1,7 @@
 #include "trash_service.h"
 
 #include "file_operation_service.h"
+#include "native_operation_path.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -18,7 +19,7 @@
 namespace TrashService {
 namespace {
 
-QByteArray encode(const QString& path) { return QFile::encodeName(path); }
+QByteArray encode(const QString& path) { return operationBytes(path); }
 
 QString xdgDataHome() {
   const auto env = qEnvironmentVariable("XDG_DATA_HOME");
@@ -71,7 +72,7 @@ bool ensureFilesAndInfo(const QString& dirPath, TrashDirectory* out) {
 // device is the mount point (REQ-F-041's "$topdir").
 QString findTopdir(const QString& path, dev_t device) {
   const QFileInfo info(path);
-  QString current = QFileInfo(info.absolutePath()).canonicalFilePath();
+  QString current = canonicalOperationPath(info.absolutePath());
   QString last = current;
   while (true) {
     struct stat ancestorStat{};
@@ -175,12 +176,24 @@ QString uniqueTrashName(const TrashDirectory& dir, const QString& itemName) {
 
 std::optional<TrashError> writeTrashInfo(const TrashDirectory& dir, const QString& trashName,
                                          const QString& originalPath) {
-  QFile file(QDir(dir.info_dir).filePath(trashName + QStringLiteral(".trashinfo")));
-  if (!file.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
-    return TrashError{.kind = FailureKind::Metadata, .path = file.fileName(), .reason = file.errorString()};
+  const auto infoPath = QDir(dir.info_dir).filePath(trashName + QStringLiteral(".trashinfo"));
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+  const int descriptor = ::open(encode(infoPath).constData(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+  QFile file;
+  if (descriptor < 0) {
+    return TrashError{
+        .kind = FailureKind::Metadata,
+        .path = infoPath,
+        .reason = FileOperationService::describeErrno(errno),
+    };
+  }
+  if (!file.open(descriptor, QIODevice::WriteOnly, QFileDevice::AutoCloseHandle)) {
+    ::close(descriptor);
+    ::unlink(encode(infoPath).constData());
+    return TrashError{.kind = FailureKind::Metadata, .path = infoPath, .reason = file.errorString()};
   }
   const auto pathField = dir.use_relative_path ? QDir(dir.topdir).relativeFilePath(originalPath) : originalPath;
-  const auto encoded = QUrl::toPercentEncoding(pathField, "/");
+  const auto encoded = operationBytes(pathField).toPercentEncoding("/");
   const auto deletionDate = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-ddTHH:mm:ss"));
   const auto contents =
       QStringLiteral("[Trash Info]\nPath=%1\nDeletionDate=%2\n").arg(QString::fromUtf8(encoded), deletionDate).toUtf8();
@@ -188,15 +201,15 @@ std::optional<TrashError> writeTrashInfo(const TrashDirectory& dir, const QStrin
     const auto reason =
         file.error() == QFileDevice::NoError ? FileOperationService::describeErrno(errno) : file.errorString();
     file.close();
-    ::unlink(encode(file.fileName()).constData());
-    return TrashError{.kind = FailureKind::Metadata, .path = file.fileName(), .reason = reason};
+    ::unlink(encode(infoPath).constData());
+    return TrashError{.kind = FailureKind::Metadata, .path = infoPath, .reason = reason};
   }
   file.close();
   return std::nullopt;
 }
 
 void removeTrashInfo(const TrashDirectory& dir, const QString& trashName) {
-  QFile::remove(QDir(dir.info_dir).filePath(trashName + QStringLiteral(".trashinfo")));
+  ::unlink(encode(QDir(dir.info_dir).filePath(trashName + QStringLiteral(".trashinfo"))).constData());
 }
 
 namespace {

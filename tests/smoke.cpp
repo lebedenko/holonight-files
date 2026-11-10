@@ -2935,6 +2935,14 @@ TEST(Files, ModeBadgeWidthConstant) {
     EXPECT_EQ(harness.badge.item->width(), width);
     EXPECT_EQ(harness.badge.item->mapToScene(QPointF()).x(), sceneX);
   }
+  QTest::keyClick(window, Qt::Key_V, Qt::ControlModifier);
+  ASSERT_EQ(harness.controller.vim()->currentMode(), VimModeController::Mode::Mark);
+  EXPECT_TRUE(badgeShows(harness.badge, "V-MARK", "accentViolet"));
+  auto* viewButton = window->findChild<QQuickItem*>("iconViewButton");
+  ASSERT_NE(viewButton, nullptr);
+  EXPECT_TRUE(viewButton->isEnabled());
+  EXPECT_EQ(harness.badge.item->width(), width);
+  EXPECT_EQ(harness.badge.item->mapToScene(QPointF()).x(), sceneX);
 }
 
 TEST(Files, ModeBadgeVisibleDuringPrompt) {
@@ -3327,6 +3335,69 @@ TEST(Files, MarkdownQuickLookStyleTracksThemeChanges) {
   EXPECT_EQ(harness.window->findChild<QQuickItem*>("quickLookMarkdownView"), view);
 }
 
+TEST(Files, SelectionHighlightsFollowMembershipInBothPresentations) {
+  for (const bool icons : {false, true}) {
+    SCOPED_TRACE(icons ? "Icons" : "List");
+    QTemporaryDir directory(files_test::fixturePattern("selection-highlights"));
+    files_test::populateEntries(directory, 9);
+    DirectoryController controller{files_test::imageRuntime};
+    auto loaded = loadActiveWindow(controller, directory.path());
+    ASSERT_NE(loaded.list, nullptr);
+    controller.setIconView(icons);
+    auto* view = loaded.window->findChild<QQuickItem*>(icons ? "directoryGridView" : "directoryListView");
+    ASSERT_NE(view, nullptr);
+    const QString delegateName = icons ? "directoryIconDelegate" : "directoryEntryDelegate";
+    const auto delegates = [&] {
+      QMap<int, QQuickItem*> result;
+      for (auto* cell : view->property("contentItem").value<QQuickItem*>()->childItems()) {
+        auto* entry = findVisual(cell, delegateName);
+        if (entry != nullptr) {
+          result.insert(entry->property("index").toInt(), entry);
+        }
+      }
+      return result;
+    };
+    ASSERT_TRUE(QTest::qWaitFor([&] { return delegates().size() == 9; }));
+    const auto expectSelection = [&](const QList<int>& expected) {
+      QCoreApplication::processEvents();
+      QList<int> highlighted;
+      const auto entries = delegates();
+      for (auto entry = entries.cbegin(); entry != entries.cend(); ++entry) {
+        auto* overlay = findVisual(entry.value(), "hnSelectableDelegateSelectedOverlay");
+        ASSERT_NE(overlay, nullptr);
+        EXPECT_EQ(entry.value()->property("highlighted").toBool(), overlay->isVisible());
+        if (overlay->isVisible()) {
+          highlighted.append(entry.key());
+        }
+      }
+      EXPECT_EQ(highlighted, expected);
+      EXPECT_EQ(controller.vim()->selectedCount(), expected.size());
+    };
+    expectSelection({});
+    controller.selectEntry(2);
+    controller.handleKey("v");
+    controller.vim()->extendVisual(7);
+    expectSelection({2, 3, 4, 5, 6, 7});
+    controller.vim()->extendVisual(4);
+    expectSelection({2, 3, 4});
+    controller.selectEntry(2);
+    expectSelection({2});
+    controller.selectEntry(5);
+    expectSelection({5});  // Same count and mode, different membership.
+    controller.selectEntry(2);
+    controller.selectEntry(5, Qt::ControlModifier);
+    controller.selectEntry(7, Qt::ControlModifier);
+    expectSelection({2, 5, 7});
+    controller.selectEntry(5, Qt::ControlModifier);
+    expectSelection({2, 7});
+    controller.selection()->beginRectangle(false);
+    controller.selection()->updateRectangle({3, 6});
+    expectSelection({3, 6});  // Same count and mode again.
+    controller.handleKey("Escape");
+    expectSelection({});
+  }
+}
+
 TEST(Files, MouseFileActivationSelectsPreviewsAndOpensExactlyOnce) {
   for (bool icons : {false, true}) {
     SCOPED_TRACE(icons ? "Icons" : "List");
@@ -3362,7 +3433,9 @@ TEST(Files, MouseFileActivationSelectsPreviewsAndOpensExactlyOnce) {
     EXPECT_EQ(receiver.received, QUrl::fromLocalFile(path));
     controller.handleKey("v");
     QTest::mouseDClick(loaded.window, Qt::LeftButton, Qt::NoModifier, center);
-    EXPECT_EQ(receiver.calls, 1);
+    EXPECT_EQ(receiver.calls, 2);
+    EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+    EXPECT_EQ(controller.selection()->selectedCount(), 1);
     controller.handleKey("Escape");
     ASSERT_TRUE(QTest::qWaitFor([&] { return controller.preview()->quickLookEligible(); }));
     QTest::keyClick(loaded.window, Qt::Key_Space);
@@ -3376,7 +3449,7 @@ TEST(Files, MouseFileActivationSelectsPreviewsAndOpensExactlyOnce) {
     auto* searchOwner = loaded.window->activeFocusItem();
     QTest::mouseClick(loaded.window, Qt::LeftButton, Qt::NoModifier, center);
     EXPECT_EQ(loaded.window->activeFocusItem(), searchOwner);
-    EXPECT_EQ(receiver.calls, 1);
+    EXPECT_EQ(receiver.calls, 2);
     controller.cancelSearchEditing();
   }
 }

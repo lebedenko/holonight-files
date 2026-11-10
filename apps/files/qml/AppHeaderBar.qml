@@ -60,7 +60,7 @@ HnHeaderBar {
         focusPolicy: Qt.TabFocus
         checkable: true
         autoExclusive: true
-        enabled: root.historyEnabled
+        enabled: !root.editingLocation && root.controller.transfersEnabled
         icon.color: checked && enabled ? HoloniightPalette.primary : "transparent"
 
         Binding {

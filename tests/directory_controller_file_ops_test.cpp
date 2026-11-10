@@ -1,12 +1,15 @@
 #include "directory_controller.h"
 #include "directory_fixtures.h"
+#include "native_operation_path.h"
 
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 using files_test::fixturePattern;
 using files_test::ScopedXdgDataHome;
@@ -381,4 +384,75 @@ TEST(DirectoryControllerFileOps, FinderRefreshesAfterInlineCreateRenameAndExtern
       QTest::qWaitFor([&] { return controller.finder()->pathAt(0) == root.filePath("needle-renamed.txt"); }, 5000));
   ASSERT_FALSE(writeFile(root, "needle-external.txt").isEmpty());
   ASSERT_TRUE(QTest::qWaitFor([&] { return controller.finder()->rowCount() == 2; }, 5000));
+}
+
+TEST(DirectoryControllerFileOps, PointerMarksCopyExactNativeNamesAndSkipParent) {
+  QTemporaryDir src;
+  QTemporaryDir dst;
+  ASSERT_TRUE(src.isValid() && dst.isValid());
+  const QByteArray first = QByteArray("same-") + static_cast<char>(0xff);
+  const QByteArray second = QByteArray("same-") + static_cast<char>(0xfe);
+  for (const auto& name : {first, second}) {
+    const auto path = QFile::encodeName(src.path()) + '/' + name;
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+    const int descriptor = ::open(path.constData(), O_CREAT | O_WRONLY | O_EXCL, 0600);
+    ASSERT_GE(descriptor, 0);
+    ASSERT_EQ(::close(descriptor), 0);
+  }
+  writeFile(src, "other");
+  DirectoryController controller;
+  controller.open(src.path());
+  ASSERT_TRUE(settled(controller));
+  int firstRow = -1;
+  int secondRow = -1;
+  for (int row = 0; row < controller.listing()->rowCount(); ++row) {
+    const auto nativePath = controller.listing()->index(row, 0).data(DirectoryModel::NativePathRole).toByteArray();
+    if (nativePath.endsWith(first)) {
+      firstRow = row;
+    }
+    if (nativePath.endsWith(second)) {
+      secondRow = row;
+    }
+  }
+  ASSERT_GE(firstRow, 0);
+  ASSERT_GE(secondRow, 0);
+  controller.selectEntry(firstRow);
+  controller.selectEntry(secondRow, Qt::ControlModifier);
+  ASSERT_EQ(controller.selection()->selectedCount(), 2);
+  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Mark);
+  const auto drag = controller.dragUriList(firstRow);
+  EXPECT_TRUE(drag.contains("%FF"));
+  EXPECT_TRUE(drag.contains("%FE"));
+  EXPECT_FALSE(controller.selection()->selected().contains(QFile::encodeName(src.path())));
+  ASSERT_TRUE(controller.handleKey("y"));
+  controller.open(dst.path());
+  ASSERT_TRUE(settled(controller));
+  ASSERT_TRUE(controller.handleKey("p"));
+  ASSERT_TRUE(taskIdle(controller));
+  for (const auto& name : {first, second}) {
+    const auto path = QFile::encodeName(dst.path()) + '/' + name;
+    EXPECT_EQ(::access(path.constData(), F_OK), 0);
+  }
+  EXPECT_FALSE(QFile::exists(dst.filePath("other")));
+}
+TEST(DirectoryControllerFileOps, MarkMovementAndEscapeDoNotRouteSpaceToQuickLook) {
+  QTemporaryDir src;
+  writeFile(src, "one");
+  writeFile(src, "two");
+  DirectoryController controller;
+  controller.open(src.path());
+  ASSERT_TRUE(settled(controller));
+  controller.selectEntry(0);
+  ASSERT_TRUE(controller.handleKey("Ctrl+V"));
+  ASSERT_TRUE(controller.handleKey("j"));
+  EXPECT_EQ(controller.selection()->selectedCount(), 1);
+  ASSERT_TRUE(controller.handleKey(" "));
+  EXPECT_EQ(controller.selection()->selectedCount(), 2);
+  EXPECT_FALSE(controller.quickLookOpen());
+  controller.setIconView(true);
+  EXPECT_TRUE(controller.iconView());
+  EXPECT_EQ(controller.selection()->selectedCount(), 2);
+  ASSERT_TRUE(controller.handleKey("Escape"));
+  EXPECT_EQ(controller.selection()->selectedCount(), 0);
+  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
 }

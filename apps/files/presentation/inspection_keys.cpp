@@ -64,9 +64,8 @@ bool InspectionKeys::press(int key, const QString& text, int modifiers, bool aut
     }
     return true;
   }
-  if (!popup && control && (key == Qt::Key_U || key == Qt::Key_D)) {
-    return controller != nullptr &&
-           controller->handleKey(key == Qt::Key_U ? QStringLiteral("Ctrl+U") : QStringLiteral("Ctrl+D"));
+  if (!popup && control && (key == Qt::Key_U || key == Qt::Key_D || key == Qt::Key_V)) {
+    return controller != nullptr && controller->handleKey(QStringLiteral("Ctrl+") + QChar(static_cast<char16_t>(key)));
   }
   if (!acceptsModifiers(modifiers, text)) {
     return false;

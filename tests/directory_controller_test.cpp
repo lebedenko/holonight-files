@@ -2468,11 +2468,16 @@ TEST(DirectoryController, IconSpatialCountsClampIncompleteRowsAndResize) {
   EXPECT_EQ(controller.cursorRow(), 7);
   controller.handleKey("v");
   controller.selectEntry(2);
-  EXPECT_TRUE(controller.vim()->isRowSelected(5));
-  controller.activateEntry(0);
-  EXPECT_EQ(controller.currentPath(), dir.path());
+  EXPECT_TRUE(controller.vim()->isRowSelected(2));
+  EXPECT_FALSE(controller.vim()->isRowSelected(5));
+  EXPECT_EQ(controller.vim()->currentMode(), VimModeController::Mode::Normal);
+  controller.selectEntry(5, Qt::ShiftModifier);
+  EXPECT_EQ(controller.vim()->selectedCount(), 4);
   controller.setIconView(false);
-  EXPECT_TRUE(controller.iconView());
+  EXPECT_FALSE(controller.iconView());
+  EXPECT_EQ(controller.vim()->selectedCount(), 4);
+  EXPECT_TRUE(controller.vim()->isRowSelected(2));
+  EXPECT_TRUE(controller.vim()->isRowSelected(5));
 }
 
 TEST(DirectoryController, IconUpRestoresExitedFolderAndDiscardsCount) {

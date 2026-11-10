@@ -1,6 +1,7 @@
 #include "directory_controller.h"
 
 #include "file_transfer.h"
+#include "native_operation_path.h"
 
 #include <QClipboard>
 #include <QCoreApplication>
@@ -63,6 +64,7 @@ DirectoryController::DirectoryController(HoloNight::System::StorageController* s
   // Ahead of the forwarding connection, so observers never see a settled listing whose cursor has
   // not yet been restored.
   connect(&navigation_.model_, &DirectoryModel::changed, this, &DirectoryController::maybeApplyPendingRestore);
+  connect(&navigation_.model_, &DirectoryModel::changed, this, &DirectoryController::syncSelection);
   connect(&navigation_.model_, &DirectoryModel::changed, this, &DirectoryController::changed);
   connect(&navigation_.model_, &DirectoryModel::shutdownFinished, this,
           [this] { lifecycle_.workerFinished(&navigation_.model_); });
@@ -166,7 +168,7 @@ void DirectoryController::goUp() {
   }
 }
 void DirectoryController::setIconView(bool icons) {
-  if (!historyNavigationEnabled() || icons == icon_view_) {
+  if (!transfersEnabled() || icons == icon_view_) {
     return;
   }
   const QPersistentModelIndex source = listing()->mapToSource(listing()->index(cursorRow(), 0));
@@ -186,8 +188,9 @@ void DirectoryController::setGridDimensions(int columns, int rows) {
     emit changed();
   }
 }
-void DirectoryController::selectEntry(int row) {
+void DirectoryController::selectEntry(int row, int modifiers) {
   if (transfersEnabled() && row >= 0 && row < listing()->rowCount()) {
+    vim_.selection()->pointer(row, (modifiers & Qt::ControlModifier) != 0, (modifiers & Qt::ShiftModifier) != 0);
     setCursorRow(row);
   }
 }
@@ -271,29 +274,24 @@ void DirectoryController::removeActivePlaceholderIfAny() { editing_.removeActive
 
 QStringList DirectoryController::collectVisualSelectionPaths() const {
   QStringList paths;
-  for (int row = 0; row < navigation_.proxy_.rowCount(); ++row) {
-    if (!vim_.isRowSelected(row)) {
-      continue;
-    }
-    const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(row, 0));
-    const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
-    if (!path.isEmpty()) {
-      paths.append(path);
-    }
+  for (const auto& path : vim_.selection()->selected()) {
+    paths.append(operationPath(path));
   }
   return paths;
 }
 void DirectoryController::yankOrCut(bool cut, bool wholeVisualSelection) {
   QStringList paths;
-  if (wholeVisualSelection) {
+  if (vim_.selectedCount() > 0) {
     paths = collectVisualSelectionPaths();
-    vim_.exitVisual();  // REQ-F-002/004: exits VISUAL immediately, regardless of what was selected
   } else if (navigation_.cursor_.index() >= 0 && navigation_.cursor_.index() < navigation_.proxy_.rowCount()) {
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(navigation_.cursor_.index(), 0));
-    const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
-    if (!path.isEmpty()) {
-      paths = {path};
+    const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::NativePathRole).toByteArray();
+    if (!path.isEmpty() && entryNameAt(cursorRow()) != u"..") {
+      paths = {operationPath(path)};
     }
+  }
+  if (wholeVisualSelection || vim_.selectedCount() > 0) {
+    vim_.exitVisual();
   }
   if (paths.isEmpty()) {
     return;
@@ -316,15 +314,17 @@ void DirectoryController::pasteRegister() {
 }
 void DirectoryController::requestTrash(bool wholeVisualSelection) {
   QStringList paths;
-  if (wholeVisualSelection) {
+  if (vim_.selectedCount() > 0) {
     paths = collectVisualSelectionPaths();
-    vim_.exitVisual();  // REQ-F-015: exits VISUAL immediately, prompt appears back in NORMAL
   } else if (navigation_.cursor_.index() >= 0 && navigation_.cursor_.index() < navigation_.proxy_.rowCount()) {
     const auto sourceIndex = navigation_.proxy_.mapToSource(navigation_.proxy_.index(navigation_.cursor_.index(), 0));
-    const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::PathRole).toString();
-    if (!path.isEmpty()) {
-      paths = {path};
+    const auto path = navigation_.model_.data(sourceIndex, DirectoryModel::NativePathRole).toByteArray();
+    if (!path.isEmpty() && entryNameAt(cursorRow()) != u"..") {
+      paths = {operationPath(path)};
     }
+  }
+  if (wholeVisualSelection || vim_.selectedCount() > 0) {
+    vim_.exitVisual();
   }
   if (paths.isEmpty()) {
     return;
@@ -334,7 +334,28 @@ void DirectoryController::requestTrash(bool wholeVisualSelection) {
 void DirectoryController::updateInsertText(const QString& text) { editing_.updateInsertText(text); }
 void DirectoryController::commitInsertEditing() { editing_.commitInsertEditing(); }
 void DirectoryController::cancelInsertEditing() { editing_.cancelInsertEditing(); }
-void DirectoryController::listingChanged() { editing_.listingChanged(); }
+void DirectoryController::syncSelection() {
+  QList<QByteArray> visible;
+  QList<QByteArray> ineligible;
+  for (int row = 0; row < listing()->rowCount(); ++row) {
+    const auto index = listing()->index(row, 0);
+    const auto nativePath = index.data(DirectoryModel::NativePathRole).toByteArray();
+    visible.append(nativePath);
+    if (index.data(DirectoryModel::NameRole).toString() == u".." || nativePath.isEmpty()) {
+      ineligible.append(nativePath);
+    }
+  }
+  vim_.selection()->setVisibleEntries(visible, ineligible);
+  QList<QByteArray> available;
+  for (int row = 0; row < navigation_.model_.rowCount(); ++row) {
+    available.append(navigation_.model_.index(row, 0).data(DirectoryModel::NativePathRole).toByteArray());
+  }
+  vim_.selection()->reconcile(available, !scanning() && directoryError().isEmpty());
+}
+void DirectoryController::listingChanged() {
+  syncSelection();
+  editing_.listingChanged();
+}
 void DirectoryController::ensureSearchCurrent() { editing_.ensureSearchCurrent(); }
 void DirectoryController::updateSearchQuery(const QString& query) { editing_.updateSearchQuery(query); }
 void DirectoryController::commitSearchEditing() { editing_.commitSearchEditing(); }
@@ -366,6 +387,25 @@ void DirectoryController::shutdown() { lifecycle_.shutdown(); }
 
 int DirectoryController::takeCount() { return commands_.takeCount(); }
 bool DirectoryController::handleKey(const QString& key) {
+  const auto mode = vim_.currentMode();
+  if (transfersEnabled()) {
+    if (key == u"Ctrl+V") {
+      vim_.selection()->beginMark(cursorRow());
+      return true;
+    }
+    if (key == u"Escape" && (vim_.selectedCount() > 0 || mode == VimModeController::Mode::Mark)) {
+      vim_.exitVisual();
+      return true;
+    }
+    if (mode == VimModeController::Mode::Mark && key == u" ") {
+      vim_.selection()->toggle(cursorRow());
+      return true;
+    }
+    if (mode == VimModeController::Mode::Mark && (key == u"v" || key == u"V")) {
+      vim_.enterVisual(cursorRow());
+      return true;
+    }
+  }
   const auto command = commands_.route(key, {
                                                 .mode = vim_.currentMode(),
                                                 .prompt = tasks_.promptKind(),
@@ -498,26 +538,29 @@ void DirectoryController::execute(const FileCommand& command) {
 
 bool DirectoryController::transfersEnabled() const {
   const auto mode = vim_.currentMode();
-  return (mode == VimModeController::Mode::Normal || mode == VimModeController::Mode::Visual) && !tasks_.hasPrompt() &&
-         !quickLookOpen() && !finder_open_ && !lifecycle_.started_ && directoryError().isEmpty();
+  return (mode == VimModeController::Mode::Normal || mode == VimModeController::Mode::Visual ||
+          mode == VimModeController::Mode::Mark) &&
+         !tasks_.hasPrompt() && !quickLookOpen() && !finder_open_ && !lifecycle_.started_ && directoryError().isEmpty();
 }
 QString DirectoryController::dragUriList(int row) const {
   if (!transfersEnabled()) {
     return {};
   }
   const auto source = navigation_.proxy_.index(row, 0);
-  if (!source.isValid() || source.data(DirectoryModel::PathRole).toString().isEmpty()) {
+  if (!source.isValid() || source.data(DirectoryModel::NativePathRole).toByteArray().isEmpty() ||
+      entryNameAt(row) == u"..") {
     return {};
   }
   QStringList paths;
-  if (vim_.currentMode() == VimModeController::Mode::Visual && vim_.isRowSelected(row)) {
+  if (vim_.isRowSelected(row)) {
     paths = collectVisualSelectionPaths();
   } else {
-    paths.append(source.data(DirectoryModel::PathRole).toString());
+    paths.append(operationPath(source.data(DirectoryModel::NativePathRole).toByteArray()));
   }
   QString result;
   for (const auto& path : paths) {
-    result += QString::fromLatin1(QUrl::fromLocalFile(path).toEncoded()) + QStringLiteral("\r\n");
+    result +=
+        QString::fromLatin1(HolonightFileBrowser::localUrl(operationBytes(path)).toEncoded()) + QStringLiteral("\r\n");
   }
   return result;
 }

@@ -1,5 +1,7 @@
 #include "file_operation_service.h"
 
+#include "native_operation_path.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -27,7 +29,7 @@ struct DirectoryCloser {
 
 constexpr qint64 kChunkSize = 1 << 20;  // 1 MiB, streamed — never full-buffer (REQ-NF-005)
 
-QByteArray encode(const QString& path) { return QFile::encodeName(path); }
+QByteArray encode(const QString& path) { return operationBytes(path); }
 
 // Best-effort recursive removal: keeps going past an individual failure so as much as possible is
 // cleaned up, but remembers the first errno encountered.
@@ -42,7 +44,7 @@ bool removeDirectoryRecursivelyImpl(const QString& path, int* firstErrno) {
   }
   bool succeeded = true;
   while (auto* item = ::readdir(dir.get())) {
-    const auto name = QFile::decodeName(static_cast<const char*>(item->d_name));
+    const auto name = operationPath(QByteArray(static_cast<const char*>(item->d_name)));
     if (name == u"." || name == u"..") {
       continue;
     }
@@ -83,16 +85,16 @@ ItemResult failure(const QString& reason) {
 // Resolve the parent, not the final entry: destination symlinks are entries to replace.
 QString resolvedEntryPath(const QString& path) {
   const QFileInfo info(path);
-  const auto parent = QFileInfo(info.absolutePath()).canonicalFilePath();
+  const auto parent = canonicalOperationPath(info.absolutePath());
   return parent.isEmpty() ? QString() : QDir(parent).filePath(info.fileName());
 }
 
 bool destinationWithinSource(const QString& srcPath, const QString& destPath) {
-  const auto canonicalSource = QFileInfo(srcPath).canonicalFilePath();
+  const auto canonicalSource = canonicalOperationPath(srcPath);
   // Walk upwards so a not-yet-existing destination still resolves symlinked ancestors.
   QString ancestor = QFileInfo(destPath).absolutePath();
   while (!ancestor.isEmpty()) {
-    const auto canonical = QFileInfo(ancestor).canonicalFilePath();
+    const auto canonical = canonicalOperationPath(ancestor);
     if (!canonical.isEmpty()) {
       if (canonical == canonicalSource ||
           canonical.startsWith(canonicalSource.endsWith(u'/') ? canonicalSource : canonicalSource + u'/')) {
@@ -305,7 +307,7 @@ ItemResult copyDirectoryTree(const QString& srcPath, const QString& destPath, co
       result.cancelled = true;
       return result;
     }
-    const auto name = QFile::decodeName(static_cast<const char*>(item->d_name));
+    const auto name = operationPath(QByteArray(static_cast<const char*>(item->d_name)));
     if (name == u"." || name == u"..") {
       continue;
     }

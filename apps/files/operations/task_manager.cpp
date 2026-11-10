@@ -1,5 +1,6 @@
 #include "task_manager.h"
 
+#include "native_operation_path.h"
 #include "trash_service.h"
 
 #include <QDir>
@@ -61,7 +62,8 @@ ConflictOutcome resolveConflictIfAny(TaskManager* self, QSemaphore* semaphore,
     return outcome;
   }
   pendingConflict->store(-1);
-  postConflictDetected(self, taskId, ++(*promptSerial), itemName, itemName);
+  postConflictDetected(self, taskId, ++(*promptSerial), QFile::decodeName(operationBytes(itemName)),
+                       QFile::decodeName(operationBytes(itemName)));
   if (!waitForPromptAnswer(semaphore, cancel)) {
     outcome.action = ConflictOutcome::Action::Aborted;  // Ctrl+C while the prompt was open
     return outcome;
@@ -94,7 +96,7 @@ TaskSummary processCopyMoveTask(const TaskManager::Task& task, const std::shared
     }
     const QFileInfo info(source);
     const auto itemName = info.fileName();
-    postItemStarted(self, task.id, itemName);
+    postItemStarted(self, task.id, QFile::decodeName(operationBytes(itemName)));
     affectedDirs->insert(info.absolutePath());
 
     const auto outcome =
@@ -140,7 +142,7 @@ TaskSummary processTrashTask(const TaskManager::Task& task, const std::shared_pt
     if (cancel->load()) {
       break;
     }
-    postItemStarted(self, task.id, QFileInfo(source).fileName());
+    postItemStarted(self, task.id, QFile::decodeName(operationBytes(QFileInfo(source).fileName())));
     affectedDirs->insert(QFileInfo(source).absolutePath());
     const auto result = TrashService::trashEntry(source, cancel);
     if (result.cancelled) {

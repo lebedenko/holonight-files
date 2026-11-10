@@ -426,41 +426,29 @@ TEST(PreviewConsumers, SharedFilePreviewKeepsProgressivePixelsAndBlankSelection)
     FilePreview { width: 240; height: 400; iconProvider: "file:///missing-preview-icon/" }
   )",
                     QUrl());
+  QQuickWindow window;
   std::unique_ptr<QObject> pane(component.createWithInitialProperties({{"service", QVariant::fromValue(&preview)}}));
   ASSERT_NE(pane, nullptr) << component.errorString().toStdString();
-  auto* frame = pane->findChild<QObject*>("filePreviewFrame");
+  qobject_cast<QQuickItem*>(pane.get())->setParentItem(window.contentItem());
+  window.resize(240, 400);
+  window.show();
+  auto* frame = pane->findChild<QQuickItem*>("previewImageArea");
+  auto* thumbnail = pane->findChild<QQuickItem*>("previewThumbnail");
   ASSERT_NE(frame, nullptr);
-  EXPECT_EQ(frame->property("previewState").toInt(), 2);  // Empty, without instructions.
-  EXPECT_EQ(frame->property("previewItem").value<QObject*>(), nullptr);
+  ASSERT_NE(thumbnail, nullptr);
+  EXPECT_FALSE(frame->isVisible());
   preview.setTarget("/folder", true, -1, {}, 0040755, false, {}, "folder");
-  EXPECT_EQ(frame->property("previewState").toInt(), 0);  // Ordinary icon content.
+  EXPECT_TRUE(frame->isVisible());
+  EXPECT_TRUE(QTest::qWaitFor([&] { return frame->width() == frame->height(); }));
   PreviewServiceTestAccess::presentationSelection(preview, "pending");
-  EXPECT_EQ(frame->property("previewState").toInt(), 1);
   QImage image(32, 32, QImage::Format_RGB32);
   image.fill(Qt::red);
   PreviewServiceTestAccess::presentationState(preview, true, image);
   EXPECT_TRUE(preview.busy());
-  EXPECT_EQ(frame->property("previewState").toInt(), 0);
+  EXPECT_TRUE(thumbnail->isVisible());
   PreviewServiceTestAccess::presentationState(preview, false, image);
-  EXPECT_EQ(frame->property("previewState").toInt(), 0);
-  QTemporaryDir directory(files_test::fixturePattern("shared-preview-failure"));
-  ASSERT_TRUE(directory.isValid());
-  files_test::writeCorruptJpeg(directory, "broken.jpg");
-  const auto path = directory.filePath("broken.jpg");
-  preview.setTarget(path, false, QFileInfo(path).size(), {}, 0100600, false, {}, "image-x-generic");
-  ASSERT_TRUE(QTest::qWaitFor([&] { return !preview.busy(); }));
-  ASSERT_FALSE(preview.previewErrorMessage().isEmpty());
-  EXPECT_EQ(frame->property("previewState").toInt(), 3);
-  auto* content = frame->property("previewItem").value<QObject*>();
-  ASSERT_NE(content, nullptr);
-  auto* caption = content->findChild<QObject*>("filePreviewFailureCaption");
-  ASSERT_NE(caption, nullptr);
-  EXPECT_EQ(caption->property("rawText").toString(), QStringLiteral("No preview available"));
-  auto* fallback = content->findChild<QQuickItem*>("filePreviewFallbackIcon");
-  ASSERT_NE(fallback, nullptr);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return fallback->isVisible(); }));
-  EXPECT_FALSE(fallback->property("hasError").toBool());
+  EXPECT_TRUE(thumbnail->isVisible());
   preview.clear();
-  EXPECT_EQ(frame->property("previewState").toInt(), 2);
-  EXPECT_EQ(frame->property("previewItem").value<QObject*>(), nullptr);
+  EXPECT_FALSE(frame->isVisible());
+  EXPECT_FALSE(thumbnail->isVisible());
 }

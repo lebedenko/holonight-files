@@ -54,6 +54,7 @@ class DirectoryController : public QObject {
   Q_PROPERTY(bool sidebarActivationEnabled READ sidebarActivationEnabled NOTIFY changed)
   Q_PROPERTY(PreviewService* preview READ preview CONSTANT)
   Q_PROPERTY(VimModeController* vim READ vim CONSTANT)
+  Q_PROPERTY(HolonightFileBrowser::SelectionSession* selection READ selection CONSTANT)
   Q_PROPERTY(TaskManager* tasks READ tasks CONSTANT)
   Q_PROPERTY(bool quickLookOpen READ quickLookOpen NOTIFY changed)
   Q_PROPERTY(bool historyNavigationEnabled READ historyNavigationEnabled NOTIFY changed)
@@ -97,7 +98,9 @@ class DirectoryController : public QObject {
   [[nodiscard]] int gridColumns() const { return grid_columns_; }
   Q_INVOKABLE void setIconView(bool icons);
   Q_INVOKABLE void setGridDimensions(int columns, int rows);
-  Q_INVOKABLE void selectEntry(int row);
+  Q_INVOKABLE void selectEntry(int row, int modifiers = 0);
+  HolonightFileBrowser::SelectionSession* selection() { return vim_.selection(); }
+  void syncSelection();
   Q_INVOKABLE void activateEntry(int row);
   Q_INVOKABLE void goUp();
   Q_INVOKABLE void activateBreadcrumb(int index);

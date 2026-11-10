@@ -185,7 +185,8 @@ TEST(FileDrop, IconTilesKeepEightPixelGapsAndPaddingAcrossResizeAndScroll) {
     EXPECT_NEAR(start.y(), 8, 0.01);
     EXPECT_EQ(first->height(), 128);
     EXPECT_TRUE(first->property("keyboardCursor").toBool());
-    EXPECT_FALSE(first->property("highlighted").toBool());
+    EXPECT_TRUE(first->property("highlighted").toBool());
+    EXPECT_EQ(controller.selection()->selectedCount(), 1);
     auto* icon = first->findChild<QQuickItem*>("iconColumnField");
     ASSERT_NE(icon, nullptr);
     EXPECT_EQ(icon->size(), QSizeF(64, 64));
