@@ -195,17 +195,17 @@ TEST(WindowCrossFilesystem, VisualDValidThenInvalidTrashLocationsFailPerItemWith
 // mixed validation-failure fixture. All selected sources share one trash location.
 TEST(WindowCrossFilesystem, VisualDMixedMetadataFailureHasOneConfirmationAndPreservesFailedSource) {
   SKIP_IF_UNAVAILABLE();
-  const auto foreign = fs_isolation::mountFreshTmpfs("nr_inodes=7");
+  const auto foreign = fs_isolation::mountFreshTmpfs("nr_inodes=8");
   ASSERT_FALSE(foreign.isEmpty());
   struct statvfs inodeInfo{};
   const auto mountPath = QFile::encodeName(foreign);
   ASSERT_EQ(::statvfs(mountPath.constData(), &inodeInfo), 0);
-  ASSERT_EQ(inodeInfo.f_files, 7U);
-  ASSERT_EQ(inodeInfo.f_ffree, 6U);  // Only the root inode exists.
+  ASSERT_EQ(inodeInfo.f_files, 8U);
+  ASSERT_EQ(inodeInfo.f_ffree, 7U);  // Only the root inode exists.
   ASSERT_FALSE(writeFile(foreign + "/a.txt", "successful payload").isEmpty());
   ASSERT_FALSE(writeFile(foreign + "/b.txt", "retained payload").isEmpty());
   ASSERT_EQ(::statvfs(mountPath.constData(), &inodeInfo), 0);
-  ASSERT_EQ(inodeInfo.f_ffree, 4U);  // Three trash directories and one metadata file.
+  ASSERT_EQ(inodeInfo.f_ffree, 5U);  // Three Trash directories, the lock, and one metadata file.
 
   RenderedWindow rendered;
   ASSERT_TRUE(rendered.activate());

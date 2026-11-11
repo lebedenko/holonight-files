@@ -356,6 +356,7 @@ bool FileCommandRouter::handlePromptKey(const QString& key) {
       // REQ-F-017: any key other than "y" declines, including Escape (REQ-C-008).
       command_ = {.kind = FileCommand::Kind::ConfirmTrash, .count = key == u"y" ? 1 : 0};
       return true;
+    case TaskManager::PromptKind::PermanentDeleteConfirm:
     case TaskManager::PromptKind::None:
       break;
   }

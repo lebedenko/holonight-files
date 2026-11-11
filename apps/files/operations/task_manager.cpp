@@ -3,6 +3,7 @@
 #include "native_operation_path.h"
 #include "trash_service.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QSet>
@@ -10,6 +11,8 @@
 #include <cstdint>
 
 namespace {
+
+namespace trash = holonightd::trash;
 
 using FailedItem = TaskManager::FailedItem;
 using TaskSummary = TaskManager::TaskSummary;
@@ -160,6 +163,35 @@ TaskSummary processTrashTask(const TaskManager::Task& task, const std::shared_pt
   return summary;
 }
 
+TaskSummary processStoredTrashTask(const TaskManager::Task& task, const std::shared_ptr<std::atomic_bool>& cancel,
+                                   TaskManager* self, QSet<QString>* affected) {
+  TaskSummary summary;
+  for (const auto& entry : task.trash_entries) {
+    if (cancel->load()) {
+      break;
+    }
+    const auto name = QFile::decodeName(entry.original_path.filename().c_str());
+    postItemStarted(self, task.id, name);
+    const auto destination = task.dest_dir.isEmpty()
+                                 ? entry.original_path
+                                 : std::filesystem::path(operationBytes(task.dest_dir).toStdString());
+    const auto result =
+        task.kind == TaskManager::TaskKind::Restore ? trash::restore(entry, destination) : trash::remove(entry);
+    if (result) {
+      ++summary.succeeded;
+    } else {
+      ++summary.failed;
+      ++summary.incomplete;
+      summary.failures.append({.path = name, .reason = QString::fromStdString(result.error())});
+    }
+    if (task.kind == TaskManager::TaskKind::Restore) {
+      affected->insert(QFile::decodeName(destination.parent_path().c_str()));
+    }
+    postItemProcessed(self, task.id);
+  }
+  return summary;
+}
+
 }  // namespace
 
 TaskManager::TaskManager(QObject* parent)
@@ -186,11 +218,118 @@ TaskManager::~TaskManager() {
   thread_.wait();
 }
 
+QVariantList TaskManager::trashEntries() const {
+  QVariantList rows;
+  for (const auto& entry : trash_scan_.entries) {
+    rows.push_back(QVariantMap{
+        {QStringLiteral("name"), QFile::decodeName(entry.original_path.filename().c_str())},
+        {QStringLiteral("location"), QFile::decodeName(entry.original_path.parent_path().c_str())},
+        {
+            QStringLiteral("date"),
+            QDateTime::fromSecsSinceEpoch(entry.deleted_at.time_since_epoch().count()).toLocalTime(),
+        },
+        {
+            QStringLiteral("volume"),
+            entry.location.mount_point.empty() ? tr("Home Trash")
+                                               : QFile::decodeName(entry.location.mount_point.c_str()),
+        },
+    });
+  }
+  return rows;
+}
+
+QStringList TaskManager::trashProblems() const {
+  QStringList rows;
+  for (const auto& problem : trash_scan_.problems) {
+    rows.append(QString::fromStdString(problem));
+  }
+  return rows;
+}
+
+void TaskManager::scanTrash() {
+  if (trash_scanning_ || stopping_) {
+    return;
+  }
+  trash_scanning_ = true;
+  emit trashChanged();
+  QMetaObject::invokeMethod(
+      worker_,
+      [this] {
+        auto scan = trash::scan();
+        QMetaObject::invokeMethod(
+            this,
+            [this, scan = std::move(scan)] mutable {
+              trash_scan_ = std::move(scan);
+              trash_scanning_ = false;
+              emit trashChanged();
+            },
+            Qt::QueuedConnection);
+      },
+      Qt::QueuedConnection);
+}
+
+void TaskManager::restoreTrash(int index, const QUrl& folder, const QString& name) {
+  if (stopping_ || busy_ || hasPrompt() || (trash_scanning_ && index != -1)) {
+    return;
+  }
+  const auto position = static_cast<std::size_t>(index);
+  const auto* entry = position < trash_scan_.entries.size() ? &trash_scan_.entries[position] : nullptr;
+  if (entry == nullptr && index == -1 && !folder.isEmpty() && alternate_restore_) {
+    entry = &*alternate_restore_;
+  }
+  if (entry == nullptr) {
+    return;
+  }
+  QString destination;
+  if (!folder.isEmpty()) {
+    if (!folder.isLocalFile() || !QDir::isAbsolutePath(folder.toLocalFile()) || name.isEmpty() ||
+        name == QStringLiteral(".") || name == QStringLiteral("..") || name.contains(u'/') ||
+        name.contains(QChar::Null)) {
+      return;
+    }
+    destination = QDir(folder.toLocalFile()).filePath(name);
+  }
+  original_restore_ = destination.isEmpty() ? std::optional(*entry) : std::nullopt;
+  queue_.append({
+      .kind = TaskKind::Restore,
+      .sources = {},
+      .dest_dir = destination,
+      .id = ++next_task_id_,
+      .trash_entries = {*entry},
+  });
+  alternate_restore_.reset();
+  dispatchNextTask();
+}
+
+void TaskManager::confirmDeletion(std::vector<trash::Entry> entries) {
+  if (entries.empty() || stopping_ || busy_ || hasPrompt() || trash_scanning_) {
+    return;
+  }
+  queue_.append({
+      .kind = TaskKind::DeletePermanently,
+      .sources = {},
+      .dest_dir = {},
+      .id = ++next_task_id_,
+      .trash_entries = std::move(entries),
+  });
+  dispatchNextTask();
+}
+
+void TaskManager::deleteTrash(int index) {
+  const auto position = static_cast<std::size_t>(index);
+  if (position < trash_scan_.entries.size()) {
+    confirmDeletion({trash_scan_.entries[position]});
+  }
+}
+
+void TaskManager::emptyTrash() { confirmDeletion(trash_scan_.entries); }
+
 void TaskManager::enqueueCopy(const QStringList& sources, const QString& destDir) {
   if (sources.isEmpty() || stopping_) {
     return;
   }
-  queue_.append({.kind = TaskKind::Copy, .sources = sources, .dest_dir = destDir, .id = ++next_task_id_});
+  queue_.append(
+      {.kind = TaskKind::Copy, .sources = sources, .dest_dir = destDir, .id = ++next_task_id_, .trash_entries = {}});
   dispatchNextTask();
 }
 
@@ -198,7 +337,8 @@ void TaskManager::enqueueMove(const QStringList& sources, const QString& destDir
   if (sources.isEmpty() || stopping_) {
     return;
   }
-  queue_.append({.kind = TaskKind::Move, .sources = sources, .dest_dir = destDir, .id = ++next_task_id_});
+  queue_.append(
+      {.kind = TaskKind::Move, .sources = sources, .dest_dir = destDir, .id = ++next_task_id_, .trash_entries = {}});
   dispatchNextTask();
 }
 
@@ -206,12 +346,14 @@ void TaskManager::requestTrashConfirmation(const QStringList& paths) {
   if (paths.isEmpty() || stopping_) {
     return;
   }
-  queue_.append({.kind = TaskKind::Trash, .sources = paths, .dest_dir = {}, .id = ++next_task_id_});
+  queue_.append(
+      {.kind = TaskKind::Trash, .sources = paths, .dest_dir = {}, .id = ++next_task_id_, .trash_entries = {}});
   dispatchNextTask();
 }
 
 void TaskManager::respondToTrashConfirm(bool confirmed, quint64 requestId) {
-  if (prompt_kind_ != PromptKind::TrashConfirm || requestId != prompt_id_) {
+  if ((prompt_kind_ != PromptKind::TrashConfirm && prompt_kind_ != PromptKind::PermanentDeleteConfirm) ||
+      requestId != prompt_id_) {
     return;
   }
   const auto task = queue_.takeFirst();
@@ -270,7 +412,7 @@ void TaskManager::resetPromptState() {
   prompt_kind_ = PromptKind::None;
   conflict_source_name_.clear();
   conflict_dest_name_.clear();
-  trash_confirm_paths_.clear();
+  trash_confirm_count_ = 0;
   prompt_id_ = 0;
 }
 
@@ -278,12 +420,14 @@ void TaskManager::dispatchNextTask() {
   if (busy_ || hasPrompt() || queue_.isEmpty() || stopping_) {
     return;
   }
-  if (queue_.first().kind == TaskKind::Trash) {
+  if (queue_.first().kind == TaskKind::Trash || queue_.first().kind == TaskKind::DeletePermanently) {
+    current_operation_ = queue_.first().kind;
     active_task_id_ = queue_.first().id;
-    trash_confirm_paths_ = queue_.first().sources;
+    trash_confirm_count_ = queue_.first().itemCount();
     prompt_id_ = ++(*prompt_serial_);
     last_prompt_id_ = prompt_id_;
-    prompt_kind_ = PromptKind::TrashConfirm;
+    prompt_kind_ =
+        current_operation_ == TaskKind::Trash ? PromptKind::TrashConfirm : PromptKind::PermanentDeleteConfirm;
     emit changed();
     return;
   }
@@ -296,7 +440,7 @@ void TaskManager::startTask(const Task& task) {
   current_operation_ = task.kind;
   current_item_name_.clear();
   items_done_ = 0;
-  items_total_ = static_cast<int>(task.sources.size());
+  items_total_ = task.itemCount();
   cancellation_ = std::make_shared<std::atomic_bool>(false);
   pending_conflict_resolution_ = std::make_shared<std::atomic_int>(-1);
   prompt_semaphore_ = std::make_shared<QSemaphore>(0);  // fresh per task: no stray cross-task tokens
@@ -314,10 +458,21 @@ void TaskManager::runTaskOnWorker(const Task& task) {
       worker_,
       [self, task, cancel, semaphore, pendingConflict, promptSerial] {
         QSet<QString> affected;
-        const auto summary = task.kind == TaskKind::Trash
-                                 ? processTrashTask(task, cancel, self, &affected)
-                                 : processCopyMoveTask(task, cancel, semaphore.get(), pendingConflict.get(), self,
-                                                       &affected, promptSerial.get());
+        TaskSummary summary;
+        switch (task.kind) {
+          case TaskKind::Trash:
+            summary = processTrashTask(task, cancel, self, &affected);
+            break;
+          case TaskKind::Restore:
+          case TaskKind::DeletePermanently:
+            summary = processStoredTrashTask(task, cancel, self, &affected);
+            break;
+          case TaskKind::Copy:
+          case TaskKind::Move:
+            summary = processCopyMoveTask(task, cancel, semaphore.get(), pendingConflict.get(), self, &affected,
+                                          promptSerial.get());
+            break;
+        }
         const QStringList affectedList(affected.constBegin(), affected.constEnd());
         QMetaObject::invokeMethod(
             self,
@@ -368,6 +523,15 @@ void TaskManager::onTaskFinished(quint64 taskId, TaskSummary summary, QStringLis
   busy_ = false;
   last_summary_ = std::move(summary);
   formatSummaryText();
+  if (current_operation_ == TaskKind::Restore || current_operation_ == TaskKind::DeletePermanently) {
+    if (original_restore_ && last_summary_.failed > 0) {
+      alternate_restore_ = std::move(original_restore_);
+      emit restoreAlternativeRequested(QFile::decodeName(alternate_restore_->original_path.filename().c_str()),
+                                       last_summary_.failures.front().reason);
+    }
+    original_restore_.reset();
+    scanTrash();
+  }
   emit taskFinished(std::move(affectedDirs));
   emit changed();
   dispatchNextTask();

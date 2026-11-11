@@ -24,13 +24,16 @@ HnApplicationWindow {
 
     function routePanelFocus(direction: string): void {
         let source = activeFocusItem;
-        while (source && source !== directoryListing && source !== sidebarPanel && source !== headerBar)
+        while (source && source !== directoryListing && source !== trashView && source !== sidebarPanel && source !== headerBar)
             source = source.parent;
-        if (direction === "left" && (source === directoryListing || source === headerBar))
+        if (direction === "left" && (source === directoryListing || source === trashView || source === headerBar))
             sidebarPanel.forceActiveFocus(Qt.TabFocusReason);
-        else if ((direction === "down" && source === headerBar) || (direction === "right" && source === sidebarPanel))
-            directoryListing.focusListing();
-        else if (direction === "up" && (source === directoryListing || source === sidebarPanel))
+        else if ((direction === "down" && source === headerBar) || (direction === "right" && source === sidebarPanel)) {
+            if (window.controller.trashView)
+                trashView.focusListing();
+            else
+                directoryListing.focusListing();
+        } else if (direction === "up" && (source === directoryListing || source === trashView || source === sidebarPanel))
             headerBar.focusCurrentSegment();
     }
 
@@ -66,7 +69,7 @@ HnApplicationWindow {
     }
     Shortcut {
         sequence: "Ctrl+H"
-        enabled: !headerBar.editingLocation && !HnInputPreferences.vimNavigation && !pathFinder.visible && window.controller.historyNavigationEnabled && window.controller.vim.currentMode === VimModeController.Normal
+        enabled: !window.controller.trashView && !headerBar.editingLocation && !HnInputPreferences.vimNavigation && !pathFinder.visible && window.controller.historyNavigationEnabled && window.controller.vim.currentMode === VimModeController.Normal
         onActivated: window.controller.toggleHidden()
     }
 
@@ -187,7 +190,16 @@ HnApplicationWindow {
                 }
             }
 
+            TrashView {
+                id: trashView
+                visible: window.controller.trashView
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                tasks: window.controller.tasks
+            }
+
             Controls.SplitView {
+                visible: !window.controller.trashView
                 objectName: "listingPreviewSplit"
                 orientation: Qt.Horizontal
                 Layout.fillWidth: true

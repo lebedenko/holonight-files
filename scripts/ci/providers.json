@@ -31,5 +31,9 @@
     "name": "holonight-file-browser",
     "revision": "9e7ff60c624c8d4ca3b453ea33ccba93cd22d80d",
     "options": []
+  },
+  {
+    "name": "holonightd",
+    "revision": "af9c28553e3acb554111123bbd72fb90338040dc"
   }
 ]

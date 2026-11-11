@@ -17,7 +17,7 @@
 class PlacesModel : public QAbstractListModel {
   Q_OBJECT
  public:
-  enum class Origin : quint8 { Home, XdgUserDirectory, Bookmark };
+  enum class Origin : quint8 { Home, XdgUserDirectory, Bookmark, Trash };
   Q_ENUM(Origin)
   enum class Status : quint8 { Checking, Available, Unavailable };
   Q_ENUM(Status)

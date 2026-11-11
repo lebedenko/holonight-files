@@ -10,6 +10,7 @@
 #include <QTemporaryDir>
 
 #include <fcntl.h>
+#include <future>
 #include <gtest/gtest.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -177,4 +178,79 @@ TEST(TrashService, NativeNamesPreserveBytesInPayloadAndTrashInfo) {
   QFile metadata;
   ASSERT_TRUE(metadata.open(infoDescriptor, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle));
   EXPECT_TRUE(metadata.readAll().contains("bad-%FF"));
+}
+
+TEST(TrashService, SetgidTrashAcceptsConcurrentFilesDirectoriesAndSymlinks) {
+  const auto mount = qEnvironmentVariable("FILES_TRASH_TEST_MOUNT");
+  const auto fixture = mount.isEmpty() ? qEnvironmentVariable("FILES_TRASH_TEST_ROOT", QDir::tempPath()) : mount;
+  QTemporaryDir home(QDir(fixture).filePath("trash-setgid-XXXXXX"));
+  QTemporaryDir localData;
+  ASSERT_TRUE(home.isValid() && localData.isValid());
+  const ScopedXdgDataHome guard(mount.isEmpty() ? home.path() : localData.path());
+  ASSERT_EQ(::chmod(QFile::encodeName(home.path()).constData(), 02700), 0);
+  ASSERT_TRUE(QDir(home.path()).mkdir("first"));
+  ASSERT_TRUE(QDir(home.path()).mkdir("second"));
+  ASSERT_TRUE(QDir(home.path()).mkdir("third"));
+  const auto first = home.filePath("first/item");
+  const auto second = home.filePath("second/item");
+  const auto third = home.filePath("third/item");
+  ASSERT_FALSE(writeFile(home, "first/item", "regular").isEmpty());
+  ASSERT_TRUE(QDir().mkdir(second));
+  ASSERT_FALSE(writeFile(home, "second/item/child").isEmpty());
+  ASSERT_TRUE(QFile::link(home.filePath("missing"), third));
+
+  const auto dir = TrashService::selectTrashDir(first);
+  ASSERT_FALSE(dir.error.has_value());
+  const auto root = QFileInfo(dir.files_dir).absolutePath();
+  if (!mount.isEmpty()) {
+    EXPECT_TRUE(dir.use_relative_path);
+    EXPECT_EQ(dir.topdir, mount);
+    EXPECT_EQ(root, QDir(mount).filePath(QStringLiteral(".Trash-%1").arg(::getuid())));
+  }
+  for (const auto& path : {root, dir.files_dir, dir.info_dir}) {
+    struct stat info{};
+    ASSERT_EQ(::lstat(QFile::encodeName(path).constData(), &info), 0);
+    EXPECT_EQ(info.st_mode & 07777, 02700U);
+  }
+  QFile existing(QDir(dir.files_dir).filePath("item"));
+  ASSERT_TRUE(existing.open(QIODevice::WriteOnly));
+  ASSERT_EQ(existing.write("existing"), 8);
+  existing.close();
+
+  const auto trash = [](const QString& source) {
+    return TrashService::trashEntry(source, std::make_shared<std::atomic_bool>(false));
+  };
+  auto file = std::async(std::launch::async, trash, first);
+  auto directory = std::async(std::launch::async, trash, second);
+  auto symlink = std::async(std::launch::async, trash, third);
+  for (auto* pending : {&file, &directory, &symlink}) {
+    const auto result = pending->get();
+    EXPECT_TRUE(result.complete()) << result.reason.toStdString();
+  }
+  ASSERT_TRUE(existing.open(QIODevice::ReadOnly));
+  EXPECT_EQ(existing.readAll(), "existing");
+  EXPECT_FALSE(QFile::exists(first));
+  EXPECT_FALSE(QFile::exists(second));
+  EXPECT_FALSE(QFileInfo(third).isSymLink());
+  const auto payloads =
+      QDir(dir.files_dir)
+          .entryInfoList(QStringList{QStringLiteral("item_*")}, QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot);
+  ASSERT_EQ(payloads.size(), 3);
+  int files = 0;
+  int directories = 0;
+  int links = 0;
+  for (const auto& payload : payloads) {
+    files += static_cast<int>(payload.isFile() && !payload.isSymLink());
+    directories += static_cast<int>(payload.isDir() && QFile::exists(QDir(payload.filePath()).filePath("child")));
+    links += static_cast<int>(payload.isSymLink() && payload.symLinkTarget() == home.filePath("missing"));
+    EXPECT_TRUE(QFile::exists(QDir(dir.info_dir).filePath(payload.fileName() + ".trashinfo")));
+  }
+  EXPECT_EQ(files, 1);
+  EXPECT_EQ(directories, 1);
+  EXPECT_EQ(links, 1);
+
+  const auto failed = trash(root);
+  EXPECT_TRUE(failed.failed);
+  EXPECT_TRUE(QDir(root).exists());
+  EXPECT_FALSE(QFile::exists(QDir(dir.info_dir).filePath(QFileInfo(root).fileName() + ".trashinfo")));
 }

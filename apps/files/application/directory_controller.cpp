@@ -126,6 +126,12 @@ bool DirectoryController::sidebarActivationEnabled() const {
   return vim_.currentMode() == VimModeController::Mode::Normal && !tasks_.hasPrompt() && !quickLookOpen();
 }
 void DirectoryController::open(const QString& path, const QString& fallbackReason) {
+  if (path == QStringLiteral("trash:/")) {
+    trash_view_ = true;
+    tasks_.scanTrash();
+    emit changed();
+    return;
+  }
   openInternal(path, fallbackReason, /*restoreName=*/{}, /*recordHistory=*/true);
 }
 void DirectoryController::activateBreadcrumb(int index) {
@@ -156,11 +162,17 @@ bool DirectoryController::acceptFinderResult(int row) {
 }
 void DirectoryController::openInternal(const QString& requestedPath, const QString& fallbackReason,
                                        const QString& restoreName, bool recordHistory) {
+  if (trash_view_) {
+    trash_view_ = false;
+    emit changed();
+  }
   navigation_.openInternal(requestedPath, fallbackReason, restoreName, recordHistory);
 }
 QString DirectoryController::outgoingCursorName() const { return navigation_.outgoingCursorName(); }
 bool DirectoryController::historyNavigationEnabled() const { return sidebarActivationEnabled() && !finder_open_; }
-bool DirectoryController::canGoUp() const { return !currentPath().isEmpty() && !QDir(currentPath()).isRoot(); }
+bool DirectoryController::canGoUp() const {
+  return !trash_view_ && !currentPath().isEmpty() && !QDir(currentPath()).isRoot();
+}
 void DirectoryController::goUp() {
   takeCount();
   if (historyNavigationEnabled() && canGoUp()) {
@@ -209,7 +221,16 @@ void DirectoryController::goForward() {
 }
 void DirectoryController::navigateHistoryBack() { traverseHistory(-1, takeCount()); }
 void DirectoryController::navigateHistoryForward() { traverseHistory(1, takeCount()); }
-void DirectoryController::traverseHistory(int direction, int count) { navigation_.traverseHistory(direction, count); }
+void DirectoryController::traverseHistory(int direction, int count) {
+  if (trash_view_ && direction < 0 && historyNavigationEnabled()) {
+    trash_view_ = false;
+    emit changed();
+    return;
+  }
+  if (!trash_view_) {
+    navigation_.traverseHistory(direction, count);
+  }
+}
 void DirectoryController::cancelPendingRestore() { navigation_.cancelPendingRestore(); }
 void DirectoryController::maybeApplyPendingRestore() { navigation_.maybeApplyPendingRestore(); }
 void DirectoryController::navigateInto(int proxyRow) { navigation_.navigateInto(proxyRow); }
@@ -430,10 +451,12 @@ void DirectoryController::execute(const FileCommand& command) {
     case Kind::HalfPage: {
       setCursorRow(Holonight::navigationTarget(cursorRow(),
                                                {.command = navigationMotion(command), .count = qAbs(command.count)},
-                                               {.count = listing()->rowCount(),
-                                                .columns = icon_view_ ? grid_columns_ : 1,
-                                                .viewportHeight = static_cast<qreal>(viewport_rows_),
-                                                .rect = {}}));
+                                               {
+                                                   .count = listing()->rowCount(),
+                                                   .columns = icon_view_ ? grid_columns_ : 1,
+                                                   .viewportHeight = static_cast<qreal>(viewport_rows_),
+                                                   .rect = {},
+                                               }));
       break;
     }
     case Kind::ToggleHidden:
@@ -538,7 +561,8 @@ void DirectoryController::execute(const FileCommand& command) {
 
 bool DirectoryController::transfersEnabled() const {
   const auto mode = vim_.currentMode();
-  return (mode == VimModeController::Mode::Normal || mode == VimModeController::Mode::Visual ||
+  return !trash_view_ &&
+         (mode == VimModeController::Mode::Normal || mode == VimModeController::Mode::Visual ||
           mode == VimModeController::Mode::Mark) &&
          !tasks_.hasPrompt() && !quickLookOpen() && !finder_open_ && !lifecycle_.started_ && directoryError().isEmpty();
 }

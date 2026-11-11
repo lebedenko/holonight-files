@@ -77,7 +77,7 @@ target_include_directories(files-private PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/state"
   "${CMAKE_CURRENT_SOURCE_DIR}/places"
 )
-target_link_libraries(files-private PUBLIC HolonightQt::Appearance HolonightFileBrowser::Search HolonightFileBrowser::Storage HolonightFileBrowser::Preview HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images HolonightThumbnails::Thumbnails HolonightSearch::Search PRIVATE tomlplusplus::tomlplusplus)
+target_link_libraries(files-private PUBLIC Holonight::Trash HolonightQt::Appearance HolonightFileBrowser::Search HolonightFileBrowser::Storage HolonightFileBrowser::Preview HoloNightSystem::Storage Qt6::Quick Qt6::Svg HolonightImages::Images HolonightThumbnails::Thumbnails HolonightSearch::Search PRIVATE tomlplusplus::tomlplusplus)
 
 qt_extract_metatypes(files-private)
 
@@ -86,6 +86,7 @@ function(add_files_application target)
   set(module_qml)
   foreach(file
     qml/Main.qml
+    qml/TrashView.qml
     qml/PathFinderPopup.qml
     qml/AppHeaderBar.qml
     qml/listing/DirectoryListing.qml

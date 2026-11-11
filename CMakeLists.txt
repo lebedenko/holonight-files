@@ -33,6 +33,7 @@ find_package(HolonightFileBrowser CONFIG REQUIRED COMPONENTS Core Quick Search S
 if(BUILD_FILES_APP)
   find_package(Qt6 6.11 REQUIRED COMPONENTS Gui Quick Qml QuickControls2 Svg)
   find_package(HolonightQt CONFIG REQUIRED)
+  find_package(HolonightTrash CONFIG REQUIRED)
   find_package(tomlplusplus 3.4 CONFIG REQUIRED)
   find_package(PkgConfig REQUIRED)
   find_package(HolonightImages CONFIG REQUIRED)

@@ -55,6 +55,7 @@ class DirectoryController : public QObject {
   Q_PROPERTY(PreviewService* preview READ preview CONSTANT)
   Q_PROPERTY(VimModeController* vim READ vim CONSTANT)
   Q_PROPERTY(HolonightFileBrowser::SelectionSession* selection READ selection CONSTANT)
+  Q_PROPERTY(bool trashView READ trashView NOTIFY changed)
   Q_PROPERTY(TaskManager* tasks READ tasks CONSTANT)
   Q_PROPERTY(bool quickLookOpen READ quickLookOpen NOTIFY changed)
   Q_PROPERTY(bool historyNavigationEnabled READ historyNavigationEnabled NOTIFY changed)
@@ -90,8 +91,8 @@ class DirectoryController : public QObject {
   TaskManager* tasks() { return &tasks_; }
   [[nodiscard]] bool quickLookOpen() const { return preview_selection_.quick_look_open_; }
   [[nodiscard]] bool historyNavigationEnabled() const;
-  [[nodiscard]] bool canGoBack() const { return navigation_.jump_list_.canGoBack(); }
-  [[nodiscard]] bool canGoForward() const { return navigation_.jump_list_.canGoForward(); }
+  [[nodiscard]] bool canGoBack() const { return trash_view_ || navigation_.jump_list_.canGoBack(); }
+  [[nodiscard]] bool canGoForward() const { return !trash_view_ && navigation_.jump_list_.canGoForward(); }
   [[nodiscard]] QStringList breadcrumbLabels() const { return breadcrumbs_.labels(); }
   [[nodiscard]] bool iconView() const { return icon_view_; }
   [[nodiscard]] bool canGoUp() const;
@@ -118,6 +119,7 @@ class DirectoryController : public QObject {
   Q_INVOKABLE void navigateParent();
   Q_INVOKABLE void openEntry(int proxyRow);
   // Header buttons: always one step, discarding any pending vim count (REQ-F-033).
+  [[nodiscard]] bool trashView() const { return trash_view_; }
   Q_INVOKABLE void goBack();
   Q_INVOKABLE void goForward();
   // Ctrl+O / Ctrl+I: consume the pending vim count as the step count (REQ-F-007/011/023).
@@ -204,6 +206,7 @@ class DirectoryController : public QObject {
   PreviewService preview_;
   VimModeController vim_;
   TaskManager tasks_;
+  bool trash_view_ = false;
   ClipboardRegister register_;
 
   bool finder_open_ = false;

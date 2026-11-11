@@ -91,7 +91,7 @@ Item {
             title: row.name
             sizeRole: HnControlSize.Xs
             focusPolicy: Qt.NoFocus
-            highlighted: root.controller.currentPath === row.path
+            highlighted: root.controller.trashView ? row.origin === PlacesModel.Trash : root.controller.currentPath === row.path
             leadingContentAlignment: Qt.AlignVCenter
             onClicked: row.activate()
             Accessible.description: row.status === PlacesModel.Unavailable ? qsTr("unavailable") : ""

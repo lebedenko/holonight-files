@@ -73,11 +73,15 @@ void PlacesModel::buildPlaces(const QString& homePath, const QString& userDirsFi
     append(bookmark.name, bookmark.path, QStringLiteral("user-bookmarks"), Origin::Bookmark, !bookmarksStarted);
     bookmarksStarted = true;
   }
+  append(tr("Trash"), QStringLiteral("trash:/"), QStringLiteral("user-trash"), Origin::Trash, false);
+  places_.last().status = Status::Available;
 }
 
 void PlacesModel::dispatchStartupChecks() {
   for (const auto& place : places_) {
-    dispatchCheck(place.id, /*generation=*/0, place.path);
+    if (place.origin != Origin::Trash) {
+      dispatchCheck(place.id, /*generation=*/0, place.path);
+    }
   }
 }
 

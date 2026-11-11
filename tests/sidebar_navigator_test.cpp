@@ -14,7 +14,7 @@
 using files_test::fixturePattern;
 
 namespace {
-// Home plus two user dirs, and as many device rows as asked for.
+// Home, two user dirs, Trash, and as many device rows as asked for.
 struct Sidebar {
   QTemporaryDir home{fixturePattern("navigator-home")};
   QTemporaryDir config{fixturePattern("navigator-config")};
@@ -54,7 +54,7 @@ struct Sidebar {
 
 TEST(SidebarNavigator, DownFromTheLastPlaceCrossesIntoDevices) {
   Sidebar sidebar(2);
-  ASSERT_EQ(sidebar.places->rowCount(), 3);
+  ASSERT_EQ(sidebar.places->rowCount(), 4);
   sidebar.navigator->setCursor(SidebarNavigator::Places, sidebar.lastPlace());
   QSignalSpy reveals(sidebar.navigator.get(), &SidebarNavigator::revealRequested);
   EXPECT_TRUE(sidebar.navigator->moveDown());

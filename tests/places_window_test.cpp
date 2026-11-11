@@ -2,6 +2,7 @@
 #include "directory_fixtures.h"
 #include "engine_setup.h"
 #include "storage_fixtures.h"
+#include "trash_service.h"
 
 #include <QDirIterator>
 #include <QFile>
@@ -19,6 +20,7 @@
 #include <QTest>
 
 #include <StorageBackend.h>
+#include <algorithm>
 #include <array>
 #include <gtest/gtest.h>
 #include <tuple>
@@ -104,7 +106,7 @@ TEST(PlacesWindow, KeyboardMouseHistorySelectionAndFocus) {
   const SeededUserDirs seeded(1);  // Home plus one row, so Down/Up have somewhere to go.
   PlacesWindow view;
   ASSERT_TRUE(view.start());
-  ASSERT_EQ(view.controller.places()->rowCount(), 2);
+  ASSERT_EQ(view.controller.places()->rowCount(), 3);
   view.target();
   EXPECT_FALSE(view.button()->property("highlighted").toBool());
   EXPECT_FALSE(view.button()->property("selected").toBool());
@@ -180,7 +182,7 @@ TEST(PlacesWindow, FallbackIconsAndShortWindow) {
   const SeededUserDirs seeded(kSeeded);  // 10 rows: enough to overflow 220px.
   PlacesWindow view;
   ASSERT_TRUE(view.start());
-  ASSERT_EQ(view.controller.places()->rowCount(), kSeeded + 1);
+  ASSERT_EQ(view.controller.places()->rowCount(), kSeeded + 2);
   view.row()->setProperty("iconName", "places-deliberately-unavailable-icon");
   auto* icon = view.button()->findChild<QQuickItem*>("placeFallbackIcon");
   ASSERT_NE(icon, nullptr);
@@ -276,7 +278,7 @@ TEST(PlacesWindow, ExtraSpacingGapPrecedesFirstBookmarkRow) {
   PlacesWindow view;
   ASSERT_TRUE(view.start());
   // XDG_DESKTOP_DIR resolves to $HOME here, so REQ-F-004 hides it: Home, bm1, bm2 (3 rows).
-  ASSERT_TRUE(QTest::qWaitFor([&] { return view.controller.places()->rowCount() == 3; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return view.controller.places()->rowCount() == 4; }));
   const auto bm1Row = findPlaceRow(*view.controller.places(), bm1);
   const auto bm2Row = findPlaceRow(*view.controller.places(), bm2);
   ASSERT_EQ(bm1Row, 1);
@@ -845,4 +847,88 @@ TEST(PlacesWindow, SharedNavigationProfilesAndSectionPaging) {
     }
     EXPECT_TRUE(view.storage_backend.calls.isEmpty());
   }
+}
+
+TEST(PlacesWindow, TrashNavigationRestoreConflictAndPermanentConfirmation) {
+  const SeededUserDirs seeded(0);
+  PlacesWindow view;
+  ASSERT_TRUE(view.start());
+  auto cancel = std::make_shared<std::atomic_bool>(false);
+  const auto original = view.dir.filePath("file.txt");
+  ASSERT_TRUE(TrashService::trashEntry(original, cancel).complete());
+  ASSERT_FALSE(files_test::writeFile(view.dir, "file.txt", "keep").isEmpty());
+  auto* tasks = view.controller.tasks();
+  const auto trashRow = findPlaceRow(*view.controller.places(), QStringLiteral("trash:/"));
+  ASSERT_GE(trashRow, 0);
+  view.sidebar->forceActiveFocus();
+  view.controller.sidebarNavigator()->setCursor(SidebarNavigator::Places, trashRow);
+  sendKey(view.sidebar, Qt::Key_Return, QStringLiteral("\r"));
+  ASSERT_TRUE(view.controller.trashView());
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !tasks->trashScanning(); }));
+  auto* panel = view.window->findChild<QQuickItem*>("trashView");
+  ASSERT_NE(panel, nullptr);
+  EXPECT_TRUE(panel->isVisible());
+  int index = -1;
+  const auto entries = tasks->trashEntries();
+  for (qsizetype row = 0; row < entries.size(); ++row) {
+    const auto item = entries.at(row).toMap();
+    if (item.value("name").toString() == "file.txt" && item.value("location").toString() == view.dir.path()) {
+      index = static_cast<int>(row);
+      break;
+    }
+  }
+  ASSERT_GE(index, 0);
+  tasks->restoreTrash(index);
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !tasks->busy() && !tasks->trashScanning(); }));
+  EXPECT_EQ(tasks->lastSummary().failed, 1);
+  auto* destination = panel->findChild<QObject*>("trashRestoreDestination");
+  ASSERT_NE(destination, nullptr);
+  EXPECT_TRUE(destination->property("visible").toBool());
+  ASSERT_TRUE(QMetaObject::invokeMethod(destination, "reject"));
+
+  tasks->deleteTrash(index);
+  ASSERT_EQ(tasks->promptKind(), TaskManager::PromptKind::PermanentDeleteConfirm);
+  auto* confirmation = panel->findChild<QObject*>("trashDeleteConfirmation");
+  ASSERT_NE(confirmation, nullptr);
+  EXPECT_TRUE(confirmation->property("visible").toBool());
+  ASSERT_TRUE(QMetaObject::invokeMethod(confirmation, "reject"));
+  EXPECT_FALSE(tasks->hasPrompt());
+  EXPECT_TRUE(QFile::exists(seeded.data_home.filePath("Trash/files/file.txt")));
+
+  tasks->deleteTrash(index);
+  ASSERT_TRUE(QMetaObject::invokeMethod(confirmation, "accept"));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !tasks->busy() && !tasks->trashScanning(); }));
+  EXPECT_FALSE(QFile::exists(seeded.data_home.filePath("Trash/files/file.txt")));
+  QFile live(original);
+  ASSERT_TRUE(live.open(QIODevice::ReadOnly));
+  EXPECT_EQ(live.readAll(), "keep");
+  for (const auto& name : {"first", "second"}) {
+    ASSERT_TRUE(TrashService::trashEntry(files_test::writeFile(view.dir, name), cancel).complete());
+  }
+  tasks->scanTrash();
+  ASSERT_TRUE(QTest::qWaitFor([&] { return !tasks->trashScanning(); }));
+  const auto beforeEmpty = tasks->trashEntries();
+  tasks->emptyTrash();
+  ASSERT_EQ(tasks->promptKind(), TaskManager::PromptKind::PermanentDeleteConfirm);
+  EXPECT_EQ(tasks->trashConfirmCount(), beforeEmpty.size());
+  ASSERT_TRUE(QMetaObject::invokeMethod(confirmation, "reject"));
+  EXPECT_TRUE(QFile::exists(seeded.data_home.filePath("Trash/files/first")));
+
+  // Only accept Empty Trash when the snapshot contains exclusively this test's fixtures.
+  if (beforeEmpty.size() == 2 && std::ranges::all_of(beforeEmpty, [&view](const auto& item) {
+        return item.toMap().value("location").toString() == view.dir.path();
+      })) {
+    tasks->emptyTrash();
+    ASSERT_TRUE(TrashService::trashEntry(files_test::writeFile(view.dir, "after-prompt"), cancel).complete());
+    ASSERT_TRUE(QFile::remove(seeded.data_home.filePath("Trash/files/second")));
+    ASSERT_TRUE(QMetaObject::invokeMethod(confirmation, "accept"));
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !tasks->busy() && !tasks->trashScanning(); }));
+    EXPECT_EQ(tasks->lastSummary().succeeded, 1);
+    EXPECT_EQ(tasks->lastSummary().failed, 1);
+    EXPECT_TRUE(QFile::exists(seeded.data_home.filePath("Trash/files/after-prompt")));
+  }
+
+  view.controller.goBack();
+  EXPECT_FALSE(view.controller.trashView());
+  EXPECT_EQ(view.controller.currentPath(), view.dir.path());
 }

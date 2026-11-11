@@ -67,7 +67,7 @@ TEST(PlacesModel, HomeIsAlwaysFirstRowCheckingThenAvailable) {
   ModelFixture fixture;
   ASSERT_TRUE(fixture.valid());
   const auto model = fixture.build();
-  ASSERT_GE(model->rowCount(), 1);
+  ASSERT_GE(model->rowCount(), 2);
   EXPECT_EQ(model->data(idx(*model, 0), PlacesModel::NameRole).toString(), "Home");
   EXPECT_EQ(model->data(idx(*model, 0), PlacesModel::PathRole).toString(), fixture.home.path());
   EXPECT_EQ(model->data(idx(*model, 0), PlacesModel::IconNameRole).toString(), "user-home");
@@ -96,7 +96,7 @@ TEST(PlacesModel, XdgDirectoriesOrderedTranslatedAndIconed) {
   QCoreApplication::installTranslator(&translator);
   const auto model = fixture.build();
   QCoreApplication::removeTranslator(&translator);
-  ASSERT_EQ(model->rowCount(), 10);
+  ASSERT_EQ(model->rowCount(), 11);
   const QStringList names{
       "translated-Home",  "translated-Desktop", "translated-Documents", "translated-Downloads", "translated-Pictures",
       "translated-Music", "translated-Videos",  "translated-Projects",  "translated-Templates", "translated-Public",
@@ -123,7 +123,7 @@ TEST(PlacesModel, PlaceIconsMapKeysEqualStandardPlacePathsAndIcons) {
   const auto model = fixture.build();
   const auto icons = model->placeIcons();
   ASSERT_NE(icons, nullptr);
-  ASSERT_EQ(model->rowCount(), 4);  // Home, Documents, Downloads, one bookmark
+  ASSERT_EQ(model->rowCount(), 5);  // Home, Documents, Downloads, one bookmark
   EXPECT_EQ(icons->size(), 3);      // bookmarks never enter the map
   for (int row = 0; row < 3; ++row) {
     const auto path = model->data(idx(*model, row), PlacesModel::PathRole).toString();
@@ -138,7 +138,7 @@ TEST(PlacesModel, MissingUserDirsFileHasNoFallbackOnlyHomeAndBookmarks) {
   fixture.writePlaces("version = 1\n[[bookmarks]]\npath = \"" + fixture.home.filePath("bm").toUtf8() + "\"\n");
   QDir(fixture.home.path()).mkdir("bm");
   const auto model = fixture.build();
-  ASSERT_EQ(model->rowCount(), 2);
+  ASSERT_EQ(model->rowCount(), 3);
   EXPECT_EQ(model->data(idx(*model, 0), PlacesModel::OriginRole).value<Origin>(), Origin::Home);
   EXPECT_EQ(model->data(idx(*model, 1), PlacesModel::OriginRole).value<Origin>(), Origin::Bookmark);
 }
@@ -164,7 +164,7 @@ TEST(PlacesModel, BookmarksLoadInFileOrderAfterXdgWithSpacingFlag) {
   fixture.writePlaces("version = 1\n[[bookmarks]]\npath = \"" + fixture.home.filePath("bm1").toUtf8() +
                       "\"\n[[bookmarks]]\npath = \"" + fixture.home.filePath("bm2").toUtf8() + "\"\n");
   const auto model = fixture.build();
-  ASSERT_EQ(model->rowCount(), 4);  // Home, Desktop, bm1, bm2
+  ASSERT_EQ(model->rowCount(), 5);  // Home, Desktop, bm1, bm2
   EXPECT_EQ(model->data(idx(*model, 0), PlacesModel::StartsBookmarksRole).toBool(), false);
   EXPECT_EQ(model->data(idx(*model, 1), PlacesModel::StartsBookmarksRole).toBool(), false);
   EXPECT_EQ(model->data(idx(*model, 2), PlacesModel::StartsBookmarksRole).toBool(), true);
@@ -179,7 +179,7 @@ TEST(PlacesModel, DuplicateXdgEntriesAreDroppedSilentlyFirstWins) {
   QDir(fixture.home.path()).mkdir("Stuff");
   fixture.writeUserDirs("XDG_DESKTOP_DIR=\"$HOME/Stuff\"\nXDG_DOCUMENTS_DIR=\"$HOME/Stuff\"\n");
   const auto model = fixture.build();
-  ASSERT_EQ(model->rowCount(), 2);  // Home + Desktop only
+  ASSERT_EQ(model->rowCount(), 3);  // Home + Desktop only
   EXPECT_EQ(model->data(idx(*model, 1), PlacesModel::NameRole).toString(), "Desktop");
   EXPECT_TRUE(fixture.warnings->messages.isEmpty());
 }
@@ -191,7 +191,7 @@ TEST(PlacesModel, BookmarkDuplicatingXdgIsDroppedWithOneWarning) {
   fixture.writeUserDirs("XDG_DOWNLOAD_DIR=\"$HOME/Downloads\"\n");
   fixture.writePlaces("version = 1\n[[bookmarks]]\npath = \"" + fixture.home.filePath("Downloads").toUtf8() + "\"\n");
   const auto model = fixture.build();
-  ASSERT_EQ(model->rowCount(), 2);  // Home + Downloads (XDG); bookmark dropped
+  ASSERT_EQ(model->rowCount(), 3);  // Home + Downloads (XDG); bookmark dropped
   ASSERT_EQ(fixture.warnings->messages.size(), 1);
   EXPECT_TRUE(fixture.warnings->messages.front().contains("Downloads"));
 }
@@ -204,7 +204,7 @@ TEST(PlacesModel, BookmarkDuplicatingHomeAndRepeatedBookmarkEachWarnOnce) {
   fixture.writePlaces("version = 1\n[[bookmarks]]\npath = \"" + fixture.home.path().toUtf8() +
                       "\"\n[[bookmarks]]\npath = \"" + other + "\"\n[[bookmarks]]\npath = \"" + other + "\"\n");
   const auto model = fixture.build();
-  ASSERT_EQ(model->rowCount(), 2);  // Home + first "other" bookmark
+  ASSERT_EQ(model->rowCount(), 3);  // Home + first "other" bookmark
   ASSERT_EQ(fixture.warnings->messages.size(), 2);
   EXPECT_TRUE(fixture.warnings->messages[0].contains("Home"));
   EXPECT_TRUE(fixture.warnings->messages[1].contains("earlier bookmark"));
@@ -219,7 +219,7 @@ TEST(PlacesModel, NamesAreNotDeduplicated) {
                       "\"\nname = \"Same\"\n[[bookmarks]]\npath = \"" + fixture.home.filePath("b").toUtf8() +
                       "\"\nname = \"Same\"\n");
   const auto model = fixture.build();
-  ASSERT_EQ(model->rowCount(), 3);
+  ASSERT_EQ(model->rowCount(), 4);
   EXPECT_EQ(model->data(idx(*model, 1), PlacesModel::NameRole).toString(), "Same");
   EXPECT_EQ(model->data(idx(*model, 2), PlacesModel::NameRole).toString(), "Same");
 }
@@ -234,7 +234,7 @@ TEST(PlacesModel, SymlinkAndTargetBothRetainedNoCanonicalisation) {
   fixture.writePlaces("version = 1\n[[bookmarks]]\npath = \"" + target.toUtf8() + "\"\n[[bookmarks]]\npath = \"" +
                       link.toUtf8() + "\"\n");
   const auto model = fixture.build();
-  ASSERT_EQ(model->rowCount(), 3);
+  ASSERT_EQ(model->rowCount(), 4);
   EXPECT_EQ(model->data(idx(*model, 1), PlacesModel::PathRole).toString(), target);
   EXPECT_EQ(model->data(idx(*model, 2), PlacesModel::PathRole).toString(), link);
 }
@@ -254,7 +254,7 @@ TEST(PlacesModel, RolesRowCountAndOriginValues) {
   EXPECT_EQ(roles.value(PlacesModel::OriginRole), "origin");
   EXPECT_EQ(roles.value(PlacesModel::StatusRole), "status");
   EXPECT_EQ(roles.value(PlacesModel::StartsBookmarksRole), "startsBookmarks");
-  ASSERT_EQ(model->rowCount(), 3);
+  ASSERT_EQ(model->rowCount(), 4);
   EXPECT_EQ(model->data(idx(*model, 0), PlacesModel::OriginRole).value<Origin>(), Origin::Home);
   EXPECT_EQ(model->data(idx(*model, 1), PlacesModel::OriginRole).value<Origin>(), Origin::XdgUserDirectory);
   EXPECT_EQ(model->data(idx(*model, 2), PlacesModel::OriginRole).value<Origin>(), Origin::Bookmark);
@@ -268,7 +268,7 @@ TEST(PlacesModel, XdgNonDirectoryIsRemovedBookmarkNonDirectoryStaysUnavailable) 
   fixture.checker->default_result = false;                 // nothing exists in this fixture
   fixture.checker->overrides[fixture.home.path()] = true;  // Home still resolves independently below
   const auto model = fixture.build();
-  ASSERT_TRUE(QTest::qWaitFor([&] { return model->rowCount() == 2; }));  // Home + bookmark; XDG removed
+  ASSERT_TRUE(QTest::qWaitFor([&] { return model->rowCount() == 3; }));  // Home + bookmark; XDG removed
   EXPECT_EQ(model->data(idx(*model, 0), PlacesModel::OriginRole).value<Origin>(), Origin::Home);
   EXPECT_EQ(model->data(idx(*model, 1), PlacesModel::OriginRole).value<Origin>(), Origin::Bookmark);
   ASSERT_TRUE(QTest::qWaitFor(
@@ -282,7 +282,7 @@ TEST(PlacesModel, HomeBecomesAvailableEvenWhenItsOwnCheckReturnsFalse) {
   const auto model = fixture.build();
   ASSERT_TRUE(QTest::qWaitFor(
       [&] { return model->data(idx(*model, 0), PlacesModel::StatusRole).value<Status>() == Status::Available; }));
-  ASSERT_EQ(model->rowCount(), 1);  // never removed
+  ASSERT_EQ(model->rowCount(), 2);  // never removed
 }
 
 TEST(PlacesModel, ChecksRunOffTheGuiThread) {
@@ -317,7 +317,7 @@ TEST(PlacesModel, GuiThreadKeepsRunningWhileChecksAreGated) {
   const auto gate = std::make_shared<QSemaphore>();
   fixture.checker->gates[fixture.home.path()] = gate;
   const auto model = fixture.build();
-  ASSERT_EQ(model->rowCount(), 1);  // constructor already returned
+  ASSERT_EQ(model->rowCount(), 2);  // constructor already returned
   int ticks = 0;
   QTimer timer;
   timer.setInterval(5);
@@ -335,7 +335,7 @@ TEST(PlacesModel, FailedXdgCheckEmitsExactlyOneRowsRemoved) {
   fixture.checker->overrides[fixture.home.filePath("missing")] = false;
   const auto model = fixture.build();
   QSignalSpy removedSpy(model.get(), &QAbstractItemModel::rowsRemoved);
-  ASSERT_TRUE(QTest::qWaitFor([&] { return model->rowCount() == 1; }));
+  ASSERT_TRUE(QTest::qWaitFor([&] { return model->rowCount() == 2; }));
   EXPECT_EQ(removedSpy.count(), 1);
 }
 
@@ -450,7 +450,7 @@ TEST(PlacesModel, RecheckBookmarkIdStaysCorrectAfterEarlierXdgRowRemoved) {
   QDir(fixture.home.path()).mkdir("bm");
   fixture.writePlaces("version = 1\n[[bookmarks]]\npath = \"" + fixture.home.filePath("bm").toUtf8() + "\"\n");
   const auto model = fixture.build();
-  ASSERT_TRUE(QTest::qWaitFor([&] { return model->rowCount() == 2; }));  // XDG row removed
+  ASSERT_TRUE(QTest::qWaitFor([&] { return model->rowCount() == 3; }));  // XDG row removed
   const auto placeId = model->recheckBookmark(1);
   EXPECT_NE(placeId, 0U);
   QSignalSpy resolvedSpy(model.get(), &PlacesModel::bookmarkRecheckResolved);

@@ -8,11 +8,14 @@
 #include <QString>
 #include <QStringList>
 #include <QThread>
+#include <QUrl>
+#include <QVariantList>
 #include <QtQml/qqmlregistration.h>
 #include <QtTypes>
 
 #include <atomic>
 #include <cstdint>
+#include <holonightd/Trash.h>
 #include <memory>
 
 // The queue, progress, cancellation, and prompt engine for copy/move/trash (SPEC.md's TaskManager,
@@ -37,16 +40,19 @@ class TaskManager : public QObject {
   Q_PROPERTY(int trashConfirmCount READ trashConfirmCount NOTIFY changed)
   Q_PROPERTY(quint64 promptId READ promptId NOTIFY changed)
 
+  Q_PROPERTY(QVariantList trashEntries READ trashEntries NOTIFY trashChanged)
+  Q_PROPERTY(QStringList trashProblems READ trashProblems NOTIFY trashChanged)
+  Q_PROPERTY(bool trashScanning READ trashScanning NOTIFY trashChanged)
   Q_PROPERTY(QString lastSummaryText READ lastSummaryText NOTIFY changed)
 
  public:
   // Nested (like PreviewService's PreviewErrorKind) so QML resolves these as TaskManager.Copy,
   // TaskManager.Conflict, etc.
-  enum class TaskKind : quint8 { Copy, Move, Trash };
+  enum class TaskKind : quint8 { Copy, Move, Trash, Restore, DeletePermanently };
   Q_ENUM(TaskKind)
   enum class ConflictResolution : quint8 { Skip, Overwrite, AutoRename, Cancel };
   Q_ENUM(ConflictResolution)
-  enum class PromptKind : quint8 { None, Conflict, TrashConfirm };
+  enum class PromptKind : quint8 { None, Conflict, TrashConfirm, PermanentDeleteConfirm };
   Q_ENUM(PromptKind)
 
   struct FailedItem {
@@ -68,6 +74,11 @@ class TaskManager : public QObject {
     QStringList sources;
     QString dest_dir;
     quint64 id = 0;
+    std::vector<holonightd::trash::Entry> trash_entries;
+
+    [[nodiscard]] int itemCount() const {
+      return static_cast<int>(trash_entries.empty() ? sources.size() : trash_entries.size());
+    }
   };
 
   explicit TaskManager(QObject* parent = nullptr);
@@ -87,12 +98,19 @@ class TaskManager : public QObject {
   [[nodiscard]] PromptKind promptKind() const { return prompt_kind_; }
   [[nodiscard]] QString conflictSourceName() const { return conflict_source_name_; }
   [[nodiscard]] QString conflictDestName() const { return conflict_dest_name_; }
-  [[nodiscard]] int trashConfirmCount() const { return static_cast<int>(trash_confirm_paths_.size()); }
+  [[nodiscard]] int trashConfirmCount() const { return trash_confirm_count_; }
   [[nodiscard]] quint64 promptId() const { return prompt_id_; }
 
   [[nodiscard]] QString lastSummaryText() const { return last_summary_text_; }
   [[nodiscard]] const TaskSummary& lastSummary() const { return last_summary_; }
 
+  [[nodiscard]] QVariantList trashEntries() const;
+  [[nodiscard]] QStringList trashProblems() const;
+  [[nodiscard]] bool trashScanning() const { return trash_scanning_; }
+  Q_INVOKABLE void scanTrash();
+  Q_INVOKABLE void restoreTrash(int index, const QUrl& folder = {}, const QString& name = {});
+  Q_INVOKABLE void deleteTrash(int index);
+  Q_INVOKABLE void emptyTrash();
   Q_INVOKABLE void enqueueCopy(const QStringList& sources, const QString& destDir);
   Q_INVOKABLE void enqueueMove(const QStringList& sources, const QString& destDir);
   Q_INVOKABLE void requestTrashConfirmation(const QStringList& paths);
@@ -112,6 +130,8 @@ class TaskManager : public QObject {
 
  signals:
   void changed();
+  void trashChanged();
+  void restoreAlternativeRequested(QString name, QString reason);
   // Emitted once a queued task (Copy/Move/Trash) fully drains — DirectoryController refreshes any
   // directory listed here in addition to its existing QFileSystemWatcher-driven refresh.
   void taskFinished(QStringList affectedDirs);
@@ -138,7 +158,7 @@ class TaskManager : public QObject {
   PromptKind prompt_kind_ = PromptKind::None;
   QString conflict_source_name_;
   QString conflict_dest_name_;
-  QStringList trash_confirm_paths_;
+  int trash_confirm_count_ = 0;
   quint64 prompt_id_ = 0;
   quint64 last_prompt_id_ = 0;
   quint64 active_task_id_ = 0;
@@ -153,5 +173,10 @@ class TaskManager : public QObject {
   std::shared_ptr<QSemaphore> prompt_semaphore_;
   std::shared_ptr<std::atomic_int> pending_conflict_resolution_;
 
+  void confirmDeletion(std::vector<holonightd::trash::Entry> entries);
+  holonightd::trash::Scan trash_scan_;
+  std::optional<holonightd::trash::Entry> alternate_restore_;
+  std::optional<holonightd::trash::Entry> original_restore_;
+  bool trash_scanning_ = false;
   bool stopping_ = false;
 };

@@ -175,12 +175,13 @@ and leaves conflict prompts unresolved. Incomplete directory moves retain the en
 source tree; completed destination copies remain and the summary explains skipped
 children and errors. Copies stage file and symlink replacements so failure or
 cancellation preserves the previous destination.
-Trash uses validated home or per-partition `.Trash/$uid` / `.Trash-$uid` storage.
-If validation, metadata creation or relocation fails, the item remains untouched and
-the summary reports why. Permanent deletion is unavailable. Progress, prompts, and
-the completion summary render inline in the existing status bar; there is no `:` command
-palette. See [file operations verification](docs/sdd/file-operations/VERIFICATION.md)
-for evidence and known gaps.
+Trash uses validated home or per-partition `.Trash/$uid` / `.Trash-$uid` storage,
+including NFS. The summary reports validation, metadata and relocation failures.
+Open **Trash** in Places to view items and restore them to their original
+location or to an existing folder under a chosen name. **Delete Permanently**
+and **Empty Trash** require confirmation and apply only to items already in Trash.
+The status bar shows progress and per-item failures. See the
+[Trash guide](docs/sdd/trash/README.md) for recovery behavior.
 See [docs/BACKLOG.md](docs/BACKLOG.md) for the planned stages and
 [docs/mockups/moc1.png](docs/mockups/moc1.png) for visual direction.
 
